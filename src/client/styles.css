@@ -1695,3 +1695,5 @@ td strong {
 .login-page .account-primary-link { margin: 24px 0 12px; }
 .local-mode-note { padding: 8px 5%; background: #eaf1f4; color: #496775; font-size: 12px; }
 @media (max-width: 800px) { .account-grid { grid-template-columns: 1fr; } .workspace-bar { gap: 14px; } .workspace-bar nav { margin-left: 0; flex-wrap: wrap; } .account-page { margin-top: 30px; } }
+
+.workspace-tokens { padding: 8px 12px; border-radius: 8px; background: #eef5f3; color: #234f42; font-size: 14px; font-weight: 600; }

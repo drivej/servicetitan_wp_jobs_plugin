@@ -14,7 +14,10 @@
     "start": "node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json --noEmit",
     "test": "node --import tsx --test src/server/*.test.ts src/server/saas/*.test.ts",
-    "db:migrate": "npm run build:server && node dist/server/migrate.js"
+    "db:migrate": "npm run build:server && node dist/server/migrate.js",
+    "dev:remote": "node scripts/remote.mjs dev",
+    "db:migrate:remote": "node scripts/remote.mjs migrate",
+    "db:check:remote": "node scripts/remote.mjs check"
   },
   "author": "",
   "license": "ISC",

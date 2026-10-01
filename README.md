@@ -202,3 +202,24 @@ image; otherwise the existing featured image is preserved. A manually edited
 post returns HTTP 409 unless `force` is true.
 
 The dates are inclusive calendar dates and filter on a job's first appointment. The optional `zip` filter accepts a five-digit ZIP code or ZIP+4 and resolves matching ServiceTitan locations before building the filtered jobs page. The ServiceTitan list request applies `jobStatus=Completed`, then checks attachment metadata and retains only jobs with supported images. Attachment lookups use bounded concurrency and a short-lived cache. Ranges are capped at 366 days, and page size is capped at 50.
+
+### Job tokens
+
+Hosted accounts display their available job tokens in the workspace header. Each successful WordPress push, rebuild, or AI copy generation costs one token; status changes and reads are free. The authenticated account owns the balance across all of its websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
+
+Apply migration `002_job_tokens.sql` before starting the updated server. Accounts start with zero tokens. An administrator can allocate tokens using a parameterized database statement such as `UPDATE users SET job_tokens = job_tokens + $1 WHERE id = $2` with a positive integer amount and verified account UUID. There is no public token-grant endpoint.
+
+Paid provider operations hold a database row lock for the account. On provider success, the server decrements the balance and records an audit entry in the same transaction, committing before returning success. Provider failures roll back without a charge, and concurrent requests cannot overspend. Do not configure a database idle-in-transaction timeout shorter than the provider request duration. External provider changes cannot be atomically committed with PostgreSQL: a server/database failure after provider success but before commit requires administrative reconciliation; automatic refunds or retries cannot establish whether the external change occurred.
+
+### Local app with a remote development database
+
+Use the ignored `.env.remote` profile (see `.env.remote.example`) to keep remote test credentials separate from `.env`. Configure a dedicated remote PostgreSQL database, a restricted runtime login, the migration owner's direct connection, and development Google OAuth credentials. Both database URLs must include `sslmode=verify-full`.
+
+```sh
+npm run db:migrate:remote
+# Apply runtime-role grants from docs/development.md after the migration.
+npm run db:check:remote
+npm run dev:remote
+```
+
+Open `http://localhost:3000`. This runs the account and token workflow locally against the remote database. Normal `npm run dev` retains the existing local configuration. Full setup steps, TLS, role grants, and OAuth callback details are in [the development guide](docs/development.md).

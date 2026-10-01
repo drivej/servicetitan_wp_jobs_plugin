@@ -4,7 +4,7 @@ import { hashToken, randomToken, type SecretVault } from './crypto.js';
 import { HttpError, type ConnectionInput, type WebsiteInput } from './validation.js';
 
 export interface Identity { subject: string; email: string; name: string; avatarUrl?: string; }
-export interface User { id: string; email: string; name: string; avatarUrl: string | null; }
+export interface User { id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; }
 export interface Connection { id: string; name: string; environment: 'integration' | 'production'; tenantId: string; version: number; }
 export interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; version: number; }
 export interface WebsiteContext {
@@ -12,7 +12,7 @@ export interface WebsiteContext {
   connection: Connection & Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>;
   wordpress?: NonNullable<WebsiteInput['wordpress']>;
 }
-const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null });
+const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, jobTokens: Number(row.job_tokens) });
 const connectionFrom = (row: Record<string, unknown>): Connection => ({ id: String(row.id), name: String(row.name), environment: row.environment as Connection['environment'], tenantId: String(row.tenant_id), version: Number(row.version) });
 const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), version: Number(row.version) });
 const audit = async (sql: Sql, userId: string, action: string, target: string): Promise<void> => {
@@ -123,6 +123,18 @@ export class AccountStore {
         connection: { ...connectionFrom(connection), ...this.vault.decrypt<Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>>(String(connection.credentials), `connection:${userId}:${connection.id}`) },
         ...(site.wordpress_credentials ? { wordpress: this.vault.decrypt<NonNullable<WebsiteInput['wordpress']>>(String(site.wordpress_credentials), `website:${userId}:${id}`) } : {}),
       };
+    });
+  }
+  async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>): Promise<T> {
+    return this.db.transaction(userId, async (sql) => {
+      // Serialize across websites, tabs, and server instances. Never trust a client balance.
+      const row = (await sql.query('SELECT job_tokens FROM users WHERE id=$1 AND disabled_at IS NULL FOR UPDATE', [userId])).rows[0];
+      if (!row || Number(row.job_tokens) < 1) throw new HttpError('No job tokens available. Add tokens before trying again.', 402);
+      const result = await operation();
+      await sql.query('UPDATE users SET job_tokens=job_tokens-1 WHERE id=$1', [userId]);
+      await audit(sql, userId, `job_token.spent.${action}`, websiteId);
+      // The transaction commits before the caller sends the success response.
+      return result;
     });
   }
   async recordAction(userId: string, action: string, target: string): Promise<void> {

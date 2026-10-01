@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 
+import { HttpError } from './saas/validation.js';
+
 import { OpenAIRequestError } from './openai-error.js';
 import { DisabledJobCopyGenerator, type JobCopyGenerator } from './openai.js';
 import type { JobsProvider, JobsQuery } from './service-titan.js';
@@ -16,6 +18,7 @@ interface CreateAppOptions {
   staticDirectory?: string;
   wordpressPluginArchivePath?: string;
   apiPrefix?: string;
+  spendJobToken?: <T>(action: string, operation: () => Promise<T>) => Promise<T>;
 }
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 366;
@@ -31,6 +34,7 @@ export const createApp = ({
   staticDirectory,
   wordpressPluginArchivePath = WORDPRESS_PLUGIN_ARCHIVE,
   apiPrefix = '/api',
+  spendJobToken = async (_action, operation) => operation(),
 }: CreateAppOptions) => {
   const app = express();
   app.disable('x-powered-by');
@@ -79,7 +83,7 @@ export const createApp = ({
     try {
       const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
       response.set('Cache-Control', 'no-store');
-      response.json(await copyGenerator.generate(details.summary));
+      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(details.summary)));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {
@@ -120,7 +124,7 @@ export const createApp = ({
       const images = await Promise.all(attachmentIds.map((attachmentId) => serviceTitan.getJobImage(jobId, attachmentId)));
       const totalImageBytes = images.reduce((total, image) => total + image.bytes.byteLength, 0);
       if (totalImageBytes > 30 * 1024 * 1024) throw new ValidationError('Selected images cannot exceed 30 MB in total.');
-      response.status(201).json(await wordpress.pushJob(details.summary, images, status, approvedCopy));
+      response.status(201).json(await spendJobToken('push', () => wordpress.pushJob(details.summary, images, status, approvedCopy)));
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/wordpress/regenerate`, async (request, response, next) => {
@@ -132,7 +136,7 @@ export const createApp = ({
       const details = await serviceTitan.getJobDetails(jobId);
       const image = attachmentId ? await serviceTitan.getJobImage(jobId, attachmentId) : undefined;
       response.set('Cache-Control', 'no-store');
-      response.json(await wordpress.regenerateJob(details.summary, force, image, approvedCopy));
+      response.json(await spendJobToken('rebuild', () => wordpress.regenerateJob(details.summary, force, image, approvedCopy)));
     } catch (error) { next(error); }
   });
   const updateWordpressStatus: RequestHandler = async (request, response, next) => {
@@ -152,6 +156,7 @@ export const createApp = ({
   }
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+    if (error instanceof HttpError) { response.status(error.status).json({ error: error.message }); return; }
     if (error instanceof ValidationError) { response.status(400).json({ error: error.message }); return; }
     if (error instanceof OpenAIRequestError) { response.status(error.status).json({ error: error.message }); return; }
     if (error instanceof ServiceTitanRequestError) { response.status(error.status).json({ error: error.message }); return; }

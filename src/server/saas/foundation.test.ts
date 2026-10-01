@@ -103,7 +103,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 1);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 2);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -218,5 +218,37 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
       assert.equal(await f.store.session(alice.token), undefined);
       await assert.rejects(f.store.login({ subject: 'google-alice', email: 'changed@example.com', name: 'Alice' }), /disabled/);
     });
+  } finally { await f.close(); }
+});
+
+test('job tokens charge only successful work, prevent overspending, and belong to the session account', async () => {
+  const f = await fixture();
+  try {
+    const alice = await f.store.login({ subject: 'tokens-alice', email: 'alice@example.com', name: 'Alice' });
+    const bob = await f.store.login({ subject: 'tokens-bob', email: 'bob@example.com', name: 'Bob' });
+    const connection = await f.store.saveConnection(alice.user.id, source);
+    const site = await f.store.saveWebsite(alice.user.id, siteInput(connection.id));
+    assert.equal(alice.user.jobTokens, 0);
+    let calls = 0;
+    const operation = async () => { calls++; return 'done'; };
+    await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', operation), /No job tokens/);
+    assert.equal(calls, 0);
+    await f.sql.query('UPDATE users SET job_tokens=3 WHERE id=$1', [alice.user.id]);
+    await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', async () => { throw new Error('Provider failed'); }), /Provider failed/);
+    assert.equal((await f.store.session(alice.token))?.jobTokens, 3);
+    for (const action of ['push', 'rebuild', 'ai_generation']) {
+      assert.equal(await f.store.spendJobToken(alice.user.id, site.id, action, operation), 'done');
+    }
+    assert.equal((await f.store.session(alice.token))?.jobTokens, 0);
+    assert.equal((await f.store.session(bob.token))?.jobTokens, 0);
+    const audit = await f.sql.query("SELECT action FROM audit_logs WHERE action LIKE 'job_token.spent.%'");
+    assert.equal(audit.rows.length, 3);
+    await f.sql.query('UPDATE users SET job_tokens=1 WHERE id=$1', [alice.user.id]);
+    const before = calls;
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => f.store.spendJobToken(alice.user.id, site.id, 'push', operation)));
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(calls - before, 1);
+    assert.equal((await f.store.session(alice.token))?.jobTokens, 0);
+    await assert.rejects(f.sql.query('UPDATE users SET job_tokens=-1 WHERE id=$1', [alice.user.id]));
   } finally { await f.close(); }
 });

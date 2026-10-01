@@ -252,3 +252,52 @@ test('parses complete AI post copy and allows title-only edits for existing curr
   assert.throws(() => parseApprovedPostCopy('A title without labeled fields', true), /Start with TITLE/);
   assert.throws(() => parseApprovedPostCopy('TITLE: Short\nEXCERPT: A valid excerpt that is long enough to pass.', true), /title must be between/);
 });
+
+
+test('all paid routes enforce the server token gate even with forged billing fields', async () => {
+  const fullCopy = [
+    'TITLE: Water Heater Repair in Austin, TX',
+    'EXCERPT: A concise local description of the completed water heater service.',
+    'INTRO: An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
+    'CONTEXT HEADING: Why Did the Hot-Water Issue Need Attention?',
+    'CONTEXT: Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
+    'WORK HEADING: What Did the Water-Heater Service Include?',
+    'WORK ITEMS:',
+    '- Reviewed the reported hot-water performance issue.',
+    '- Completed the targeted repairs documented for this service visit.',
+    'CLOSING: The completed work addressed the documented water-heater concern for this Austin, Texas property.',
+  ].join('\n');
+
+  const { HttpError } = await import('./saas/validation.js');
+  const { DisabledWordPressClient } = await import('./wordpress.js');
+  const actions: string[] = [];
+  const app = createApp({
+    spendJobToken: async (action) => { actions.push(action); throw new HttpError('No job tokens available.', 402); },
+    serviceTitan: {
+      getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
+      getJob: async () => { throw new Error('unused'); },
+      getJobDetails: async () => ({
+        job: { id: 1, jobNumber: '1', locationId: 2, jobTypeId: 3, jobStatus: 'Completed' },
+        summary: { id: 1, jobNumber: '1', jobName: 'Plumbing', status: 'Completed', location: { city: 'Austin', state: 'TX', zip: '78701' } },
+        attachments: [], history: [],
+      }),
+      getJobImage: async () => ({ id: 'image', fileName: 'image.jpg', contentType: 'image/jpeg', bytes: new Uint8Array([1]) }),
+    },
+    wordpress: new DisabledWordPressClient(),
+  });
+  const server = app.listen(0, '127.0.0.1');
+  try {
+    await new Promise<void>((done) => server.once('listening', done));
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    for (const path of ['ai-copy', 'wordpress', 'wordpress/regenerate']) {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/1/${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobTokens: 999, cost: 0, userId: 'someone-else', attachmentIds: ['image'], status: 'draft', aiCopy: fullCopy, force: true }),
+      });
+      assert.equal(response.status, 402);
+      assert.match((await response.json()).error, /No job tokens/);
+    }
+    assert.deepEqual(actions, ['ai_generation', 'push', 'rebuild']);
+  } finally { await new Promise<void>((done, reject) => server.close((error) => error ? reject(error) : done())); }
+});

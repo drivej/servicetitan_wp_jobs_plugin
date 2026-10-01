@@ -27,8 +27,9 @@ if (db) await db.verifyRuntimeRole();
 const aiConfig = loadOpenAIConfig();
 const copyGenerator = aiConfig ? new OpenAIJobCopyGenerator(aiConfig) : new DisabledJobCopyGenerator();
 const staticOptions = isProduction ? { staticDirectory: resolve(process.cwd(), 'dist/client') } : {};
-const app = saasConfig && db
-  ? createSaaSApp({ config: saasConfig, store: new AccountStore(db, saasConfig.vault), google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(copyGenerator), ...staticOptions })
+const store = saasConfig && db ? new AccountStore(db, saasConfig.vault) : undefined;
+const app = saasConfig && store
+  ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator), ...staticOptions })
   : createApp({
       serviceTitan: new ServiceTitanClient(config!.serviceTitan),
       wordpress: config!.wordpress ? new WordPressClient(config!.wordpress, fetch, new ZippopotamClient(config!.zipLookup)) : new DisabledWordPressClient(),
@@ -46,7 +47,7 @@ if (!isProduction) {
   app.use(vite.middlewares);
 }
 
-const server = app.listen(port, mode === 'local' ? '127.0.0.1' : '0.0.0.0', () => {
+const server = app.listen(port, mode === 'local' ? '127.0.0.1' : (process.env.HOST || '0.0.0.0'), () => {
   console.log(`ServiceTitan Jobs is listening on http://localhost:${port}`);
 });
 

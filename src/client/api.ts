@@ -11,7 +11,14 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
   if (!['GET', 'HEAD'].includes(init.method || 'GET') && csrf) headers.set('X-CSRF-Token', csrf);
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };
-export const apiFetch = (path: string, init?: RequestInit): Promise<Response> => accountFetch(apiUrl(path), init);
+export const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
+  try { return await accountFetch(apiUrl(path), init); }
+  finally {
+    if (isSaaSWorkspace() && init?.method && !['GET', 'HEAD'].includes(init.method)) {
+      window.dispatchEvent(new Event('job-tokens-changed'));
+    }
+  }
+};
 export function wordpressStatusStorage() {
   const prefix = `account:${userId}:website:${websiteId || 'local'}:`;
   return {

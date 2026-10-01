@@ -89,3 +89,24 @@ No Sevalla resources have been provisioned. The region, resources, domain, Googl
 The existing privacy limitation remains: summary text is not a comprehensive PII redactor. SaaS no longer sends the raw job object or the structured street/unit address to its editor/generator, but free-text facts still require review and stronger minimization before automated publication.
 
 References: [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [openid-client](https://github.com/panva/openid-client), [node-postgres transactions](https://node-postgres.com/features/transactions).
+
+## Run locally against a remote test database
+
+Use a dedicated development PostgreSQL database, separate from production. The `.env.remote` profile is ignored by Git; `.env.remote.example` documents its fields. `npm run dev:remote` runs the authenticated SaaS workflow on loopback while using the remote database for accounts, sessions, integrations, and job tokens. It does not read the usual `.env` file. ServiceTitan and WordPress credentials are entered through the account UI; optionally configure OpenAI in `.env.remote` for AI generation.
+
+1. Provision PostgreSQL with a public connection endpoint accessible from your development machine and verified TLS. If your provider uses its own CA, include the provider's CA path as `sslrootcert` in the URL; keep `sslmode=verify-full`.
+2. Create a separate runtime login without superuser or BYPASSRLS privileges. Put its URL in `DATABASE_URL` and the database owner's direct URL in `MIGRATION_DATABASE_URL`, both in `.env.remote`. URL-encode special characters in passwords.
+3. Configure the development Google OAuth client and `http://localhost:3000/auth/google/callback`. Keep the generated encryption key stable; changing it loses access to previously saved encrypted integration credentials.
+4. Run `npm run db:migrate:remote`, then apply the runtime grants in the Database setup section using your actual database and role names.
+5. Run `npm run db:check:remote` to verify connectivity, runtime permissions, ownership policies, and the job-token migration.
+6. Run `npm run dev:remote` and open `http://localhost:3000`. Sign in and configure test integrations. Allocate development job tokens as described in the README.
+
+The runner keeps migration credentials out of the web-server process. It rejects missing credentials and URLs without `sslmode=verify-full`. Regular `npm run dev` continues to use `.env`. These commands exercise the app with a remote database; `npm test` continues to use embedded PostgreSQL unless a separate disposable `TEST_DATABASE_URL` is explicitly supplied.
+
+### Current Sevalla development instance
+
+Provisioned in the **ServiceTitan WP Jobs Plugin** project: **ServiceTitan Jobs Dev**, PostgreSQL 17, London, DB1 ($5/month), database `st_jobs_dev`. External networking was enabled with owner approval. The migration owner URL is stored only in ignored `.env.remote`.
+
+Connection verification found that this instance rejects PostgreSQL TLS negotiation (`The server does not support SSL connections`); Studio reports `ssl=off`. The supplied owner is not a superuser and has no `CREATEROLE` permission. Both versioned migrations were applied atomically through Sevalla's HTTPS Studio, preserving the repository checksums.
+
+Local app startup is not ready: arrange a verified encrypted connection (provider-enabled TLS or an encrypted tunnel), a separate runtime login through the provider, and Google OAuth development credentials. Keep `sslmode=verify-full`; do not work around this by sending application/session data over an unencrypted public database connection. External access is currently enabled without IP restrictions. No app users or test token allocations have been added.

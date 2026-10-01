@@ -5,7 +5,7 @@ import { ServiceTitanClient, type JobDetails } from '../service-titan.js';
 import { DisabledWordPressClient, WordPressClient } from '../wordpress.js';
 import { ZippopotamClient } from '../zip-lookup.js';
 import { publicFetch } from './public-fetch.js';
-import type { WebsiteContext } from './store.js';
+import type { AccountStore, WebsiteContext } from './store.js';
 
 export type WebsiteAppFactory = (userId: string, context: WebsiteContext) => Express;
 export function minimizeJobDetails(details: JobDetails): JobDetails {
@@ -13,7 +13,7 @@ export function minimizeJobDetails(details: JobDetails): JobDetails {
   const { id, jobNumber, locationId, jobTypeId, jobStatus } = details.job;
   return { ...details, job: { id, jobNumber, locationId, jobTypeId, jobStatus }, summary: { ...details.summary, location } };
 }
-export function websiteAppFactory(copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator()): WebsiteAppFactory {
+export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator()): WebsiteAppFactory {
   const apps = new Map<string, { app: Express; expiresAt: number }>();
   return (userId, { website, connection, wordpress }) => {
     const key = `${userId}:${website.id}:${website.version}:${connection.id}:${connection.version}`;
@@ -32,6 +32,7 @@ export function websiteAppFactory(copyGenerator: JobCopyGenerator = new Disabled
       getJobDetails,
       getJobImage: (id, attachment) => serviceTitan.getJobImage(id, attachment),
     }, copyGenerator, apiPrefix: '',
+      spendJobToken: (action, operation) => store.spendJobToken(userId, website.id, action, operation),
       wordpress: wordpress ? new WordPressClient({ ...wordpress,
         collectionUrl: `${website.url}/wp-json/wp/v2/${website.restBase}`,
         postStatus: 'draft', zipAcfFieldName: website.zipAcfField,

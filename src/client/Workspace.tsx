@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
-interface User { id: string; name: string; email: string; }
+interface User { id: string; name: string; email: string; jobTokens: number; }
 interface Connection { id: string; name: string; environment: string; tenantId: string; }
 interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; }
 interface Session { mode: 'saas' | 'local'; user?: User; csrfToken?: string; }
@@ -57,6 +57,24 @@ export function Workspace({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (session?.mode !== 'saas') return;
+    let active = true;
+    let revision = 0;
+    const refreshBalance = async () => {
+      const current = ++revision;
+      try {
+        const updated = await accountFetch('/api/session').then(json<Session>);
+        if (active && current === revision) setSession(updated);
+      } catch { /* Keep the last confirmed balance; the API still enforces spending. */ }
+    };
+    const update = () => { void refreshBalance(); };
+    window.addEventListener('job-tokens-changed', update);
+    window.addEventListener('focus', update);
+    const interval = window.setInterval(update, 30_000);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('job-tokens-changed', update); window.removeEventListener('focus', update); };
+  }, [session?.mode]);
+
   if (signedOut) return <main className="account-page login-page">
     <p className="eyebrow">ServiceTitan Jobs</p><h1>Turn completed jobs into local stories.</h1>
     <p className="intro">Connect your ServiceTitan account, review project copy, and publish it to your WordPress websites.</p>
@@ -107,6 +125,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     <header className="workspace-bar">
       <a className="workspace-brand" href="/">ServiceTitan Jobs</a>
       {websites.length > 0 && <label className="workspace-selector"><span>Website</span><select aria-label="Active website" value={selected} onChange={(event) => chooseSite(event.target.value)}>{websites.map((site) => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>}
+      <span className="workspace-tokens" role="status" title="Each successful push, rebuild, or AI description costs 1 job token.">{user.jobTokens.toLocaleString()} job tokens available</span>
       <nav aria-label="Account"><a href="/">Jobs</a><a href="/account" aria-current={accountPage ? 'page' : undefined}>Account & websites</a><button disabled={busy} onClick={() => void logout()}>Sign out</button></nav>
     </header>
     {error && <p className="notice error account-notice" role="alert">{error}</p>}
@@ -114,6 +133,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       <p className="eyebrow">Your workspace</p><h1>{websites.length ? 'Account & websites' : `Welcome, ${user.name.split(' ')[0]}.`}</h1>
       <p className="intro">{websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'}</p>
       <p className="field-help">Signed in as {user.email}</p>
+      <p>Each successful push, rebuild, or AI description generation costs 1 job token. Failed requests do not spend tokens.</p>
       {message && <p className="notice" role="status">{message}</p>}
       <div className="account-grid">
         <section className="panel account-panel"><p className="eyebrow">1 · Source</p><h2>ServiceTitan connections</h2>
