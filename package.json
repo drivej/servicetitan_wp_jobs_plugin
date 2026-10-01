@@ -1,0 +1,51 @@
+{
+  "name": "service-titan-jobs-provider",
+  "version": "1.0.0",
+  "description": "Browse ServiceTitan jobs by appointment date and service location.",
+  "type": "module",
+  "main": "dist/server/index.js",
+  "scripts": {
+    "dev": "npm run build:plugin && npm run build:server && node dist/server/index.js",
+    "build": "npm run clean && npm run typecheck && npm run build:client && npm run build:server && npm run build:plugin",
+    "build:client": "vite build",
+    "build:plugin": "node scripts/build-wordpress-plugin.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json --noEmit",
+    "test": "node --import tsx --test src/server/*.test.ts src/server/saas/*.test.ts",
+    "db:migrate": "npm run build:server && node dist/server/migrate.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.20.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ipaddr.js": "^2.5.0",
+    "openid-client": "^6.8.8",
+    "pg": "^8.23.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "undici": "^8.11.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/archiver": "^8.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "archiver": "^8.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "private": true
+}

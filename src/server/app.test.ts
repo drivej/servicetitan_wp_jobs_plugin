@@ -1,0 +1,254 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+
+import { createApp, parseApprovedPostCopy, parseJobsQuery } from './app.js';
+
+test('converts an inclusive date range into ServiceTitan UTC boundaries', () => {
+  assert.deepEqual(
+    parseJobsQuery({ start: '2026-08-01', end: '2026-08-07', page: '2', pageSize: '25' }),
+    {
+      startDate: '2026-08-01T00:00:00.000Z',
+      endDateExclusive: '2026-08-08T00:00:00.000Z',
+      page: 2,
+      pageSize: 25,
+    },
+  );
+});
+
+test('applies pagination defaults', () => {
+  const query = parseJobsQuery({ start: '2026-08-01', end: '2026-08-01' });
+  assert.equal(query.page, 1);
+  assert.equal(query.pageSize, 25);
+});
+
+test('accepts an optional ZIP-code jobs filter', () => {
+  const query = parseJobsQuery({ start: '2026-08-01', end: '2026-08-07', zip: '07001' });
+  assert.equal(query.zip, '07001');
+  assert.throws(
+    () => parseJobsQuery({ start: '2026-08-01', end: '2026-08-07', zip: '7001' }),
+    /ZIP code/,
+  );
+});
+
+test('rejects impossible dates, reversed ranges, and oversized pages', () => {
+  assert.throws(() => parseJobsQuery({ start: '2026-02-30', end: '2026-03-01' }), /valid calendar dates/);
+  assert.throws(() => parseJobsQuery({ start: '2026-03-02', end: '2026-03-01' }), /on or after/);
+  assert.throws(() => parseJobsQuery({ start: '2026-03-01', end: '2026-03-02', pageSize: '51' }), /between 1 and 50/);
+});
+
+test('downloads the packaged WordPress plugin with an installable filename', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'st-plugin-download-'));
+  const archivePath = join(directory, 'plugin.zip');
+  const archive = Buffer.from('test plugin archive');
+  await writeFile(archivePath, archive);
+
+  const app = createApp({
+    serviceTitan: {
+      getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
+      getJob: async () => { throw new Error('not used'); },
+      getJobDetails: async () => { throw new Error('not used'); },
+      getJobImage: async () => { throw new Error('not used'); },
+    },
+    wordpress: {
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getStatuses: async () => ({}),
+      getStatus: async () => ({ state: 'not_found', label: 'None' }),
+      pushJob: async () => { throw new Error('not used'); },
+      regenerateJob: async () => { throw new Error('not used'); },
+      updateStatus: async () => { throw new Error('not used'); },
+    },
+    wordpressPluginArchivePath: archivePath,
+  });
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/servicetitan-job-integration-1.18.0.zip`);
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-disposition') || '', /servicetitan-job-integration-1\.18\.0\.zip/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), archive);
+
+    const removedSave = await fetch(`http://127.0.0.1:${address.port}/api/wordpress/plugin/download`, { method: 'POST' });
+    assert.equal(removedSave.status, 404);
+  } finally {
+    await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('passes an optional replacement image through the regeneration route', async () => {
+  let requestedImage = '';
+  let regeneratedWithImage = '';
+  let regeneratedWithTitle = '';
+  let regeneratedWithExcerpt = '';
+  const app = createApp({
+    serviceTitan: {
+      getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
+      getJob: async () => { throw new Error('not used'); },
+      getJobDetails: async (jobId) => ({
+        job: { id: jobId, jobNumber: 'J-42', locationId: 2, jobTypeId: 3, jobStatus: 'Completed' },
+        summary: {
+          id: jobId,
+          jobNumber: 'J-42',
+          jobName: 'Plumbing Service',
+          status: 'Completed',
+          location: { city: 'Torrance', state: 'CA', zip: '90505' },
+        },
+        attachments: [],
+        history: [],
+      }),
+      getJobImage: async (_jobId, attachmentId) => {
+        requestedImage = attachmentId;
+        return { id: attachmentId, fileName: 'replacement.jpg', contentType: 'image/jpeg', bytes: new Uint8Array([1, 2, 3]) };
+      },
+    },
+    wordpress: {
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getStatuses: async () => ({}),
+      getStatus: async () => ({ state: 'exists', label: 'Published', postId: 77 }),
+      pushJob: async () => { throw new Error('not used'); },
+      regenerateJob: async (_job, force, image, copy) => {
+        assert.equal(force, false);
+        regeneratedWithImage = image?.id || '';
+        regeneratedWithTitle = copy?.title || '';
+        regeneratedWithExcerpt = copy?.excerpt || '';
+        return { state: 'exists', label: 'Published', postId: 77 };
+      },
+      updateStatus: async () => { throw new Error('not used'); },
+    },
+  });
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/42/wordpress/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: false, attachmentId: 'replacement_1', aiCopy: 'TITLE: Plumbing Service in Torrance, CA\nEXCERPT: A fresh SEO description for this completed plumbing service in Torrance, California.' }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(requestedImage, 'replacement_1');
+    assert.equal(regeneratedWithImage, 'replacement_1');
+    assert.equal(regeneratedWithTitle, 'Plumbing Service in Torrance, CA');
+    assert.equal(regeneratedWithExcerpt, 'A fresh SEO description for this completed plumbing service in Torrance, California.');
+  } finally {
+    await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
+  }
+});
+
+test('generates editable AI copy from trusted ServiceTitan job details', async () => {
+  let generatedJobName = '';
+  const body = {
+    intro: 'A Torrance property had a documented kitchen drain blockage that required professional drain-clearing service.',
+    contextHeading: 'Why Did the Kitchen Drain Need Attention?',
+    contextParagraph: 'A blocked kitchen drain can interrupt daily use and may worsen if the obstruction is not properly addressed.',
+    workHeading: 'What Did the Drain Service Include?',
+    workItems: ['Located the documented kitchen drain blockage.', 'Cleared the obstruction from the affected drain line.'],
+    closing: 'The completed drain-clearing work addressed the reported blockage for this Torrance, California property.',
+  };
+  const app = createApp({
+    serviceTitan: {
+      getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
+      getJob: async () => { throw new Error('not used'); },
+      getJobDetails: async (jobId) => ({
+        job: { id: jobId, jobNumber: 'J-42', locationId: 2, jobTypeId: 3, jobStatus: 'Completed' },
+        summary: {
+          id: jobId,
+          jobNumber: 'J-42',
+          jobName: 'Drain Clearing',
+          status: 'Completed',
+          summaryText: 'Cleared a blocked kitchen drain.',
+          location: { city: 'Torrance', state: 'CA', zip: '90505' },
+        },
+        attachments: [],
+        history: [],
+      }),
+      getJobImage: async () => { throw new Error('not used'); },
+    },
+    wordpress: {
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getStatuses: async () => ({}),
+      getStatus: async () => ({ state: 'not_found', label: 'None' }),
+      pushJob: async () => { throw new Error('not used'); },
+      regenerateJob: async () => { throw new Error('not used'); },
+      updateStatus: async () => { throw new Error('not used'); },
+    },
+    copyGenerator: {
+      generate: async (job) => {
+        generatedJobName = job.jobName;
+        return {
+          title: 'Drain Clearing Service in Torrance, CA',
+          excerpt: 'Professional drain clearing resolved the documented kitchen blockage for a local property in Torrance, California.',
+          body,
+        };
+      },
+    },
+  });
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/42/ai-copy`, { method: 'POST' });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(generatedJobName, 'Drain Clearing');
+    assert.deepEqual(await response.json(), {
+      title: 'Drain Clearing Service in Torrance, CA',
+      excerpt: 'Professional drain clearing resolved the documented kitchen blockage for a local property in Torrance, California.',
+      body,
+    });
+  } finally {
+    await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
+  }
+});
+
+test('parses complete AI post copy and allows title-only edits for existing current posts', () => {
+  const fullCopy = [
+    'TITLE: Water Heater Repair in Austin, TX',
+    'EXCERPT: A concise local description of the completed water heater service.',
+    'INTRO: An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
+    'CONTEXT HEADING: Why Did the Hot-Water Issue Need Attention?',
+    'CONTEXT: Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
+    'WORK HEADING: What Did the Water-Heater Service Include?',
+    'WORK ITEMS:',
+    '- Reviewed the reported hot-water performance issue.',
+    '- Completed the targeted repairs documented for this service visit.',
+    'CLOSING: The completed work addressed the documented water-heater concern for this Austin, Texas property.',
+  ].join('\n');
+  assert.deepEqual(
+    parseApprovedPostCopy(fullCopy, true),
+    {
+      title: 'Water Heater Repair in Austin, TX',
+      excerpt: 'A concise local description of the completed water heater service.',
+      body: {
+        intro: 'An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
+        contextHeading: 'Why Did the Hot-Water Issue Need Attention?',
+        contextParagraph: 'Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
+        workHeading: 'What Did the Water-Heater Service Include?',
+        workItems: ['Reviewed the reported hot-water performance issue.', 'Completed the targeted repairs documented for this service visit.'],
+        closing: 'The completed work addressed the documented water-heater concern for this Austin, Texas property.',
+      },
+    },
+  );
+  assert.deepEqual(
+    parseApprovedPostCopy('TITLE: Water Heater Repair in Austin, TX\nEXCERPT: A concise local description of the completed water heater service.', false),
+    { title: 'Water Heater Repair in Austin, TX', excerpt: 'A concise local description of the completed water heater service.' },
+  );
+  assert.throws(
+    () => parseApprovedPostCopy('TITLE: Water Heater Repair in Austin, TX\nEXCERPT: A concise local description of the completed water heater service.', true),
+    /must include the intro/,
+  );
+  assert.throws(() => parseApprovedPostCopy('A title without labeled fields', true), /Start with TITLE/);
+  assert.throws(() => parseApprovedPostCopy('TITLE: Short\nEXCERPT: A valid excerpt that is long enough to pass.', true), /title must be between/);
+});
