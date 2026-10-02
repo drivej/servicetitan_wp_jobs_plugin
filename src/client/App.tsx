@@ -1,7 +1,6 @@
 import { apiFetch, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
 
-import { AppNavigation } from './AppNavigation';
 import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './jobsSearch';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
@@ -240,7 +239,6 @@ export function App() {
 
   return (
     <main>
-      <AppNavigation current='jobs' jobsHref={jobsListUrl(search)} />
       <header className='hero'>
         {/* <p className='eyebrow'>ServiceTitan workspace</p> */}
         <h3>ServiceTitan Jobs Search</h3>

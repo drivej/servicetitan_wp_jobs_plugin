@@ -1,7 +1,6 @@
 import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
 
-import { AppNavigation } from './AppNavigation';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { type WordPressStatus, writeCachedWordPressStatuses } from './wordpressStatusCache';
 import {
@@ -253,7 +252,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   return (
     <main>
-      <AppNavigation current="jobs" jobsHref={jobsHref} />
       <header className="hero details-hero">
         <a className="back-link" href={jobsHref}>← Back to jobs</a>
         <p className="eyebrow">Job details</p>

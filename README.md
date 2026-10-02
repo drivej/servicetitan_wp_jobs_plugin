@@ -223,3 +223,24 @@ npm run dev:remote
 ```
 
 Open `http://localhost:3000`. This runs the account and token workflow locally against the remote database. Normal `npm run dev` retains the existing local configuration. Full setup steps, TLS, role grants, and OAuth callback details are in [the development guide](docs/development.md).
+
+Useful Links:
+
+https://app.sevalla.com/app/servicetitanwpjobsplugin-4unqy/overview?idCompany=1d7d19f0-7059-4d39-8105-0c19df98e7a4
+
+https://servicetitanwpjobsplugin-4unqy.sevalla.app/
+
+https://console.cloud.google.com/auth/clients?tutorial=iam--quickstart&project=servicetitan-wp-jobs-plugin
+
+https://dashboard.stripe.com/acct_1PoRFT2MaKtF7IaH/account/status/tasks/astask_1QNmZ32MaKtF7IaH1E9EhkqF
+
+https://platform.openai.com/api-keys
+
+Docs:
+
+https://developer.servicetitan.io/docs/apis/tenant-salestech-v2/endpoints
+
+Reference:
+
+https://callwiseway.com/recent-project/garbage-disposal-replacement-in-hermosa-beach/
+

@@ -99,7 +99,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     catch (error) { next(error); }
   });
   app.put('/api/connections/:id', async (req, res, next) => {
-    try { res.json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body), uuid(req.params.id), true)); }
+    try { res.json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body, true), uuid(req.params.id), true)); }
     catch (error) { next(error); }
   });
   app.get('/api/websites', async (_req, res, next) => {

@@ -1,11 +1,9 @@
 import { isSaaSWorkspace } from './api';
-import { AppNavigation } from './AppNavigation';
 
 export function WordPressIntegrationGuide() {
   const saas = isSaaSWorkspace();
   return (
     <main className="guide-page">
-      <AppNavigation current="guide" />
 
       <header className="guide-hero">
         <p className="eyebrow">Integration guide</p>
@@ -74,7 +72,7 @@ export function WordPressIntegrationGuide() {
           <section id="configure-app">
             <p className="guide-step">Step 3</p>
             <h2>Configure the ServiceTitan Jobs app</h2>
-            {saas ? <p>Open <a href="/account">Account & websites</a>, add your website under the correct ServiceTitan connection, and enter the WordPress username and Application Password. The default REST base is <code>st-jobs</code>. Save, select that website, and check its connection in the WordPress plugin tab.</p> : <>
+            {saas ? <p>Open <a href="/account">Settings</a>, add your website under the correct ServiceTitan connection, and enter the WordPress username and Application Password. The default REST base is <code>st-jobs</code>. Save, select that website, and check its connection in the WordPress plugin tab.</p> : <>
             <p>Add these server-side environment variables locally or in the Sevalla/Kinsta application settings:</p>
             <pre><code>{`WORDPRESS_URL=https://www.example.com
 WORDPRESS_USERNAME=servicetitan-integration
@@ -159,7 +157,7 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
               <li>Use a dedicated integration user and Application Password.</li>
               <li>Keep WordPress and the companion plugin updated.</li>
               <li>Use HTTPS outside local development.</li>
-              <li>Store credentials through Account & websites, or in server environment variables for local mode.</li>
+              <li>Store credentials through Settings, or in server environment variables for local mode.</li>
               <li>Revoke the Application Password immediately if it is exposed.</li>
             </ul>
           </section>

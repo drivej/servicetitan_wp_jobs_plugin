@@ -39,13 +39,14 @@ export function websiteUrl(value: unknown): string {
   return url.toString().replace(/\/+$/, '');
 }
 export interface ConnectionInput { name: string; environment: 'integration' | 'production'; tenantId: string; clientId: string; clientSecret: string; appKey: string; }
-export function connectionInput(input: unknown): ConnectionInput {
+export function connectionInput(input: unknown, update = false): ConnectionInput {
   const value = record(input, ['name', 'environment', 'tenantId', 'clientId', 'clientSecret', 'appKey']);
   if (value.environment !== 'integration' && value.environment !== 'production') throw new HttpError('Choose a ServiceTitan environment.');
   const tenantId = textField(value.tenantId, 'Tenant ID', 20);
   if (!/^\d+$/.test(tenantId)) throw new HttpError('Tenant ID must contain only digits.');
+  const credential = (key: string, label: string, max: number) => update && (value[key] === undefined || value[key] === '') ? '' : textField(value[key], label, max);
   return { name: textField(value.name, 'Connection name'), environment: value.environment, tenantId,
-    clientId: textField(value.clientId, 'Client ID', 500), clientSecret: textField(value.clientSecret, 'Client secret', 2000), appKey: textField(value.appKey, 'App key', 2000) };
+    clientId: credential('clientId', 'Client ID', 500), clientSecret: credential('clientSecret', 'Client secret', 2000), appKey: credential('appKey', 'App key', 2000) };
 }
 export interface WebsiteInput { name: string; connectionId: string; url: string; restBase: string; zipAcfField: string; wordpress?: { username: string; applicationPassword: string }; }
 export function websiteInput(input: unknown): WebsiteInput {

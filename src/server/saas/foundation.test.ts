@@ -143,6 +143,16 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
       assert.equal(context.wordpress?.applicationPassword, 'wp-never-return');
       await f.store.saveConnection(alice.user.id, { ...source, clientSecret: 'rotated' }, connection.id, true);
       assert.equal((await f.store.websiteContext(alice.user.id, site.id)).connection.clientSecret, 'rotated');
+      const unchanged = connectionInput({ ...source, clientId: '', clientSecret: '', appKey: '' }, true);
+      await f.store.saveConnection(alice.user.id, unchanged, connection.id, true);
+      assert.equal((await f.store.websiteContext(alice.user.id, site.id)).connection.clientSecret, 'rotated');
+      await assert.rejects(f.store.saveConnection(alice.user.id, { ...unchanged, environment: 'production' }, connection.id, true), /new environment/);
+      assert.equal((await f.store.websiteContext(alice.user.id, site.id)).connection.environment, 'integration');
+      const switched = await f.store.saveConnection(alice.user.id, { ...source, environment: 'production', clientSecret: 'production-secret' }, connection.id, true);
+      assert.equal(switched.environment, 'production');
+      assert(switched.version > connection.version);
+      assert.equal((await f.store.websiteContext(alice.user.id, site.id)).connection.clientSecret, 'production-secret');
+      assert.throws(() => connectionInput({ ...source, clientSecret: '' }), /Client secret/);
       await assert.rejects(f.store.saveConnection(alice.user.id, { ...source, tenantId: '999' }, connection.id, true), /new connection/);
       await assert.rejects(f.store.saveWebsite(alice.user.id, { ...siteInput(connection.id), url: 'https://changed.example.com' }, site.id, true), /new website/);
     });

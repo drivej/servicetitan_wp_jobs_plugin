@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { AppNavigation } from './AppNavigation';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
 interface User { id: string; name: string; email: string; jobTokens: number; }
@@ -75,6 +76,10 @@ export function Workspace({ children }: { children: ReactNode }) {
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('job-tokens-changed', update); window.removeEventListener('focus', update); };
   }, [session?.mode]);
 
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/wordpress-integration' ? 'guide' : path === '/' || path.startsWith('/jobs/') ? 'jobs' : undefined;
+  const jobsHref = currentPage === 'jobs' ? `/${window.location.search}` : '/';
+
   if (signedOut) return <main className="account-page login-page">
     <p className="eyebrow">ServiceTitan Jobs</p><h1>Turn completed jobs into local stories.</h1>
     <p className="intro">Connect your ServiceTitan account, review project copy, and publish it to your WordPress websites.</p>
@@ -83,7 +88,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     <p className="field-help">Your websites and integrations stay private to your account.</p>
   </main>;
   if (!loaded) return <main className="account-page"><h1>ServiceTitan Jobs</h1><p role={error ? 'alert' : 'status'}>{error || 'Loading your workspace…'}</p>{error && <button onClick={() => window.location.reload()}>Try again</button>}</main>;
-  if (session?.mode === 'local') return <><div className="local-mode-note">Local workspace · <a href="/wordpress-plugin">WordPress plugin</a></div>{children}</>;
+  if (session?.mode === 'local') return <><header className="workspace-bar"><a className="workspace-brand" href="/">ServiceTitan Jobs</a><span className="local-mode-note">Local workspace</span><AppNavigation current={currentPage} jobsHref={jobsHref} /></header>{children}</>;
   const user = session!.user!;
   const accountPage = window.location.pathname === '/account' || websites.length === 0;
 
@@ -114,6 +119,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           ...(field('username') || field('applicationPassword') ? { wordpress: { username: field('username'), applicationPassword: field('applicationPassword') } } : {}) };
     try {
       await accountFetch(`/api/${kind}${editing ? `/${editing.id}` : ''}`, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(json);
+      if (kind === 'connections' && editingConnection && field('environment') !== editingConnection.environment) clearAccountCache(user.id);
       form.reset(); setEditingConnection(undefined); setEditingWebsite(undefined);
       await refresh(user, session!.csrfToken!);
       setMessage(kind === 'connections' ? 'ServiceTitan connection saved.' : 'Website saved. Open Jobs to verify the connection and review your content.');
@@ -126,11 +132,12 @@ export function Workspace({ children }: { children: ReactNode }) {
       <a className="workspace-brand" href="/">ServiceTitan Jobs</a>
       {websites.length > 0 && <label className="workspace-selector"><span>Website</span><select aria-label="Active website" value={selected} onChange={(event) => chooseSite(event.target.value)}>{websites.map((site) => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>}
       <span className="workspace-tokens" role="status" title="Each successful push, rebuild, or AI description costs 1 job token.">{user.jobTokens.toLocaleString()} job tokens available</span>
-      <nav aria-label="Account"><a href="/">Jobs</a><a href="/account" aria-current={accountPage ? 'page' : undefined}>Account & websites</a><button disabled={busy} onClick={() => void logout()}>Sign out</button></nav>
+      <AppNavigation current={accountPage ? undefined : currentPage} jobsHref={jobsHref} />
+      <nav aria-label="Account"><a href="/account" aria-current={accountPage ? 'page' : undefined}>Settings</a><button disabled={busy} onClick={() => void logout()}>Sign out</button></nav>
     </header>
     {error && <p className="notice error account-notice" role="alert">{error}</p>}
     {accountPage ? <main className="account-page">
-      <p className="eyebrow">Your workspace</p><h1>{websites.length ? 'Account & websites' : `Welcome, ${user.name.split(' ')[0]}.`}</h1>
+      <p className="eyebrow">Your workspace</p><h1>{websites.length ? 'Settings' : `Welcome, ${user.name.split(' ')[0]}.`}</h1>
       <p className="intro">{websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'}</p>
       <p className="field-help">Signed in as {user.email}</p>
       <p>Each successful push, rebuild, or AI description generation costs 1 job token. Failed requests do not spend tokens.</p>
@@ -141,12 +148,12 @@ export function Workspace({ children }: { children: ReactNode }) {
           <form key={editingConnection?.id || 'new-connection'} onSubmit={(event) => void submit(event, 'connections')} className="account-form">
             <h3>{editingConnection ? `Update ${editingConnection.name}` : 'Add a connection'}</h3>
             <label>Name<input name="name" required maxLength={100} defaultValue={editingConnection?.name} placeholder="My service business" /></label>
-            <div className="account-field-pair"><label>Environment<select name="environment" defaultValue={editingConnection?.environment || 'integration'}>{(!editingConnection || editingConnection.environment === 'integration') && <option value="integration">Integration</option>}{(!editingConnection || editingConnection.environment === 'production') && <option value="production">Production</option>}</select></label>
+            <div className="account-field-pair"><label>Environment<select name="environment" defaultValue={editingConnection?.environment || 'integration'}><option value="integration">Integration</option><option value="production">Production</option></select></label>
             <label>Tenant ID<input name="tenantId" required pattern="[0-9]{1,20}" defaultValue={editingConnection?.tenantId} readOnly={Boolean(editingConnection)} /></label></div>
-            <label>Client ID<input name="clientId" required maxLength={500} autoComplete="off" /></label>
-            <label>Client secret<input name="clientSecret" type="password" required maxLength={2000} autoComplete="new-password" /></label>
-            <label>App key<input name="appKey" type="password" required maxLength={2000} autoComplete="new-password" /></label>
-            <p className="field-help">Credentials are encrypted on the server and never sent back to the browser. Saving does not test ServiceTitan access.</p>
+            <label>Client ID<input name="clientId" required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={500} autoComplete="off" /></label>
+            <label>Client secret<input name="clientSecret" type="password" required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={2000} autoComplete="new-password" /></label>
+            <label>App key<input name="appKey" type="password" required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={2000} autoComplete="new-password" /></label>
+            <p className="field-help">Credentials are encrypted and are not displayed again. When updating the same environment, leave a credential blank to keep its saved value. To switch environments, enter all three credentials for the new environment. The change applies to every website using this connection; existing WordPress posts are not changed. Saving does not test ServiceTitan access.</p>
             <div className="account-actions"><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save connection'}</button>{editingConnection && <button type="button" onClick={() => setEditingConnection(undefined)}>Cancel</button>}</div>
           </form>
         </section>

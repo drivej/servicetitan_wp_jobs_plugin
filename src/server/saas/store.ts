@@ -78,14 +78,19 @@ export class AccountStore {
   }
   async saveConnection(userId: string, input: ConnectionInput, id: string = randomUUID(), update = false): Promise<Connection> {
     return this.db.transaction(userId, async (sql) => {
+      let saved: Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'> | undefined;
       if (update) {
         const row = (await sql.query('SELECT * FROM servicetitan_connections WHERE user_id=$1 AND id=$2 FOR UPDATE', [userId, id])).rows[0];
         if (!row) throw new HttpError('Connection not found.', 404);
-        if (row.tenant_id !== input.tenantId || row.environment !== input.environment) throw new HttpError('Create a new connection to change tenant or environment.');
+        if (row.tenant_id !== input.tenantId) throw new HttpError('Create a new connection to change tenant.');
+        if (row.environment !== input.environment && (!input.clientId || !input.clientSecret || !input.appKey)) throw new HttpError('Enter the Client ID, client secret, and app key for the new environment.');
+        saved = this.vault.decrypt(String(row.credentials), `connection:${userId}:${id}`);
       }
-      const encrypted = this.vault.encrypt({ clientId: input.clientId, clientSecret: input.clientSecret, appKey: input.appKey }, `connection:${userId}:${id}`);
+      const credentials = { clientId: input.clientId || saved?.clientId, clientSecret: input.clientSecret || saved?.clientSecret, appKey: input.appKey || saved?.appKey };
+      if (!credentials.clientId || !credentials.clientSecret || !credentials.appKey) throw new HttpError('ServiceTitan credentials are required.');
+      const encrypted = this.vault.encrypt(credentials, `connection:${userId}:${id}`);
       const result = update
-        ? await sql.query('UPDATE servicetitan_connections SET name=$3,credentials=$4,version=version+1,updated_at=now() WHERE user_id=$1 AND id=$2 RETURNING *', [userId, id, input.name, encrypted])
+        ? await sql.query('UPDATE servicetitan_connections SET name=$3,credentials=$4,environment=$5,version=version+1,updated_at=now() WHERE user_id=$1 AND id=$2 RETURNING *', [userId, id, input.name, encrypted, input.environment])
         : await sql.query('INSERT INTO servicetitan_connections(id,user_id,name,environment,tenant_id,credentials) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, userId, input.name, input.environment, input.tenantId, encrypted]);
       await audit(sql, userId, update ? 'connection.updated' : 'connection.created', id);
       return connectionFrom(result.rows[0]!);

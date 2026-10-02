@@ -44,7 +44,7 @@ main {
 .app-nav {
   display: flex;
   gap: 6px;
-  margin-bottom: 42px;
+  margin-bottom: 0;
 }
 .app-nav a {
   padding: 8px 12px;
@@ -1697,3 +1697,6 @@ td strong {
 @media (max-width: 800px) { .account-grid { grid-template-columns: 1fr; } .workspace-bar { gap: 14px; } .workspace-bar nav { margin-left: 0; flex-wrap: wrap; } .account-page { margin-top: 30px; } }
 
 .workspace-tokens { padding: 8px 12px; border-radius: 8px; background: #eef5f3; color: #234f42; font-size: 14px; font-weight: 600; }
+
+.workspace-bar .app-nav { margin: 0; flex-wrap: wrap; gap: 6px; }
+.workspace-bar .app-nav a[aria-current='page'] { color: white; }
