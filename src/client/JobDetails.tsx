@@ -181,6 +181,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });
+      if (response.status === 402) return;
       const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
       if (!response.ok) throw new Error(body.error || 'Unable to generate copy.');
       if (!body.title || !body.excerpt || !hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
@@ -203,6 +204,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ attachmentIds: selectedIds, status: desiredStatus, aiCopy }),
       });
+      if (response.status === 402) return;
       const body = await readJson<WordPressStatus | { error?: string }>(response);
       if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to create the WordPress post.');
       const status = body as WordPressStatus;
@@ -237,6 +239,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
           ...(aiCopy.trim() ? { aiCopy } : {}),
         }),
       });
+      if (response.status === 402) return;
       const body = await readJson<WordPressStatus | { error?: string }>(response);
       if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to regenerate the WordPress post.');
       const status = body as WordPressStatus;

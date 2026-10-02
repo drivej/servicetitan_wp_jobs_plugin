@@ -81,7 +81,13 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/session', (_req, res) => {
-    res.json({ mode: 'saas', user: res.locals.user, csrfToken: csrfToken(String(res.locals.sessionToken)) });
+    res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user, csrfToken: csrfToken(String(res.locals.sessionToken)) });
+  });
+  app.post('/api/tokens/test-credit', async (_req, res, next) => {
+    try {
+      if (!config.testTokensEnabled) throw new HttpError('Test tokens are disabled.', 403);
+      res.json({ jobTokens: await store.addTestJobToken((res.locals.user as User).id) });
+    } catch (error) { next(error); }
   });
   app.post('/api/logout', async (_req, res, next) => {
     try {

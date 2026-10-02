@@ -130,6 +130,14 @@ export class AccountStore {
       };
     });
   }
+  async addTestJobToken(userId: string): Promise<number> {
+    return this.db.transaction(userId, async (sql) => {
+      const row = (await sql.query('UPDATE users SET job_tokens=job_tokens+1 WHERE id=$1 AND disabled_at IS NULL RETURNING job_tokens', [userId])).rows[0];
+      if (!row) throw new HttpError('Account not available.', 403);
+      await audit(sql, userId, 'job_token.credited.test', userId);
+      return Number(row.job_tokens);
+    });
+  }
   async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>): Promise<T> {
     return this.db.transaction(userId, async (sql) => {
       // Serialize across websites, tabs, and server instances. Never trust a client balance.

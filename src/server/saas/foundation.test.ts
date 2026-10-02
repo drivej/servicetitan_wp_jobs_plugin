@@ -206,6 +206,22 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
         const sessionBody = await sessionResponse.json() as { csrfToken: string; user: { id: string } };
         assert.equal(sessionBody.csrfToken, csrfToken(alice.token));
         assert.equal(sessionBody.user.id, alice.user.id);
+        const creditUrl = `${base}/api/tokens/test-credit`;
+        assert.equal((await fetch(creditUrl, { method: 'POST' })).status, 401);
+        assert.equal((await fetch(creditUrl, { method: 'POST', headers: headers(alice.token) })).status, 403);
+        config.testTokensEnabled = true;
+        assert.equal((await fetch(creditUrl, { method: 'POST', headers: { Cookie: `st_session=${alice.token}`, Origin: config.origin } })).status, 403);
+        const aliceBalance = (await f.store.session(alice.token))!.jobTokens;
+        const bobBalance = (await f.store.session(bobSession.token))!.jobTokens;
+        const credits = await Promise.all([1, 2].map(() => fetch(creditUrl, {
+          method: 'POST', headers: headers(alice.token),
+          body: JSON.stringify({ userId: bob.user.id, amount: 1000, jobTokens: 1000 }),
+        })));
+        assert(credits.every((response) => response.status === 200));
+        assert.equal((await f.store.session(alice.token))!.jobTokens, aliceBalance + 2);
+        assert.equal((await f.store.session(bobSession.token))!.jobTokens, bobBalance);
+        config.testTokensEnabled = false;
+        assert.equal((await fetch(creditUrl, { method: 'POST', headers: headers(alice.token) })).status, 403);
         const start = await fetch(`${base}/auth/google`, { redirect: 'manual' });
         const loginCookie = start.headers.get('set-cookie')!;
         assert.match(loginCookie, /HttpOnly/); assert.match(loginCookie, /SameSite=Lax/);

@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { AppNavigation } from './AppNavigation';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
 interface User { id: string; name: string; email: string; jobTokens: number; }
 interface Connection { id: string; name: string; environment: string; tenantId: string; }
 interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; }
-interface Session { mode: 'saas' | 'local'; user?: User; csrfToken?: string; }
+interface Session { mode: 'saas' | 'local'; testTokensEnabled?: boolean; user?: User; csrfToken?: string; }
 
 async function json<T>(response: Response): Promise<T> {
   const body = await response.json() as T & { error?: string };
@@ -13,6 +13,7 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 export function Workspace({ children }: { children: ReactNode }) {
+  const tokenDialog = useRef<HTMLDialogElement>(null);
   const [session, setSession] = useState<Session>();
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState('');
@@ -70,10 +71,12 @@ export function Workspace({ children }: { children: ReactNode }) {
       } catch { /* Keep the last confirmed balance; the API still enforces spending. */ }
     };
     const update = () => { void refreshBalance(); };
+    const exhausted = () => tokenDialog.current?.showModal();
+    window.addEventListener('job-tokens-exhausted', exhausted);
     window.addEventListener('job-tokens-changed', update);
     window.addEventListener('focus', update);
     const interval = window.setInterval(update, 30_000);
-    return () => { active = false; window.clearInterval(interval); window.removeEventListener('job-tokens-changed', update); window.removeEventListener('focus', update); };
+    return () => { active = false; window.removeEventListener('job-tokens-exhausted', exhausted); window.clearInterval(interval); window.removeEventListener('job-tokens-changed', update); window.removeEventListener('focus', update); };
   }, [session?.mode]);
 
   const path = window.location.pathname.replace(/\/$/, '') || '/';
@@ -90,7 +93,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   if (!loaded) return <main className="account-page"><h1>ServiceTitan Jobs</h1><p role={error ? 'alert' : 'status'}>{error || 'Loading your workspace…'}</p>{error && <button onClick={() => window.location.reload()}>Try again</button>}</main>;
   if (session?.mode === 'local') return <><header className="workspace-bar"><a className="workspace-brand" href="/">ServiceTitan Jobs</a><span className="local-mode-note">Local workspace</span><AppNavigation current={currentPage} jobsHref={jobsHref} /></header>{children}</>;
   const user = session!.user!;
-  const accountPage = window.location.pathname === '/account' || websites.length === 0;
+  const tokensPage = path === '/add-tokens';
+  const accountPage = !tokensPage && (path === '/account' || websites.length === 0);
 
   const chooseSite = (id: string) => {
     configureApi(user.id, id, session!.csrfToken!);
@@ -98,6 +102,15 @@ export function Workspace({ children }: { children: ReactNode }) {
     setSelected(id);
     // Old job IDs and filters should not carry into another tenant's detail page.
     window.location.assign('/');
+  };
+  const addTestToken = async () => {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await accountFetch('/api/tokens/test-credit', { method: 'POST' }).then(json);
+      window.dispatchEvent(new Event('job-tokens-changed'));
+      setMessage('1 test token added.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to add a test token.'); }
+    finally { setBusy(false); }
   };
   const logout = async () => {
     setBusy(true); setError('');
@@ -133,10 +146,25 @@ export function Workspace({ children }: { children: ReactNode }) {
       {websites.length > 0 && <label className="workspace-selector"><span>Website</span><select aria-label="Active website" value={selected} onChange={(event) => chooseSite(event.target.value)}>{websites.map((site) => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>}
       <span className="workspace-tokens" role="status" title="Each successful push, rebuild, or AI description costs 1 job token.">{user.jobTokens.toLocaleString()} job tokens available</span>
       <AppNavigation current={accountPage ? undefined : currentPage} jobsHref={jobsHref} />
-      <nav aria-label="Account"><a href="/account" aria-current={accountPage ? 'page' : undefined}>Settings</a><button disabled={busy} onClick={() => void logout()}>Sign out</button></nav>
+      <nav aria-label="Account"><a href="/add-tokens" aria-current={tokensPage ? 'page' : undefined}>Add Tokens</a><a href="/account" aria-current={accountPage ? 'page' : undefined}>Settings</a><button disabled={busy} onClick={() => void logout()}>Sign out</button></nav>
     </header>
     {error && <p className="notice error account-notice" role="alert">{error}</p>}
-    {accountPage ? <main className="account-page">
+    <dialog ref={tokenDialog} className="error-modal token-dialog" aria-labelledby="token-dialog-title" aria-describedby="token-dialog-description">
+      <h2 id="token-dialog-title">No job tokens available</h2>
+      <p id="token-dialog-description">Add tokens to push a post, rebuild a post, or generate an AI description. Your request has not been completed.</p>
+      <div className="account-actions"><a className="account-primary-link" href="/add-tokens">Add Tokens</a><button onClick={() => tokenDialog.current?.close()}>Close</button></div>
+    </dialog>
+    {tokensPage ? <main className="account-page">
+      <p className="eyebrow">Your workspace</p><h1>Add Tokens</h1>
+      <p className="intro">Use job tokens to publish posts, rebuild posts, and generate AI descriptions.</p>
+      <section className="panel account-panel">
+        <h2>{user.jobTokens.toLocaleString()} job tokens available</h2>
+        <p>Each successful action costs 1 token. Failed requests do not spend tokens.</p>
+        <p>Token purchases are coming soon.</p>
+        {session?.testTokensEnabled && <><h3>Testing</h3><p>Add one free token at a time to test the application. No payment is required.</p><button className="primary" disabled={busy} onClick={() => void addTestToken()}>{busy ? 'Adding…' : 'Add 1 test token'}</button></>}
+        {message && <p className="notice" role="status">{message}</p>}
+      </section>
+    </main> : accountPage ? <main className="account-page">
       <p className="eyebrow">Your workspace</p><h1>{websites.length ? 'Settings' : `Welcome, ${user.name.split(' ')[0]}.`}</h1>
       <p className="intro">{websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'}</p>
       <p className="field-help">Signed in as {user.email}</p>

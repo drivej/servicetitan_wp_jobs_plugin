@@ -12,7 +12,11 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };
 export const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
-  try { return await accountFetch(apiUrl(path), init); }
+  try {
+    const response = await accountFetch(apiUrl(path), init);
+    if (isSaaSWorkspace() && response.status === 402) window.dispatchEvent(new Event('job-tokens-exhausted'));
+    return response;
+  }
   finally {
     if (isSaaSWorkspace() && init?.method && !['GET', 'HEAD'].includes(init.method)) {
       window.dispatchEvent(new Event('job-tokens-changed'));
