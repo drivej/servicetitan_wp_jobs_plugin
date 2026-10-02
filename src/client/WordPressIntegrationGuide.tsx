@@ -23,6 +23,7 @@ export function WordPressIntegrationGuide() {
           <a href="#job-page">Create the jobs page</a>
           <a href="#existing-posts">Existing posts</a>
           <a href="#troubleshooting">Troubleshooting</a>
+          <a href="#report-bug">Report a bug</a>
         </aside>
 
         <article className="guide-content">
@@ -149,6 +150,11 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
               <details><summary>A pushed job does not appear on the jobs page</summary><p>Confirm the post is published. If it is an older post, assign a ZIP Codes term manually. Also check whether the page shortcode includes that job’s ZIP code.</p></details>
               <details><summary>The Push button is disabled</summary><p>Select the row’s refresh icon first. Push is enabled only after WordPress confirms the correlated post does not already exist.</p></details>
             </div>
+          </section>
+
+          <section id="report-bug">
+            <h2>Report a bug</h2>
+            <p>Please describe the problem you were having and what you were doing when it happened.</p>
           </section>
 
           <section className="guide-callout security-callout">

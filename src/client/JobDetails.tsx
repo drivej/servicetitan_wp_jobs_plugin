@@ -1,3 +1,4 @@
+import { ErrorDialog } from './ErrorDialog';
 import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -33,10 +34,11 @@ interface JobImageOptionProps {
   disabled: boolean;
   jobId: number;
   onToggle: () => void;
+  onImageState: (id: string, state: 'loaded' | 'error') => void;
   selected: boolean;
 }
 
-function JobImageOption({ attachment, disabled, jobId, onToggle, selected }: JobImageOptionProps) {
+function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, selected }: JobImageOptionProps) {
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   return (
@@ -53,12 +55,12 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, selected }: Job
           src={apiUrl(`/api/jobs/${jobId}/images/${encodeURIComponent(attachment.id)}`)}
           alt={attachment.fileName}
           loading="lazy"
-          onLoad={() => setImageState('loaded')}
-          onError={() => setImageState('error')}
+          onLoad={() => { setImageState('loaded'); onImageState(attachment.id, 'loaded'); }}
+          onError={() => { setImageState('error'); onImageState(attachment.id, 'error'); }}
         />
       </span>
       <span className="image-choice">
-        <input type="radio" name="job-image" checked={selected} disabled={disabled} onChange={onToggle} />
+        <input type="radio" name="job-image" checked={selected} disabled={disabled || imageState !== 'loaded'} onChange={onToggle} />
         <span>{attachment.fileName}</span>
       </span>
     </label>
@@ -69,6 +71,12 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const jobsHref = `/${window.location.search}`;
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [imageStates, setImageStates] = useState<Record<string, 'loaded' | 'error'>>({});
+  const selectedImageLoaded = selectedIds.length === 1 && imageStates[selectedIds[0]!] === 'loaded';
+  const recordImageState = (id: string, state: 'loaded' | 'error') => {
+    setImageStates((current) => ({ ...current, [id]: state }));
+    if (state === 'error') setSelectedIds((current) => current.filter((selected) => selected !== id));
+  };
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState(false);
@@ -195,7 +203,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   };
 
   const pushToWordPress = async () => {
-    if (selectedIds.length !== 1 || !hasCompleteAiCopy) return;
+    if (!selectedImageLoaded || !hasCompleteAiCopy) return;
     setPushing(true);
     setError('');
     try {
@@ -303,9 +311,9 @@ export function JobDetails({ jobId }: { jobId: number }) {
               <button
                 className="primary wordpress-push-button"
                 type="button"
-                disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || selectedIds.length !== 1 || !hasCompleteAiCopy || pushing}
-                title={selectedIds.length !== 1
-                  ? 'Select an image before pushing.'
+                disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
+                title={!selectedImageLoaded
+                  ? 'Select a working image before pushing.'
                   : !hasCompleteAiCopy ? 'Generate or paste the complete AI post copy before pushing.' : undefined}
                 onClick={() => void pushToWordPress()}
               >
@@ -317,7 +325,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
       </section>
 
       {loading && <div className="notice" role="status">Loading job details and images…</div>}
-      {error && <div className="notice error" role="alert">{error}</div>}
+      <ErrorDialog message={error} onClose={() => setError('')} />
 
       {details && (
         <>
@@ -345,6 +353,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 ? 'The current featured image is selected when it can be matched. Choose a different image before rebuilding only if you want to replace it.'
                 : 'The selected image is uploaded to the WordPress Media Library and becomes the generated post’s featured image.'}
             </p>
+            {(details.attachments.length === 0 || details.attachments.every((attachment) => imageStates[attachment.id] === 'error')) && <p className="notice" role="status">This job does not qualify to be pushed because it has no working images. Add or restore an image in ServiceTitan, then reload this page to check again.</p>}
             <div className="image-grid">
               {details.attachments.map((attachment) => {
                 const selected = selectedIds.includes(attachment.id);
@@ -354,6 +363,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                     attachment={attachment}
                     disabled={pushing || regenerating}
                     jobId={jobId}
+                    onImageState={recordImageState}
                     onToggle={() => toggleImage(attachment.id)}
                     selected={selected}
                   />
