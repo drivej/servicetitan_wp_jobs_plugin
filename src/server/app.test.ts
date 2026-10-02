@@ -271,6 +271,7 @@ test('all paid routes enforce the server token gate even with forged billing fie
   const { HttpError } = await import('./saas/validation.js');
   const { DisabledWordPressClient } = await import('./wordpress.js');
   const actions: string[] = [];
+  let imageUnavailable = false;
   const app = createApp({
     spendJobToken: async (action) => { actions.push(action); throw new HttpError('No job tokens available.', 402); },
     serviceTitan: {
@@ -281,7 +282,10 @@ test('all paid routes enforce the server token gate even with forged billing fie
         summary: { id: 1, jobNumber: '1', jobName: 'Plumbing', status: 'Completed', location: { city: 'Austin', state: 'TX', zip: '78701' } },
         attachments: [], history: [],
       }),
-      getJobImage: async () => ({ id: 'image', fileName: 'image.jpg', contentType: 'image/jpeg', bytes: new Uint8Array([1]) }),
+      getJobImage: async () => {
+        if (imageUnavailable) throw new HttpError('Image unavailable.', 502);
+        return { id: 'image', fileName: 'image.jpg', contentType: 'image/jpeg', bytes: new Uint8Array([1]) };
+      },
     },
     wordpress: new DisabledWordPressClient(),
   });
@@ -298,6 +302,15 @@ test('all paid routes enforce the server token gate even with forged billing fie
       assert.equal(response.status, 402);
       assert.match((await response.json()).error, /No job tokens/);
     }
+    assert.deepEqual(actions, ['ai_generation', 'push', 'rebuild']);
+    imageUnavailable = true;
+    const failedPush = await fetch(`http://127.0.0.1:${address.port}/api/jobs/1/wordpress`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attachmentIds: ['image'], status: 'publish', aiCopy: fullCopy }),
+    });
+    assert.equal(failedPush.status, 502);
+    assert.match((await failedPush.json()).error, /Image unavailable/);
+    // The token callback and WordPress publishing are never reached when the image fails.
     assert.deepEqual(actions, ['ai_generation', 'push', 'rebuild']);
   } finally { await new Promise<void>((done, reject) => server.close((error) => error ? reject(error) : done())); }
 });

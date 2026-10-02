@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { TeamSettings, type TeamRole } from './TeamSettings';
 import { AppNavigation } from './AppNavigation';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
-interface User { id: string; name: string; email: string; jobTokens: number; }
+interface User { workspaceId: string; workspaceName: string; role: TeamRole; id: string; name: string; email: string; jobTokens: number; }
 interface Connection { id: string; name: string; environment: string; tenantId: string; }
 interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; }
 interface Session { mode: 'saas' | 'local'; testTokensEnabled?: boolean; user?: User; csrfToken?: string; }
@@ -13,6 +14,15 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 export function Workspace({ children }: { children: ReactNode }) {
+  const [invitationToken] = useState(() => {
+    const incoming = window.location.pathname === '/invite' ? new URLSearchParams(window.location.hash.slice(1)).get('token') : null;
+    try {
+      if (incoming && /^[a-zA-Z0-9_-]{43}$/.test(incoming)) window.sessionStorage.setItem('pending-team-invite', incoming);
+      return window.sessionStorage.getItem('pending-team-invite') || '';
+    } catch { return incoming || ''; }
+  });
+  const [invitation, setInvitation] = useState<{ workspaceName: string; role: TeamRole; email: string }>();
+  const [workspaces, setWorkspaces] = useState<{ id: string; name: string; role: TeamRole }[]>([]);
   const tokenDialog = useRef<HTMLDialogElement>(null);
   const [session, setSession] = useState<Session>();
   const [signedOut, setSignedOut] = useState(false);
@@ -27,16 +37,18 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [editingWebsite, setEditingWebsite] = useState<Website>();
 
   async function refresh(user: User, token: string) {
-    const [connectionResult, siteResult] = await Promise.all([
+    const [connectionResult, siteResult, workspaceResult] = await Promise.all([
       accountFetch('/api/connections').then(json<{ connections: Connection[] }>),
       accountFetch('/api/websites').then(json<{ websites: Website[] }>),
+      accountFetch('/api/workspaces').then(json<{ workspaces: { id: string; name: string; role: TeamRole }[] }>),
     ]);
+    setWorkspaces(workspaceResult.workspaces);
     setConnections(connectionResult.connections);
     setWebsites(siteResult.websites);
     let saved = '';
     try { saved = window.sessionStorage.getItem(`website:${user.id}`) || ''; } catch { /* optional */ }
     const site = siteResult.websites.find((item) => item.id === saved) || siteResult.websites[0];
-    configureApi(user.id, site?.id || '', token);
+    configureApi(user.id, site?.id || '', token, user.workspaceId);
     setSelected(site?.id || '');
     setLoaded(true);
   }
@@ -52,8 +64,9 @@ export function Workspace({ children }: { children: ReactNode }) {
         setSession(current);
         if (current.mode === 'local') { configureApi('local', '', ''); setLoaded(true); return; }
         if (!current.user || !current.csrfToken) throw new Error('Invalid session response.');
-        configureApi(current.user.id, '', current.csrfToken);
+        configureApi(current.user.id, '', current.csrfToken, current.user.workspaceId);
         await refresh(current.user, current.csrfToken);
+        if (invitationToken) setInvitation(await accountFetch('/api/invitations/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: invitationToken }) }).then(json<{ workspaceName: string; role: TeamRole; email: string }>));
       } catch (reason) { if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your account.'); }
     })();
     return () => { active = false; };
@@ -67,7 +80,10 @@ export function Workspace({ children }: { children: ReactNode }) {
       const current = ++revision;
       try {
         const updated = await accountFetch('/api/session').then(json<Session>);
-        if (active && current === revision) setSession(updated);
+        if (active && current === revision) {
+          if (updated.user?.workspaceId !== session.user?.workspaceId || updated.user?.role !== session.user?.role) { window.location.assign('/account'); return; }
+          setSession(updated);
+        }
       } catch { /* Keep the last confirmed balance; the API still enforces spending. */ }
     };
     const update = () => { void refreshBalance(); };
@@ -77,7 +93,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     window.addEventListener('focus', update);
     const interval = window.setInterval(update, 30_000);
     return () => { active = false; window.removeEventListener('job-tokens-exhausted', exhausted); window.clearInterval(interval); window.removeEventListener('job-tokens-changed', update); window.removeEventListener('focus', update); };
-  }, [session?.mode]);
+  }, [session?.mode, session?.user?.workspaceId, session?.user?.role]);
 
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/wordpress-integration' ? 'guide' : path === '/' || path.startsWith('/jobs/') ? 'jobs' : undefined;
@@ -85,6 +101,7 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   if (signedOut) return <main className="account-page login-page">
     <p className="eyebrow">ServiceTitan Jobs</p><h1>Turn completed jobs into local stories.</h1>
+    {invitationToken && <p className="notice">Sign in with the Google email address that received the team invitation. You can then accept it.</p>}
     <p className="intro">Connect your ServiceTitan account, review project copy, and publish it to your WordPress websites.</p>
     {new URLSearchParams(window.location.search).get('login') === 'failed' && <p className="notice error" role="alert">Sign-in could not be completed. Please try again.</p>}
     <a className="account-primary-link" href="/auth/google">Continue with Google</a>
@@ -93,11 +110,29 @@ export function Workspace({ children }: { children: ReactNode }) {
   if (!loaded) return <main className="account-page"><h1>ServiceTitan Jobs</h1><p role={error ? 'alert' : 'status'}>{error || 'Loading your workspace…'}</p>{error && <button onClick={() => window.location.reload()}>Try again</button>}</main>;
   if (session?.mode === 'local') return <><header className="workspace-bar"><a className="workspace-brand" href="/">ServiceTitan Jobs</a><span className="local-mode-note">Local workspace</span><AppNavigation current={currentPage} jobsHref={jobsHref} /></header>{children}</>;
   const user = session!.user!;
+  const canManage = user.role !== 'member';
+  const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
-  const accountPage = !tokensPage && (path === '/account' || websites.length === 0);
+  const accountPage = !invitePage && !tokensPage && (path === '/account' || websites.length === 0);
 
+  const selectWorkspace = async (workspaceId: string) => {
+    setBusy(true); setError('');
+    try {
+      const response = await accountFetch('/api/workspaces/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId }) });
+      if (!response.ok) await json(response);
+      clearAccountCache(user.id); window.location.assign('/');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to switch workspace.'); setBusy(false); }
+  };
+  const acceptInvite = async () => {
+    setBusy(true); setError('');
+    try {
+      const response = await accountFetch('/api/invitations/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: invitationToken }) });
+      if (!response.ok) await json(response);
+      window.sessionStorage.removeItem('pending-team-invite'); clearAccountCache(user.id); window.location.assign('/');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to accept invitation.'); setBusy(false); }
+  };
   const chooseSite = (id: string) => {
-    configureApi(user.id, id, session!.csrfToken!);
+    configureApi(user.id, id, session!.csrfToken!, user.workspaceId);
     try { window.sessionStorage.setItem(`website:${user.id}`, id); } catch { /* optional */ }
     setSelected(id);
     // Old job IDs and filters should not carry into another tenant's detail page.
@@ -143,6 +178,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   return <>
     <header className="workspace-bar">
       <a className="workspace-brand" href="/">ServiceTitan Jobs</a>
+      <label className="workspace-selector"><span>Workspace</span><select aria-label="Active workspace" disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       {websites.length > 0 && <label className="workspace-selector"><span>Website</span><select aria-label="Active website" value={selected} onChange={(event) => chooseSite(event.target.value)}>{websites.map((site) => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>}
       <span className="workspace-tokens" role="status" title="Each successful push, rebuild, or AI description costs 1 job token.">{user.jobTokens.toLocaleString()} job tokens available</span>
       <AppNavigation current={accountPage ? undefined : currentPage} jobsHref={jobsHref} />
@@ -154,14 +190,18 @@ export function Workspace({ children }: { children: ReactNode }) {
       <p id="token-dialog-description">Add tokens to push a post, rebuild a post, or generate an AI description. Your request has not been completed.</p>
       <div className="account-actions"><a className="account-primary-link" href="/add-tokens">Add Tokens</a><button onClick={() => tokenDialog.current?.close()}>Close</button></div>
     </dialog>
-    {tokensPage ? <main className="account-page">
+    {invitePage ? <main className="account-page"><h1>Join a workspace</h1><p>Signed in as {user.email}. Accepting adds you to the invited team and switches your active workspace. Your own workspace stays available.</p>
+      {invitation && <p>You are invited to <strong>{invitation.workspaceName}</strong> as a <strong>{invitation.role}</strong>.</p>}
+      {invitationToken ? <button className="primary" disabled={busy || !invitation} onClick={() => void acceptInvite()}>Accept invitation</button> : <p className="notice error">This invitation link is missing its token. Ask the owner for a new link.</p>}
+      <button disabled={busy} onClick={() => { window.sessionStorage.removeItem('pending-team-invite'); window.location.assign('/'); }}>Cancel</button>
+    </main> : tokensPage ? <main className="account-page">
       <p className="eyebrow">Your workspace</p><h1>Add Tokens</h1>
       <p className="intro">Use job tokens to publish posts, rebuild posts, and generate AI descriptions.</p>
       <section className="panel account-panel">
         <h2>{user.jobTokens.toLocaleString()} job tokens available</h2>
         <p>Each successful action costs 1 token. Failed requests do not spend tokens.</p>
-        <p>Token purchases are coming soon.</p>
-        {session?.testTokensEnabled && <><h3>Testing</h3><p>Add one free token at a time to test the application. No payment is required.</p><button className="primary" disabled={busy} onClick={() => void addTestToken()}>{busy ? 'Adding…' : 'Add 1 test token'}</button></>}
+        <p>Token purchases are coming soon. The workspace owner manages tokens for the team.</p>
+        {session?.testTokensEnabled && user.role === 'owner' && <><h3>Testing</h3><p>Add one free token at a time to test the application. No payment is required.</p><button className="primary" disabled={busy} onClick={() => void addTestToken()}>{busy ? 'Adding…' : 'Add 1 test token'}</button></>}
         {message && <p className="notice" role="status">{message}</p>}
       </section>
     </main> : accountPage ? <main className="account-page">
@@ -170,7 +210,9 @@ export function Workspace({ children }: { children: ReactNode }) {
       <p className="field-help">Signed in as {user.email}</p>
       <p>Each successful push, rebuild, or AI description generation costs 1 job token. Failed requests do not spend tokens.</p>
       {message && <p className="notice" role="status">{message}</p>}
-      <div className="account-grid">
+      <TeamSettings role={user.role} workspaceId={user.workspaceId} />
+      {!canManage && <p className="notice">An owner or admin manages this workspace’s connections and websites.</p>}
+      {canManage && <div className="account-grid">
         <section className="panel account-panel"><p className="eyebrow">1 · Source</p><h2>ServiceTitan connections</h2>
           <ul className="account-resource-list">{connections.map((connection) => <li key={connection.id}><div><strong>{connection.name}</strong><small>{connection.environment} · Tenant {connection.tenantId}</small></div><button onClick={() => { setEditingConnection(connection); setMessage(''); }}>Update credentials</button></li>)}</ul>
           <form key={editingConnection?.id || 'new-connection'} onSubmit={(event) => void submit(event, 'connections')} className="account-form">
@@ -200,7 +242,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             <div className="account-actions"><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save website'}</button>{editingWebsite && <button type="button" onClick={() => setEditingWebsite(undefined)}>Cancel</button>}</div>
           </form>}
         </section>
-      </div>
+      </div>}
     </main> : <div key={`${user.id}:${selected}`}>{children}</div>}
   </>;
 }

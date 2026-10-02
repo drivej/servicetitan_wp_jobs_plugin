@@ -66,6 +66,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const token = cookieValue(req.headers.cookie, sessionName);
       const user = await store.session(token);
       if (!user) throw new HttpError('Sign in to continue.', 401);
+      if (req.get('X-Workspace-ID') && req.get('X-Workspace-ID') !== user.workspaceId && req.path !== '/session') throw new HttpError('Your active workspace changed. Refresh the page.', 409);
       res.locals.user = user;
       res.locals.sessionToken = token;
       const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
@@ -86,7 +87,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.post('/api/tokens/test-credit', async (_req, res, next) => {
     try {
       if (!config.testTokensEnabled) throw new HttpError('Test tokens are disabled.', 403);
-      res.json({ jobTokens: await store.addTestJobToken((res.locals.user as User).id) });
+      res.json({ jobTokens: await store.addTestJobToken((res.locals.user as User).id, (res.locals.user as User).workspaceId) });
     } catch (error) { next(error); }
   });
   app.post('/api/logout', async (_req, res, next) => {
@@ -96,38 +97,84 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.status(204).end();
     } catch (error) { next(error); }
   });
+  app.get('/api/workspaces', async (_req, res, next) => {
+    try { res.json({ workspaces: await store.listWorkspaces((res.locals.user as User).id) }); } catch (error) { next(error); }
+  });
+  app.post('/api/workspaces/select', async (req, res, next) => {
+    try { await store.switchWorkspace((res.locals.user as User).id, String(res.locals.sessionToken), uuid(req.body?.workspaceId)); res.status(204).end(); } catch (error) { next(error); }
+  });
+  app.get('/api/team', async (_req, res, next) => {
+    const user = res.locals.user as User;
+    try { res.json(await store.team(user.id,user.workspaceId)); } catch (error) { next(error); }
+  });
+  app.post('/api/team/invitations', async (req, res, next) => {
+    const user = res.locals.user as User;
+    try {
+      if (typeof req.body?.email !== 'string') throw new HttpError('Enter an email address.');
+      const invite = await store.invite(user.id,user.workspaceId,req.body.email,req.body.role);
+      res.status(201).json({ id: invite.id, email: invite.email, role: invite.role, url: `${config.origin}/invite#token=${invite.token}` });
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/team/invitations/:id', async (req, res, next) => {
+    const user = res.locals.user as User;
+    try { await store.revokeInvitation(user.id,user.workspaceId,uuid(req.params.id)); res.status(204).end(); } catch (error) { next(error); }
+  });
+  app.patch('/api/team/members/:id', async (req, res, next) => {
+    const user = res.locals.user as User;
+    try {
+      if (!['admin','member'].includes(req.body?.role)) throw new HttpError('Choose Admin or Member.');
+      await store.changeMember(user.id,user.workspaceId,uuid(req.params.id),req.body.role); res.status(204).end();
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/team/members/:id', async (req, res, next) => {
+    const user = res.locals.user as User;
+    try { await store.changeMember(user.id,user.workspaceId,uuid(req.params.id)); res.status(204).end(); } catch (error) { next(error); }
+  });
+  app.post('/api/invitations/preview', async (req, res, next) => {
+    try {
+      if (typeof req.body?.token !== 'string') throw new HttpError('Invitation is invalid.');
+      res.json(await store.invitationDetails((res.locals.user as User).id,req.body.token));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/invitations/accept', async (req, res, next) => {
+    try {
+      if (typeof req.body?.token !== 'string') throw new HttpError('Invitation is invalid.');
+      await store.acceptInvitation((res.locals.user as User).id,String(res.locals.sessionToken),req.body.token); res.status(204).end();
+    } catch (error) { next(error); }
+  });
   app.get('/api/connections', async (_req, res, next) => {
-    try { res.json({ connections: await store.listConnections((res.locals.user as User).id) }); }
+    try { res.json({ connections: await store.listConnections((res.locals.user as User).id, (res.locals.user as User).workspaceId) }); }
     catch (error) { next(error); }
   });
   app.post('/api/connections', async (req, res, next) => {
-    try { res.status(201).json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body))); }
+    try { res.status(201).json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
     catch (error) { next(error); }
   });
   app.put('/api/connections/:id', async (req, res, next) => {
-    try { res.json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body, true), uuid(req.params.id), true)); }
+    try { res.json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body, true), uuid(req.params.id), true, (res.locals.user as User).workspaceId)); }
     catch (error) { next(error); }
   });
   app.get('/api/websites', async (_req, res, next) => {
-    try { res.json({ websites: await store.listWebsites((res.locals.user as User).id) }); }
+    try { res.json({ websites: await store.listWebsites((res.locals.user as User).id, (res.locals.user as User).workspaceId) }); }
     catch (error) { next(error); }
   });
   app.post('/api/websites', async (req, res, next) => {
-    try { res.status(201).json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body))); }
+    try { res.status(201).json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
     catch (error) { next(error); }
   });
   app.put('/api/websites/:id', async (req, res, next) => {
-    try { res.json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), uuid(req.params.id), true)); }
+    try { res.json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), uuid(req.params.id), true, (res.locals.user as User).workspaceId)); }
     catch (error) { next(error); }
   });
   app.use('/api/websites/:id', async (req, res, next) => {
     try {
       const userId = (res.locals.user as User).id;
       const id = uuid(req.params.id);
-      const context = await store.websiteContext(userId, id);
+      const context = await store.websiteContext(userId, id, (res.locals.user as User).workspaceId);
       if (['POST', 'PATCH'].includes(req.method)) {
         const action = req.path.endsWith('/ai-copy') ? 'generation.requested' : 'wordpress.operation_requested';
-        await store.recordAction(userId, action, id);
+        const jobMatch = req.path.match(/^\/jobs\/(\d+)\//);
+        await store.recordAction(userId, action, id, (res.locals.user as User).workspaceId, jobMatch ? Number(jobMatch[1]) : undefined);
       }
       websiteApp(userId, context)(req, res, next);
     } catch (error) { next(error); }

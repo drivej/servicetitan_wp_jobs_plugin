@@ -1,13 +1,15 @@
 let websiteId = '';
 let userId = 'local';
 let csrf = '';
-export function configureApi(user: string, website: string, token: string): void {
-  userId = user; websiteId = website; csrf = token;
+let workspaceId = '';
+export function configureApi(user: string, website: string, token: string, workspace = ''): void {
+  userId = user; websiteId = website; csrf = token; workspaceId = workspace;
 }
 export const isSaaSWorkspace = (): boolean => userId !== 'local';
 export const apiUrl = (path: string): string => websiteId ? `/api/websites/${encodeURIComponent(websiteId)}${path.replace(/^\/api/, '')}` : path;
 export const accountFetch = (path: string, init: RequestInit = {}): Promise<Response> => {
   const headers = new Headers(init.headers);
+  if (workspaceId) headers.set('X-Workspace-ID', workspaceId);
   if (!['GET', 'HEAD'].includes(init.method || 'GET') && csrf) headers.set('X-CSRF-Token', csrf);
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };

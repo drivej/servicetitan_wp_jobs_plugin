@@ -205,9 +205,9 @@ The dates are inclusive calendar dates and filter on a job's first appointment. 
 
 ### Job tokens
 
-Hosted accounts display their available job tokens in the workspace header. Each successful WordPress push, rebuild, or AI copy generation costs one token; status changes and reads are free. The authenticated account owns the balance across all of its websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
+Hosted accounts display their available job tokens in the workspace header. Each successful WordPress push, rebuild, or AI copy generation costs one token; status changes and reads are free. The active workspace shares one balance across its team and websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
 
-Apply migration `002_job_tokens.sql` before starting the updated server. Accounts start with zero tokens. An administrator can allocate tokens using a parameterized database statement such as `UPDATE users SET job_tokens = job_tokens + $1 WHERE id = $2` with a positive integer amount and verified account UUID. There is no public token-grant endpoint.
+Apply all migrations, including `003_workspaces.sql`, before starting the updated server. New workspaces start with zero tokens. An administrator can allocate tokens using a parameterized database statement such as `UPDATE workspaces SET job_tokens = job_tokens + $1 WHERE id = $2` with a positive integer amount and verified workspace UUID. When `ENABLE_TEST_TOKENS=true`, workspace owners can also add one free token at a time on Add Tokens; disable this setting before paid use.
 
 Paid provider operations hold a database row lock for the account. On provider success, the server decrements the balance and records an audit entry in the same transaction, committing before returning success. Provider failures roll back without a charge, and concurrent requests cannot overspend. Do not configure a database idle-in-transaction timeout shorter than the provider request duration. External provider changes cannot be atomically committed with PostgreSQL: a server/database failure after provider success but before commit requires administrative reconciliation; automatic refunds or retries cannot establish whether the external change occurred.
 

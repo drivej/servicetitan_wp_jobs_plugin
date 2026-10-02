@@ -16,6 +16,7 @@ export class PostgresDatabase implements Database {
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.user_id', $1, true)", [userId || '']);
+      await client.query("SELECT set_config('app.workspace_id', '', true)");
       const result = await action(client);
       await client.query('COMMIT');
       return result;
@@ -29,6 +30,7 @@ export class PostgresDatabase implements Database {
     if (!result.rows[0] || result.rows[0].rolsuper || result.rows[0].rolbypassrls) {
       throw new Error('DATABASE_URL must use a non-superuser role without BYPASSRLS.');
     }
+    await this.pool.query('SELECT w.job_tokens,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id LIMIT 0');
     const tables = await this.pool.query("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid IN ('servicetitan_connections'::regclass, 'websites'::regclass, 'audit_logs'::regclass)");
     if (tables.rows.length !== 3 || tables.rows.some((row) => !row.relrowsecurity || !row.relforcerowsecurity)) {
       throw new Error('Required database ownership policies are missing. Run migrations first.');

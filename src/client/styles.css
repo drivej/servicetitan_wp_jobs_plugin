@@ -1704,3 +1704,6 @@ td strong {
 .token-dialog { margin: auto; color: #252e29; }
 .token-dialog::backdrop { background: rgba(20, 29, 24, 0.58); backdrop-filter: blur(3px); }
 .token-dialog .account-actions { justify-content: center; }
+
+.team-invite-link { width: 100%; margin: 8px 0; }
+#team { margin-bottom: 24px; }

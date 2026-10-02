@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
@@ -20,7 +23,7 @@ const siteInput = (connectionId: string) => ({ name: 'Main site', connectionId, 
 
 // Run the same SQL/ownership cases against embedded PostgreSQL locally and a real
 // server when TEST_DATABASE_URL is supplied (CI). Each run owns its isolated schema/role.
-async function fixture() {
+async function fixture(beforeWorkspaceMigration?: (sql: Sql) => Promise<void>) {
   const schema = `test_${randomUUID().replaceAll('-', '')}`;
   const role = `${schema}_runtime`;
   const pool = process.env.TEST_DATABASE_URL ? new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 1 }) : undefined;
@@ -33,6 +36,14 @@ async function fixture() {
   };
   await sql.query(`CREATE SCHEMA ${schema}; CREATE ROLE ${role} NOLOGIN; SET search_path TO ${schema};`);
   await sql.query('BEGIN');
+  if (beforeWorkspaceMigration) {
+    const directory = await mkdtemp(join(tmpdir(), 'st-old-migrations-'));
+    try {
+      for (const name of ['001_accounts.sql','002_job_tokens.sql']) await writeFile(join(directory,name),await readFile(join('migrations',name),'utf8'));
+      await migrate(sql,directory);
+      await beforeWorkspaceMigration(sql);
+    } finally { await rm(directory,{ recursive: true, force: true }); }
+  }
   await migrate(sql);
   await sql.query('COMMIT');
   await sql.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${role}`);
@@ -46,6 +57,7 @@ async function fixture() {
       try {
         await sql.query(`BEGIN; SET LOCAL ROLE ${role}; SET LOCAL search_path TO ${schema};`);
         await sql.query("SELECT set_config('app.user_id',$1,true)", [userId || '']);
+        await sql.query("SELECT set_config('app.workspace_id',$1,true)", [userId || '']);
         const value = await action(sql);
         await sql.query('COMMIT');
         return value;
@@ -103,7 +115,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 2);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 3);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -130,8 +142,8 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
       await assert.rejects(f.store.saveWebsite(bob.user.id, siteInput(connection.id)), /not found/);
       assert.deepEqual(await f.db.transaction(bob.user.id, async (sql) => (await sql.query('SELECT * FROM websites')).rows), []);
       assert.deepEqual(await f.db.transaction(undefined, async (sql) => (await sql.query('SELECT * FROM websites')).rows), []);
-      await assert.rejects(f.db.transaction(bob.user.id, (sql) => sql.query("INSERT INTO websites(id,user_id,connection_id,name,url) VALUES($1,$2,$3,'bad','https://bad.example.com')", [randomUUID(), alice.user.id, connection.id])), /row-level security/);
-      await assert.rejects(f.db.transaction(bob.user.id, (sql) => sql.query("INSERT INTO websites(id,user_id,connection_id,name,url) VALUES($1,$2,$3,'bad','https://bad.example.com')", [randomUUID(), bob.user.id, connection.id])), /foreign key/);
+      await assert.rejects(f.db.transaction(bob.user.id, (sql) => sql.query("INSERT INTO websites(id,workspace_id,connection_id,name,url) VALUES($1,$2,$3,'bad','https://bad.example.com')", [randomUUID(), alice.user.id, connection.id])), /row-level security/);
+      await assert.rejects(f.db.transaction(bob.user.id, (sql) => sql.query("INSERT INTO websites(id,workspace_id,connection_id,name,url) VALUES($1,$2,$3,'bad','https://bad.example.com')", [randomUUID(), bob.user.id, connection.id])), /foreign key/);
     });
     await t.test('credentials stay encrypted and are omitted from account responses', async () => {
       const raw = JSON.stringify((await f.sql.query('SELECT credentials FROM servicetitan_connections')).rows);
@@ -259,7 +271,7 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     const operation = async () => { calls++; return 'done'; };
     await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', operation), /No job tokens/);
     assert.equal(calls, 0);
-    await f.sql.query('UPDATE users SET job_tokens=3 WHERE id=$1', [alice.user.id]);
+    await f.sql.query('UPDATE workspaces SET job_tokens=3 WHERE id=$1', [alice.user.id]);
     await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', async () => { throw new Error('Provider failed'); }), /Provider failed/);
     assert.equal((await f.store.session(alice.token))?.jobTokens, 3);
     for (const action of ['push', 'rebuild', 'ai_generation']) {
@@ -269,12 +281,154 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     assert.equal((await f.store.session(bob.token))?.jobTokens, 0);
     const audit = await f.sql.query("SELECT action FROM audit_logs WHERE action LIKE 'job_token.spent.%'");
     assert.equal(audit.rows.length, 3);
-    await f.sql.query('UPDATE users SET job_tokens=1 WHERE id=$1', [alice.user.id]);
+    await f.sql.query('UPDATE workspaces SET job_tokens=1 WHERE id=$1', [alice.user.id]);
     const before = calls;
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => f.store.spendJobToken(alice.user.id, site.id, 'push', operation)));
     assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
     assert.equal(calls - before, 1);
     assert.equal((await f.store.session(alice.token))?.jobTokens, 0);
-    await assert.rejects(f.sql.query('UPDATE users SET job_tokens=-1 WHERE id=$1', [alice.user.id]));
+    await assert.rejects(f.sql.query('UPDATE workspaces SET job_tokens=-1 WHERE id=$1', [alice.user.id]));
   } finally { await f.close(); }
+});
+
+test('workspace invitations, roles, shared spending and revocation enforce team boundaries', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'team-owner', email: 'owner@example.com', name: 'Owner' });
+    const admin = await f.store.login({ subject: 'team-admin', email: 'admin@example.com', name: 'Admin' });
+    const member = await f.store.login({ subject: 'team-member', email: 'member@example.com', name: 'Member' });
+    const outsider = await f.store.login({ subject: 'team-outsider', email: 'outsider@example.com', name: 'Outsider' });
+    const workspaceId = owner.user.workspaceId;
+    const connection = await f.store.saveConnection(owner.user.id, source);
+    const site = await f.store.saveWebsite(owner.user.id, siteInput(connection.id));
+    const invite = await f.store.invite(owner.user.id, workspaceId, ' Member@Example.com ', 'member');
+    const raw = (await f.sql.query('SELECT * FROM workspace_invitations WHERE id=$1', [invite.id])).rows[0]!;
+    assert.equal(raw.token_hash, hashToken(invite.token));
+    assert(!JSON.stringify(raw).includes(invite.token));
+    await assert.rejects(f.store.acceptInvitation(outsider.user.id, outsider.token, invite.token), /Google email/);
+    assert.equal((await f.store.invitationDetails(member.user.id,invite.token)).role,'member');
+    await f.store.acceptInvitation(member.user.id, member.token, invite.token);
+    assert.equal((await f.store.session(member.token))!.workspaceId,workspaceId);
+    assert.equal((await f.store.session(member.token))!.role,'member');
+    await assert.rejects(f.store.acceptInvitation(member.user.id, member.token, invite.token), /invalid or expired/);
+    assert.equal((await f.store.listWebsites(member.user.id, workspaceId))[0]!.id, site.id);
+    assert.equal((await f.store.websiteContext(member.user.id,site.id,workspaceId)).wordpress!.applicationPassword,'wp-never-return');
+    assert(!JSON.stringify(await f.store.listConnections(member.user.id,workspaceId)).includes(source.clientSecret));
+    await assert.rejects(f.store.listWebsites(outsider.user.id,workspaceId), /permission/);
+    await assert.rejects(f.store.switchWorkspace(outsider.user.id,outsider.token,workspaceId), /permission/);
+    // Forging workspace context is insufficient: resource RLS also checks membership.
+    assert.deepEqual(await f.db.transaction(outsider.user.id, async (sql) => {
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [workspaceId]);
+      return (await sql.query('SELECT * FROM websites')).rows;
+    }), []);
+    await assert.rejects(f.store.saveConnection(member.user.id,source,connection.id,true,workspaceId), /permission/);
+    await assert.rejects(f.store.saveWebsite(member.user.id,siteInput(connection.id),site.id,true,workspaceId), /permission/);
+    await assert.rejects(f.store.addTestJobToken(member.user.id,workspaceId), /permission/);
+    await assert.rejects(f.store.invite(member.user.id,workspaceId,'new@example.com','member'), /permission/);
+
+    const adminInvite = await f.store.invite(owner.user.id,workspaceId,admin.user.email,'admin');
+    await f.store.acceptInvitation(admin.user.id,admin.token,adminInvite.token);
+    await f.store.saveConnection(admin.user.id,{ ...source, name: 'Updated by admin' },connection.id,true,workspaceId);
+    await assert.rejects(f.store.invite(admin.user.id,workspaceId,'new@example.com','admin'), /Only the owner/);
+    await assert.rejects(f.store.changeMember(admin.user.id,workspaceId,member.user.id,'admin'), /Only the owner/);
+    await assert.rejects(f.store.changeMember(owner.user.id,workspaceId,owner.user.id), /owner cannot/);
+    await assert.rejects(f.store.changeMember(owner.user.id,workspaceId,owner.user.id,'member'), /owner cannot/);
+    await assert.rejects(f.store.addTestJobToken(admin.user.id,workspaceId), /permission/);
+
+    await f.store.addTestJobToken(owner.user.id,workspaceId);
+    let performed = 0;
+    const attempts = await Promise.allSettled([member.user.id,admin.user.id].map((actor) => f.store.spendJobToken(actor,site.id,'push',async () => { performed++; },workspaceId,42052409)));
+    assert.equal(attempts.filter((value) => value.status === 'fulfilled').length,1);
+    assert.equal(performed,1);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,0);
+    assert.equal((await f.store.session(member.token))!.jobTokens,0);
+    const audit = (await f.sql.query("SELECT * FROM audit_logs WHERE action='job_token.spent.push'")).rows[0]!;
+    assert.equal(audit.user_id,member.user.id);
+    assert.equal(audit.workspace_id,workspaceId);
+    assert.equal(Number(audit.job_id),42052409);
+
+    const expired = await f.store.invite(owner.user.id,workspaceId,outsider.user.email,'member');
+    await f.sql.query("UPDATE workspace_invitations SET expires_at=now()-interval '1 second' WHERE id=$1", [expired.id]);
+    await assert.rejects(f.store.acceptInvitation(outsider.user.id,outsider.token,expired.token), /invalid or expired/);
+    const revoked = await f.store.invite(owner.user.id,workspaceId,outsider.user.email,'member');
+    await f.store.revokeInvitation(owner.user.id,workspaceId,revoked.id);
+    await assert.rejects(f.store.acceptInvitation(outsider.user.id,outsider.token,revoked.token), /invalid or expired/);
+    const replaced = await f.store.invite(owner.user.id,workspaceId,outsider.user.email,'member');
+    await f.store.invite(owner.user.id,workspaceId,outsider.user.email,'member');
+    await assert.rejects(f.store.acceptInvitation(outsider.user.id,outsider.token,replaced.token), /invalid or expired/);
+    const pendingAdmin = await f.store.invite(admin.user.id,workspaceId,'future@example.com','member');
+    await f.store.changeMember(owner.user.id,workspaceId,admin.user.id,'member');
+    assert((await f.sql.query('SELECT revoked_at FROM workspace_invitations WHERE id=$1', [pendingAdmin.id])).rows[0]!.revoked_at);
+    assert.equal((await f.store.session(admin.token))!.role,'member');
+    await assert.rejects(f.store.invite(admin.user.id,workspaceId,'no@example.com','member'), /permission/);
+    await f.store.changeMember(owner.user.id,workspaceId,member.user.id);
+    assert.equal((await f.store.session(member.token))!.workspaceId,member.user.id);
+    await assert.rejects(f.store.websiteContext(member.user.id,site.id,workspaceId), /permission/);
+    await assert.rejects(f.store.spendJobToken(member.user.id,site.id,'push',async () => { performed++; },workspaceId), /permission/);
+    assert.equal(performed,1);
+  } finally { await f.close(); }
+});
+
+test('workspace migration preserves existing sessions, balances, resources, encrypted credentials and audit history', async () => {
+  const ownerId = randomUUID(), connectionId = randomUUID(), siteId = randomUUID(), token = randomToken();
+  const f = await fixture(async (sql) => {
+    await sql.query("INSERT INTO users(id,google_subject,email,name,job_tokens) VALUES($1,'existing','existing@example.com','Existing',17)", [ownerId]);
+    await sql.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 day')", [hashToken(token),ownerId]);
+    await sql.query("SELECT set_config('app.user_id',$1,true)", [ownerId]);
+    await sql.query("INSERT INTO servicetitan_connections(id,user_id,name,environment,tenant_id,credentials) VALUES($1,$2,'Existing','production','1234',$3)", [connectionId,ownerId,vault.encrypt(source,`connection:${ownerId}:${connectionId}`)]);
+    await sql.query("INSERT INTO websites(id,user_id,connection_id,name,url,wordpress_credentials) VALUES($1,$2,$3,'Existing site','https://example.com',$4)", [siteId,ownerId,connectionId,vault.encrypt({ username: 'existing', applicationPassword: 'kept-secret' },`website:${ownerId}:${siteId}`)]);
+    await sql.query("INSERT INTO audit_logs(id,user_id,action,target_id) VALUES($1,$2,'website.created',$3)", [randomUUID(),ownerId,siteId]);
+  });
+  try {
+    const session = (await f.store.session(token))!;
+    assert.equal(session.workspaceId,ownerId);
+    assert.equal(session.role,'owner');
+    assert.equal(session.jobTokens,17);
+    const context = await f.store.websiteContext(ownerId,siteId,ownerId);
+    assert.equal(context.connection.clientSecret,source.clientSecret);
+    assert.equal(context.wordpress!.applicationPassword,'kept-secret');
+    assert.equal((await f.store.listWebsites(ownerId))[0]!.id,siteId);
+    const oldAudit = (await f.sql.query("SELECT * FROM audit_logs WHERE action='website.created'")).rows[0]!;
+    assert.equal(oldAudit.workspace_id,ownerId);
+    assert.equal(oldAudit.user_id,ownerId);
+    assert.equal(oldAudit.job_id,null);
+  } finally { await f.close(); }
+});
+
+test('team HTTP endpoints bind invitations and permissions to the authenticated session workspace', async () => {
+  const f = await fixture();
+  const owner = await f.store.login({ subject: 'http-team-owner', email: 'owner@example.com', name: 'Owner' });
+  const member = await f.store.login({ subject: 'http-team-member', email: 'member@example.com', name: 'Member' });
+  const config: SaaSConfig = { databaseUrl: 'unused', origin: 'http://localhost:3000', googleClientId: 'test', googleClientSecret: 'test', secureCookies: false, trustProxyHops: 0, vault, testTokensEnabled: true };
+  const app = createSaaSApp({ config, store: f.store, google: { authorization: async () => '', exchange: async () => { throw new Error('unused'); } }, websiteApp: () => express() });
+  const server = app.listen(0,'127.0.0.1');
+  await new Promise<void>((done) => server.once('listening',done));
+  const address = server.address(); assert(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = (token: string) => ({ Cookie: `st_session=${token}`, Origin: config.origin, 'X-CSRF-Token': csrfToken(token), 'Content-Type': 'application/json' });
+  const post = (path: string, token: string, body: unknown = {}) => fetch(base+path,{ method: 'POST', headers: headers(token), body: JSON.stringify(body) });
+  try {
+    assert.equal((await fetch(base+'/api/team')).status,401);
+    assert.equal((await fetch(base+'/api/team/invitations',{ method: 'POST', headers: { Cookie: `st_session=${owner.token}` } })).status,403);
+    const response = await post('/api/team/invitations',owner.token,{ email: member.user.email, role: 'member', workspaceId: member.user.id });
+    assert.equal(response.status,201);
+    const invitation = await response.json() as { url: string };
+    const inviteToken = new URLSearchParams(new URL(invitation.url).hash.slice(1)).get('token')!;
+    assert.equal((await post('/api/invitations/preview',member.token,{ token: inviteToken })).status,200);
+    assert.equal((await post('/api/invitations/accept',member.token,{ token: inviteToken, role: 'owner' })).status,204);
+    assert.equal((await f.store.session(member.token))!.workspaceId,owner.user.id);
+    assert.equal((await f.store.session(member.token))!.role,'member');
+    assert.equal((await post('/api/connections',member.token,source)).status,403);
+    assert.equal((await post('/api/tokens/test-credit',member.token)).status,403);
+    assert.equal((await post('/api/team/invitations',member.token,{ email: 'other@example.com', role: 'member' })).status,403);
+    assert.equal((await fetch(base+`/api/team/members/${member.user.id}`,{ method: 'PATCH', headers: headers(member.token), body: JSON.stringify({ role: 'admin' }) })).status,403);
+    assert.equal((await post('/api/workspaces/select',member.token,{ workspaceId: randomUUID() })).status,403);
+    assert.equal((await post('/api/workspaces/select',member.token,{ workspaceId: member.user.id })).status,204);
+    const stale = await fetch(base+'/api/team/invitations',{ method: 'POST', headers: { ...headers(member.token), 'X-Workspace-ID': owner.user.id }, body: JSON.stringify({ email: 'other@example.com',role: 'member' }) });
+    assert.equal(stale.status,409);
+    await f.store.switchWorkspace(member.user.id,member.token,owner.user.id);
+    assert.equal((await fetch(base+`/api/team/members/${member.user.id}`,{ method: 'DELETE', headers: headers(owner.token) })).status,204);
+    assert.equal((await post('/api/workspaces/select',member.token,{ workspaceId: owner.user.id })).status,403);
+    assert.equal((await f.store.session(member.token))!.workspaceId,member.user.id);
+  } finally { server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done())); await f.close(); }
 });

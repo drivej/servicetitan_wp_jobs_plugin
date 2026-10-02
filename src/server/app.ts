@@ -18,7 +18,7 @@ interface CreateAppOptions {
   staticDirectory?: string;
   wordpressPluginArchivePath?: string;
   apiPrefix?: string;
-  spendJobToken?: <T>(action: string, operation: () => Promise<T>) => Promise<T>;
+  spendJobToken?: <T>(action: string, operation: () => Promise<T>, jobId?: number) => Promise<T>;
 }
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 366;
@@ -83,7 +83,7 @@ export const createApp = ({
     try {
       const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
       response.set('Cache-Control', 'no-store');
-      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(details.summary)));
+      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(details.summary), details.summary.id));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {
@@ -124,7 +124,7 @@ export const createApp = ({
       const images = await Promise.all(attachmentIds.map((attachmentId) => serviceTitan.getJobImage(jobId, attachmentId)));
       const totalImageBytes = images.reduce((total, image) => total + image.bytes.byteLength, 0);
       if (totalImageBytes > 30 * 1024 * 1024) throw new ValidationError('Selected images cannot exceed 30 MB in total.');
-      response.status(201).json(await spendJobToken('push', () => wordpress.pushJob(details.summary, images, status, approvedCopy)));
+      response.status(201).json(await spendJobToken('push', () => wordpress.pushJob(details.summary, images, status, approvedCopy), jobId));
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/wordpress/regenerate`, async (request, response, next) => {
@@ -136,7 +136,7 @@ export const createApp = ({
       const details = await serviceTitan.getJobDetails(jobId);
       const image = attachmentId ? await serviceTitan.getJobImage(jobId, attachmentId) : undefined;
       response.set('Cache-Control', 'no-store');
-      response.json(await spendJobToken('rebuild', () => wordpress.regenerateJob(details.summary, force, image, approvedCopy)));
+      response.json(await spendJobToken('rebuild', () => wordpress.regenerateJob(details.summary, force, image, approvedCopy), jobId));
     } catch (error) { next(error); }
   });
   const updateWordpressStatus: RequestHandler = async (request, response, next) => {

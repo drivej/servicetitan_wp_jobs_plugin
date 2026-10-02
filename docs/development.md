@@ -44,11 +44,12 @@ GRANT CONNECT ON DATABASE st_jobs TO st_jobs_app;
 GRANT USAGE ON SCHEMA public TO st_jobs_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   users, sessions, oauth_attempts, rate_limits,
+  workspaces, workspace_memberships, workspace_invitations,
   servicetitan_connections, websites, audit_logs
 TO st_jobs_app;
 ```
 
-The login itself must already exist with its password held in the secret store. Do not grant it schema creation or migration-table privileges. Connections, websites and audit tables use forced row-level security. Every account operation runs in one transaction with `SET LOCAL`-equivalent user context. Auth tables are intentionally accessed through narrowly scoped server code before a user is known. They are not browser APIs.
+The login itself must already exist with its password held in the secret store. Do not grant it schema creation or migration-table privileges. Connections, websites and audit tables use forced row-level security. Every workspace operation runs in one transaction with `SET LOCAL`-equivalent user and workspace context. Resource RLS also checks membership. Workspaces, memberships, and invitations are authorization control tables accessed only through the server, like sessions; callers cannot query them directly. Auth tables are intentionally accessed through narrowly scoped server code before a user is known. They are not browser APIs.
 
 For remote PostgreSQL, configure verified TLS in the connection string/provider configuration. Do not disable certificate verification. Keep the migration credential out of the web process in hosted deployments.
 
@@ -110,3 +111,16 @@ Provisioned in the **ServiceTitan WP Jobs Plugin** project: **ServiceTitan Jobs 
 Connection verification found that this instance rejects PostgreSQL TLS negotiation (`The server does not support SSL connections`); Studio reports `ssl=off`. The supplied owner is not a superuser and has no `CREATEROLE` permission. Both versioned migrations were applied atomically through Sevalla's HTTPS Studio, preserving the repository checksums.
 
 Local app startup is not ready: arrange a verified encrypted connection (provider-enabled TLS or an encrypted tunnel), a separate runtime login through the provider, and Google OAuth development credentials. Keep `sslmode=verify-full`; do not work around this by sending application/session data over an unencrypted public database connection. External access is currently enabled without IP restrictions. No app users or test token allocations have been added.
+
+
+## Team workspaces
+
+Migration `003_workspaces.sql` gives every existing user a workspace and an owner membership. It moves tokens into `workspaces.job_tokens`, changes integration ownership to `workspace_id`, and preserves old encryption contexts by keeping workspace IDs equal to former owner IDs. Existing sessions and audit history are migrated too. Do not edit previously applied migration files.
+
+This schema change is **not compatible with the old server**. Take a database backup and use a maintenance window: stop the old web process, run `npm run db:migrate` with the migration-owner connection, grant the new tables to the runtime role using the SQL above, then deploy/start the new server. `npm run db:check:remote` checks the new tables and grants when a working remote development connection is configured. Do not run old and new server versions against this schema together.
+
+Settings → Team lets an owner invite admins or members. Admins can invite/remove members and edit integrations; only owners can promote/demote admins, manage other admins, or add test tokens. Members can process jobs on every website in that workspace. Roles and membership are checked on the server for each operation. Removing a member blocks new work immediately; an operation already authorized and running may finish before the removal transaction completes. Removing or demoting an admin also revokes their pending invitations.
+
+Invitation links expire after seven days and require the exact verified Google email (case-insensitive). Only the token hash is stored. Links put the token in a URL fragment so it is not sent in HTTP URLs/access logs. The recipient signs in, previews the workspace and role, and accepts. Reissuing revokes the old link; accepted/expired/revoked links cannot be reused. The UI provides Copy link and Open email invitation; there is no automatic email sender configured.
+
+The workspace selector changes the current session. Other tabs refresh when they notice the change; requests carry an expected workspace header to prevent stale tabs from mutating the wrong workspace. Shared spending locks the workspace row and rechecks membership, balances, and website ownership. Successful charges include the actor, workspace, website, action, and job ID in audit logs. Failed provider calls do not charge tokens.

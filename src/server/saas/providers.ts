@@ -15,8 +15,8 @@ export function minimizeJobDetails(details: JobDetails): JobDetails {
 }
 export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator()): WebsiteAppFactory {
   const apps = new Map<string, { app: Express; expiresAt: number }>();
-  return (userId, { website, connection, wordpress }) => {
-    const key = `${userId}:${website.id}:${website.version}:${connection.id}:${connection.version}`;
+  return (userId, { website, connection, wordpress, workspaceId }) => {
+    const key = `${userId}:${workspaceId}:${website.id}:${website.version}:${connection.id}:${connection.version}`;
     for (const [id, value] of apps) if (value.expiresAt <= Date.now()) apps.delete(id);
     const existing = apps.get(key);
     if (existing) return existing.app;
@@ -32,7 +32,7 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
       getJobDetails,
       getJobImage: (id, attachment) => serviceTitan.getJobImage(id, attachment),
     }, copyGenerator, apiPrefix: '',
-      spendJobToken: (action, operation) => store.spendJobToken(userId, website.id, action, operation),
+      spendJobToken: (action, operation, jobId) => store.spendJobToken(userId, website.id, action, operation, workspaceId, jobId),
       wordpress: wordpress ? new WordPressClient({ ...wordpress,
         collectionUrl: `${website.url}/wp-json/wp/v2/${website.restBase}`,
         postStatus: 'draft', zipAcfFieldName: website.zipAcfField,
