@@ -167,6 +167,15 @@ Use `npm run build` as the build command and `npm start` as the start command. D
 
 `GET /api/jobs/:jobId/images/:attachmentId` securely proxies a verified image belonging to that job.
 
+ServiceTitan may return a 302 handoff to a signed Azure Blob URL instead of image
+bytes. The image proxy accepts that handoff only to HTTPS Azure Blob storage,
+downloads without ServiceTitan credentials, validates public DNS at connection
+time, and rejects further redirects. Downloads retain the 15 MB limit and a
+90-second timeout. Generic binary responses use image byte signatures to select
+the MIME type; unrecognized content is rejected. Signed URLs stay server-side
+and are omitted from download errors. Automatic redirects remain disabled for
+authenticated ServiceTitan API calls.
+
 `POST /api/jobs/:jobId/ai-copy` reloads the job from ServiceTitan and uses the
 server-side OpenAI configuration to return a validated title, excerpt, and
 structured project-story body. The body contains an introduction, two tailored
@@ -243,4 +252,3 @@ https://developer.servicetitan.io/docs/apis/tenant-salestech-v2/endpoints
 Reference:
 
 https://callwiseway.com/recent-project/garbage-disposal-replacement-in-hermosa-beach/
-

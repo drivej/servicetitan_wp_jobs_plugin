@@ -1,6 +1,6 @@
+import { useEffect, useMemo, useState } from 'react';
 import { JobThumbnail } from './JobThumbnail';
 import { apiFetch, wordpressStatusStorage } from './api';
-import { useEffect, useMemo, useState } from 'react';
 
 import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './jobsSearch';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
@@ -34,6 +34,7 @@ const toDateInput = (date: Date): string => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
 const initialRange = (): JobFilters => {
   const end = new Date();
   const start = new Date();
@@ -340,16 +341,29 @@ export function App() {
               </colgroup>
               <thead>
                 <tr>
-                  <th scope='colgroup' colSpan={2}>Job</th>
-                  <th scope='colgroup' colSpan={3}>Location</th>
+                  <th scope='colgroup' colSpan={2}>
+                    Job
+                  </th>
+                  <th scope='colgroup' colSpan={3}>
+                    Location
+                  </th>
                   <th scope='col'>ST status</th>
-                  <th scope='colgroup' colSpan={2}>WordPress</th>
+                  <th scope='colgroup' colSpan={2}>
+                    WordPress
+                  </th>
                   <th scope='col'>
                     <span className='visually-hidden'>Job actions</span>
                   </th>
                   <th scope='col'>
                     <span className='visually-hidden'>Refresh status</span>
-                    <button title='Refresh all' aria-label='Refresh all WordPress statuses' className={`icon-button Xbulk-refresh-button${bulkRefreshing ? ' is-spinning' : ''}`} type='button' disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onClick={() => void refreshPageWordpressStatuses()}>
+                    <button
+                      title='Refresh all'
+                      aria-label='Refresh all WordPress statuses'
+                      className={`icon-button Xbulk-refresh-button${bulkRefreshing ? ' is-spinning' : ''}`}
+                      type='button'
+                      disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0}
+                      onClick={() => void refreshPageWordpressStatuses()}
+                    >
                       <RefreshIcon />
                     </button>
                   </th>
@@ -367,7 +381,9 @@ export function App() {
                         <JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} />
                       </td>
                       <td className='job-name-cell' data-label='Job'>
-                        <div className='job-name' title={job.jobName}>{job.jobName}</div>
+                        <div className='job-name' title={job.jobName}>
+                          {job.jobName}
+                        </div>
                         {wordpressStatus.state !== 'exists' && job.sourceCopyStatus && (
                           <span className={`source-copy-status source-${job.sourceCopyStatus}`} title='Basic summary check: missing, fewer than 20 words, or at least 20 words. Review the source before generating copy.'>
                             {job.sourceCopyStatus === 'missing' ? 'Missing source copy' : job.sourceCopyStatus === 'limited' ? 'Limited source copy' : 'Source copy available'}
@@ -377,13 +393,17 @@ export function App() {
                       <td className='location-cell state-cell' data-label='State'>
                         {/* <strong>{job.location.city}</strong> */}
                         {/* <span> */}
-                          {job.location.state}
+                        {job.location.state}
                         {/* </span> */}
                       </td>
-                      <td className='location-cell zip-cell' data-label='ZIP'>{job.location.zip}</td>
-                      <td className='location-cell city-cell' data-label='City'><div className='location-cell-city' title={job.location.city}>
-                        {job.location.city}
-                      </div></td>
+                      <td className='location-cell zip-cell' data-label='ZIP'>
+                        {job.location.zip}
+                      </td>
+                      <td className='location-cell city-cell' data-label='City'>
+                        <div className='location-cell-city' title={job.location.city}>
+                          {job.location.city}
+                        </div>
+                      </td>
                       <td className='st-status-cell' data-label='ST status'>
                         <span className='status'>{job.status}</span>
                       </td>

@@ -137,3 +137,78 @@ test('keeps system events visible while excluding attachments and unsafe or low-
   assert.match(items[2]?.content || '', /\[phone removed\]/);
   assert.equal(items[2]?.promptEligible, true);
 });
+
+function redirectedImageClient(location: string, imageFetch: typeof fetch) {
+  const client = new ServiceTitanClient({ clientId: 'client', clientSecret: 'secret', appKey: 'app-key', tenantId: 'tenant', apiBaseUrl: 'https://api.example', authUrl: 'https://auth.example' }, imageFetch);
+  const requests: string[] = [];
+  (client as any).api = {
+    post: async () => ({ data: { access_token: 'private-token', expires_in: 3600 } }),
+    get: async (url: string, options: any) => {
+      requests.push(url);
+      if (url.endsWith('/attachments')) return { data: [{ id: 'photo', fileName: 'photo.jpg' }] };
+      assert.equal(options.headers.Authorization, 'Bearer private-token');
+      assert.equal(options.validateStatus(302), true);
+      assert.equal(options.validateStatus(301), false);
+      return { status: 302, headers: { location }, data: new ArrayBuffer(0) };
+    },
+  };
+  return { client, requests };
+}
+const signedImageUrl = 'https://titanblobs.blob.core.windows.net/container/photo.jpg?sig=secret';
+
+test('downloads a signed storage redirect without forwarding ServiceTitan credentials', async () => {
+  const { client } = redirectedImageClient(signedImageUrl, async (url, init) => {
+    assert.equal(String(url), signedImageUrl);
+    assert.equal(init?.headers, undefined);
+    assert.equal(init?.redirect, 'error');
+    assert.ok(init?.signal);
+    return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), { headers: { 'Content-Type': 'image/jpeg' } });
+  });
+  const image = await client.getJobImage(1, 'photo');
+  assert.equal(image.contentType, 'image/jpeg');
+  assert.equal(image.bytes.length, 4);
+});
+
+test('rejects unsafe storage destinations before issuing any request', async () => {
+  for (const url of ['', 'http://titanblobs.blob.core.windows.net/a', 'https://127.0.0.1/a', 'https://example.com/a', 'https://titanblobs.blob.core.windows.net.evil.example/a', 'https://user:password@titanblobs.blob.core.windows.net/a', 'https://titanblobs.blob.core.windows.net:8443/a']) {
+    const { client } = redirectedImageClient(url, async () => { assert.fail('must not fetch'); });
+    await assert.rejects(client.getJobImage(1, 'photo'), /image storage could not complete/);
+  }
+});
+
+test('checks job ownership before following a download redirect', async () => {
+  const { client, requests } = redirectedImageClient(signedImageUrl, async () => { assert.fail('must not fetch'); });
+  await assert.rejects(client.getJobImage(1, 'someone-elses-photo'), /not found/);
+  assert.equal(requests.length, 1);
+});
+
+test('rejects empty, oversized, and non-image storage responses', async () => {
+  for (const response of [
+    new Response(new Uint8Array(), { headers: { 'Content-Type': 'image/jpeg' } }),
+    new Response('small', { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': String(16 * 1024 * 1024) } }),
+    new Response(new Uint8Array(15 * 1024 * 1024 + 1), { headers: { 'Content-Type': 'image/jpeg' } }),
+    new Response('<html>error</html>', { headers: { 'Content-Type': 'text/html' } }),
+    new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } }),
+    new Response('missing', { status: 404 }),
+    new Response(null, { status: 302, headers: { Location: 'http://localhost' } }),
+  ]) {
+    const { client } = redirectedImageClient(signedImageUrl, async () => response);
+    await assert.rejects(client.getJobImage(1, 'photo'), /larger than 15 MB|unsupported image|image storage could not complete/);
+  }
+});
+
+test('does not expose signed URL credentials in download errors', async () => {
+  const { client } = redirectedImageClient(signedImageUrl, async () => { throw new Error(`failed ${signedImageUrl}`); });
+  await assert.rejects(client.getJobImage(1, 'photo'), (error: Error) => {
+    assert.equal(error.message.includes('sig='), false);
+    assert.equal(error.message, 'ServiceTitan image storage could not complete the download.');
+    return true;
+  });
+});
+
+test('detects JPEG bytes in Azure octet-stream responses without trusting the filename', async () => {
+  const { client } = redirectedImageClient(signedImageUrl, async () => new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { headers: { 'Content-Type': 'application/octet-stream' } }));
+  assert.equal((await client.getJobImage(1, 'photo')).contentType, 'image/jpeg');
+  const { client: invalid } = redirectedImageClient(signedImageUrl, async () => new Response('<script>alert(1)</script>', { headers: { 'Content-Type': 'application/octet-stream' } }));
+  await assert.rejects(invalid.getJobImage(1, 'photo'), /unsupported image/);
+});

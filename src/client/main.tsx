@@ -1,13 +1,13 @@
-import { Workspace } from './Workspace';
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Workspace } from './Workspace';
 
 import { App } from './App';
 import { JobDetails } from './JobDetails';
 import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
-import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 import './styles.css';
+import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);

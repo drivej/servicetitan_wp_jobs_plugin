@@ -4,6 +4,7 @@ import type { ServiceTitanConfig } from './config.js';
 import { extractSafeSeoDetails } from './job-seo.js';
 import { ServiceTitanRequestError } from './service-titan-error.js';
 import { filterJobsByLocationIds, serviceTitanJobsListParams } from './service-titan-query.js';
+import { publicFetch } from './saas/public-fetch.js';
 
 interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
@@ -64,7 +65,7 @@ export class ServiceTitanClient implements JobsProvider {
   private tokenRequest: Promise<string> | undefined;
   private readonly attachmentCache = new Map<number, { expiresAt: number; request: Promise<ServiceTitanAttachment[]> }>();
 
-  constructor(private readonly config: ServiceTitanConfig) {
+  constructor(private readonly config: ServiceTitanConfig, private readonly imageFetch: typeof fetch = publicFetch) {
     this.api = (axios as unknown as { create(): AxiosInstance }).create();
     this.api.defaults.timeout = 20_000;
     this.api.defaults.maxContentLength = MAX_IMAGE_BYTES;
@@ -179,20 +180,74 @@ export class ServiceTitanClient implements JobsProvider {
       if (!attachment) throw new ServiceTitanRequestError('The selected job image was not found.', 404);
       const response = await this.api.get<ArrayBuffer>(
         `${this.config.apiBaseUrl}/forms/v2/${tenantPath}/jobs/attachment/${encodeURIComponent(attachmentIdValue)}`,
-        { headers, responseType: 'arraybuffer', timeout: 90_000 },
+        { headers, responseType: 'arraybuffer', timeout: 90_000,
+          validateStatus: (status) => (status >= 200 && status < 300) || status === 302 },
       );
-      const bytes = new Uint8Array(response.data);
+      // The API hands downloads off to a signed Azure Blob URL. Never enable
+      // automatic redirects on the authenticated client: ST-App-Key could leak.
+      const download = response.status === 302
+        ? await this.downloadImageRedirect(response.headers.location)
+        : { bytes: new Uint8Array(response.data), contentType: response.headers['content-type'] };
+      const bytes = download.bytes;
       if (bytes.byteLength < 1 || bytes.byteLength > MAX_IMAGE_BYTES) {
         throw new ServiceTitanRequestError('The selected image is empty or larger than 15 MB.', 413);
       }
       const metadata = publicAttachment(attachment);
+      const declaredType = String(download.contentType || '').split(';', 1)[0]!.trim().toLowerCase();
+      const contentType = !declaredType || declaredType === 'application/octet-stream'
+        ? imageSignatureType(bytes) : declaredType;
+      if (!IMAGE_MEDIA_TYPES.has(contentType)) {
+        throw new ServiceTitanRequestError('ServiceTitan returned an unsupported image response.', 502);
+      }
       return {
         ...metadata,
-        contentType: String(response.headers['content-type'] || metadata.contentType || 'application/octet-stream').split(';', 1)[0]!,
+        contentType,
         bytes,
       };
     } catch (error) {
       throw this.toRequestError(error);
+    }
+  }
+
+  private async downloadImageRedirect(location: unknown): Promise<{ bytes: Uint8Array; contentType: string | null }> {
+    try {
+      const url = new URL(typeof location === 'string' ? location : '');
+      if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash
+        || !/^[a-z0-9]{3,24}\.blob\.core\.windows\.net$/.test(url.hostname)) {
+        throw new Error('Invalid image storage destination.');
+      }
+      // publicFetch checks DNS at connection time and rejects further redirects.
+      // No API credentials or caller-supplied headers cross this boundary.
+      const response = await this.imageFetch(url, { redirect: 'error', signal: AbortSignal.timeout(90_000) });
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        throw new Error('Image storage request failed.');
+      }
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) {
+          throw new ServiceTitanRequestError('The selected image is empty or larger than 15 MB.', 413);
+        }
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > MAX_IMAGE_BYTES) {
+            throw new ServiceTitanRequestError('The selected image is empty or larger than 15 MB.', 413);
+          }
+          chunks.push(value);
+        }
+      } finally {
+        await reader.cancel();
+        reader.releaseLock();
+      }
+      return { bytes: Buffer.concat(chunks, size), contentType: response.headers.get('content-type') };
+    } catch (error) {
+      if (error instanceof ServiceTitanRequestError) throw error;
+      // Signed URLs are credentials; never expose fetch error messages containing them.
+      throw new ServiceTitanRequestError('ServiceTitan image storage could not complete the download.', 502);
     }
   }
 
@@ -356,6 +411,26 @@ export class ServiceTitanClient implements JobsProvider {
 }
 
 const unique = (values: number[]): number[] => [...new Set(values)];
+
+// Blob storage often serves images as octet-stream. Infer only from bytes,
+// never from filenames, so HTML/SVG cannot become active same-origin content.
+const imageSignatureType = (bytes: Uint8Array): string => {
+  const b = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const hex = b.subarray(0, 8).toString('hex');
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (hex === '89504e470d0a1a0a') return 'image/png';
+  if (['GIF87a', 'GIF89a'].includes(b.subarray(0, 6).toString('ascii'))) return 'image/gif';
+  if (b.subarray(0, 4).toString('ascii') === 'RIFF' && b.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (hex.startsWith('424d')) return 'image/bmp';
+  if (hex.startsWith('49492a00') || hex.startsWith('4d4d002a')) return 'image/tiff';
+  if (b.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = b.subarray(8, 12).toString('ascii');
+    if (['avif', 'avis'].includes(brand)) return 'image/avif';
+    if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) return 'image/heic';
+    if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
+  }
+  return '';
+};
 
 const publicEquipmentName = (value: string | null | undefined): string | undefined => {
   if (typeof value !== 'string') return undefined;
