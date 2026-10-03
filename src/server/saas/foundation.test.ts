@@ -14,7 +14,7 @@ import { migrate, type Database, type Sql } from './database.js';
 import { createSaaSApp } from './app.js';
 import { connectionInput, publicAddress, websiteInput, websiteUrl } from './validation.js';
 import { minimizeJobDetails } from './providers.js';
-import { buildJobCopyFacts } from '../../shared/job-copy.js';
+import { buildJobCopyFacts } from '../job-copy-prompt.js';
 
 const key = randomBytes(32).toString('base64');
 const vault = new SecretVault({ test: key }, 'test');

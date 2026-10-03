@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { type WordPressStatus, writeCachedWordPressStatuses } from './wordpressStatusCache';
 import {
-  buildJobCopyPrompt,
   formatJobCopy,
   hasCompleteJobBody,
   hasFormattedJobBody,
@@ -26,7 +25,6 @@ interface JobDetailsResponse {
   attachments: JobAttachment[];
   history: JobHistoryItem[];
 }
-interface DetailField { name: string; value: string; }
 type WordPressWritableStatus = 'draft' | 'publish';
 
 interface JobImageOptionProps {
@@ -87,7 +85,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [desiredStatus, setDesiredStatus] = useState<WordPressWritableStatus>('draft');
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
-  const [promptCopied, setPromptCopied] = useState(false);
   const { ready: wordpressPluginReady } = useWordPressPluginStatus();
 
   useEffect(() => {
@@ -141,7 +138,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     return () => controller.abort();
   }, [jobId]);
 
-  const fields = useMemo(() => details ? flattenFields(details.job) : [], [details]);
   const currentFeaturedAttachmentId = useMemo(() => {
     if (!details || wordpressStatus?.state !== 'exists') return undefined;
     if (wordpressStatus.featuredImageAttachmentId
@@ -152,7 +148,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     const expectedFileName = comparableUploadedFileName(wordpressStatus.featuredImageFileName);
     return details.attachments.find((attachment) => comparableUploadedFileName(attachment.fileName) === expectedFileName)?.id;
   }, [details, wordpressStatus]);
-  const aiPrompt = useMemo(() => details ? buildJobCopyPrompt(details.summary) : '', [details]);
   const hasCompleteAiCopy = hasFormattedJobBody(aiCopy);
   const requiresCompleteAiCopy = wordpressStatus?.state === 'exists'
     && (!wordpressStatus.seoVersion
@@ -171,16 +166,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const toggleImage = (attachmentId: string) => {
     setSelectedIds([attachmentId]);
   };
-  const copyAiPrompt = async () => {
-    if (!aiPrompt) return;
-    try {
-      await navigator.clipboard.writeText(aiPrompt);
-      setPromptCopied(true);
-    } catch {
-      setError('The prompt could not be copied automatically. Select the prompt text and copy it manually.');
-    }
-  };
-
   const generateAiCopy = async () => {
     setGeneratingCopy(true);
     setError('');
@@ -375,24 +360,9 @@ export function JobDetails({ jobId }: { jobId: number }) {
           <section className="panel details-panel ai-copy-panel" aria-labelledby="ai-copy-heading">
             <p className="eyebrow">AI-assisted copy</p>
             <h2 id="ai-copy-heading">Prepare the complete post</h2>
-            <p className="field-help">Generate a job-specific title, excerpt, and project story with the configured OpenAI API, or copy the prompt for another AI tool. Review and edit every field before pushing it to WordPress.</p>
-            <div className="prompt-builder">
-              <div className="prompt-builder-heading">
-                <div>
-                  <h3>SEO job-post prompt</h3>
-                  <p>Built from the service title, ServiceTitan summary, service address, and available equipment keywords. City, state, and ZIP may be published; the street address and unit remain private source context.</p>
-                </div>
-                <div className="prompt-builder-actions">
-                  <button type="button" disabled={generatingCopy} onClick={() => void copyAiPrompt()}>
-                    {promptCopied ? 'Copied' : 'Copy prompt'}
-                  </button>
-                  <button className="primary generate-copy-button" type="button" disabled={generatingCopy} onClick={() => void generateAiCopy()}>
-                    {generatingCopy ? 'Generating…' : 'Generate copy'}
-                  </button>
-                </div>
-              </div>
-              <textarea aria-label="Generated AI prompt" readOnly rows={15} value={aiPrompt} />
-            </div>
+            <button className="primary generate-copy-button" type="button" disabled={generatingCopy} onClick={() => void generateAiCopy()}>
+              {generatingCopy ? 'Generating…' : 'Generate Copy'}
+            </button>
             <label className="ai-output">
               <span>AI-generated post copy</span>
               <textarea
@@ -414,64 +384,11 @@ export function JobDetails({ jobId }: { jobId: number }) {
               </span>
             </label>
           </section>
-
-          <section className="panel details-panel history-panel" aria-labelledby="history-heading">
-            <div className="details-section-heading">
-              <div>
-                <p className="eyebrow">SEO source material</p>
-                <h2 id="history-heading">Job history</h2>
-              </div>
-            </div>
-            <p className="field-help">Events and relevant notes are shown oldest first for reference. They are not included in the AI prompt. Attachments are omitted.</p>
-            {details.history.length === 0 ? (
-              <div className="history-empty">No descriptive history entries are available for reference.</div>
-            ) : (
-              <div className="history-list">
-                {details.history.map((item) => (
-                  <article className={`history-item${item.promptEligible ? '' : ' prompt-ineligible'}`} key={item.id}>
-                    <span className="history-item-body">
-                      <span className="history-item-meta">
-                        <strong>{item.type}</strong>
-                        <time dateTime={item.date}>{formatHistoryDate(item.date)}</time>
-                      </span>
-                      <span className="history-item-content">{item.content}</span>
-                      {!item.promptEligible && <span className="history-item-exclusion">Timeline only — no descriptive memo</span>}
-                    </span>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel details-panel" aria-labelledby="fields-heading">
-            <p className="eyebrow">Individual job response</p>
-            <h2 id="fields-heading">ServiceTitan fields</h2>
-            <div className="details-table-wrap">
-              <table className="details-table">
-                <thead><tr><th scope="col">Field</th><th scope="col">Value</th></tr></thead>
-                <tbody>{fields.map((field) => <tr key={field.name}><th scope="row">{field.name}</th><td>{field.value}</td></tr>)}</tbody>
-              </table>
-            </div>
-          </section>
         </>
       )}
     </main>
   );
 }
-
-const flattenFields = (value: unknown, prefix = ''): DetailField[] => {
-  if (value === null || value === undefined) return prefix ? [{ name: prefix, value: '—' }] : [];
-  if (Array.isArray(value)) {
-    if (value.length === 0) return prefix ? [{ name: prefix, value: '[]' }] : [];
-    return value.flatMap((item, index) => flattenFields(item, `${prefix}[${index}]`));
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return prefix ? [{ name: prefix, value: '{}' }] : [];
-    return entries.flatMap(([key, item]) => flattenFields(item, prefix ? `${prefix}.${key}` : key));
-  }
-  return [{ name: prefix || 'value', value: typeof value === 'string' ? value || '—' : String(value) }];
-};
 
 const readJson = async <T,>(response: Response): Promise<T> => {
   const text = await response.text();
@@ -496,13 +413,6 @@ const seoStatusDescription = (status: WordPressStatus): string => {
   if (status.seoState === 'modified') return 'The generated title, excerpt, or content was edited in WordPress.';
   if (status.seoState === 'newer') return 'This post was generated by a newer app version.';
   return 'SEO generation status is unavailable.';
-};
-
-const formatHistoryDate = (value: string): string => {
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf())
-    ? 'Date unavailable'
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 };
 
 const comparableUploadedFileName = (value: string): string => {

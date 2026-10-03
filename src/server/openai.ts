@@ -1,11 +1,7 @@
 import type { OpenAIConfig } from './config.js';
 import { OpenAIRequestError } from './openai-error.js';
-import {
-  buildJobCopyFacts,
-  type GeneratedJobCopy,
-  type JobCopySource,
-  JOB_COPY_INSTRUCTIONS,
-} from '../shared/job-copy.js';
+import type { GeneratedJobCopy, JobCopySource } from '../shared/job-copy.js';
+import { buildJobCopyFacts, JOB_COPY_INSTRUCTIONS } from './job-copy-prompt.js';
 
 export interface JobCopyGenerator {
   generate(job: JobCopySource): Promise<GeneratedJobCopy>;
