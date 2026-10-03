@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { AppNavigation } from './AppNavigation';
 import { TeamSettings, type TeamRole } from './TeamSettings';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
@@ -18,6 +17,11 @@ interface Connection {
   environment: string;
   tenantId: string;
 }
+interface Workspace {
+  id: string;
+  name: string;
+  role: TeamRole;
+}
 interface Website {
   id: string;
   name: string;
@@ -34,11 +38,146 @@ interface Session {
   csrfToken?: string;
 }
 
+const DemoWebsites: Website[] = [
+  {
+    id: 'demo-1',
+    name: 'Demo Site 1',
+    url: 'https://demo1.example.com',
+    connectionId: 'demo-connection',
+    restBase: 'wp-json',
+    zipAcfField: 'zip_code',
+    wordpressConfigured: true
+  },
+  {
+    id: 'demo-2',
+    name: 'Demo Site 2',
+    url: 'https://demo2.example.com',
+    connectionId: 'demo-connection',
+    restBase: 'wp-json',
+    zipAcfField: 'zip_code',
+    wordpressConfigured: false
+  }
+];
+
+const DemoWorkspaces: Workspace[] = [
+  {
+    id: 'demo-workspace-1',
+    name: 'Demo Workspace 1',
+    role: 'member'
+  },
+  {
+    id: 'demo-workspace-2',
+    name: 'Demo Workspace 2',
+    role: 'admin'
+  }
+];
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(body.error || 'The request could not be completed.');
   return body;
 }
+
+const BrandBanner = () => {
+  return (
+    <a className='workspace-brand p-3' href='/'>
+      ServiceTitan Jobs
+    </a>
+  );
+};
+
+const WorkspaceSelect = ({ workspaces, disabled, onChange, value }: { workspaces: Workspace[]; disabled: boolean; value: string; onChange: React.ChangeEventHandler<HTMLSelectElement, HTMLSelectElement> }) => {
+  return (
+    workspaces.length > 0 && (
+      <label className='workspace-selector'>
+        <span>Workspace</span>
+        <select aria-label='Active workspace' disabled={disabled} value={value} onChange={onChange}>
+          {workspaces.map((workspace) => (
+            <option value={workspace.id} key={workspace.id}>
+              {workspace.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
+  );
+};
+
+const WebsitesSelect = ({ websites, onChange, selected }: { websites: Website[]; selected: string; onChange: React.ChangeEventHandler<HTMLSelectElement, HTMLSelectElement> }) => {
+  return (
+    websites.length > 0 && (
+      <label className='workspace-selector'>
+        <span>Website</span>
+        <select aria-label='Active website' value={selected} onChange={onChange}>
+          {websites.map((site) => (
+            <option value={site.id} key={site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
+  );
+};
+
+const TokenCount = ({ count }: { count: number }) => {
+  return (
+    <div style={{ alignSelf: 'end' }}>
+      <div className='workspace-tokens' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
+        {count.toLocaleString()} job tokens available
+      </div>
+    </div>
+  );
+};
+
+const AddTokensButton = ({ path }: { path: string }) => {
+  return (
+    <a className='btn-nav' href='/add-tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
+      + Tokens
+    </a>
+  );
+};
+
+const SettingsButton = ({ path }: { path: string }) => {
+  return (
+    <a className='btn-nav' href='/account' aria-current={path === '/account' ? 'page' : undefined}>
+      Settings
+    </a>
+  );
+};
+
+const SignOutButton = ({ onClick, disabled }: { onClick: React.MouseEventHandler<HTMLButtonElement>; disabled: boolean }) => {
+  return (
+    <button disabled={disabled} onClick={onClick}>
+      Sign out
+    </button>
+  );
+};
+
+const JobsButton = ({ href, path }: { href: string; path: string }) => {
+  return (
+    <a className='btn-nav' href={href} aria-current={(path === '/' || path.startsWith('/jobs/')) ? 'page' : undefined}>
+      Jobs
+    </a>
+  );
+};
+
+const PluginButton = ({ path }: { path: string }) => {
+  return (
+    <a className='btn-nav' href='/wordpress-plugin' aria-current={path === '/wordpress-plugin' ? 'page' : undefined}>
+      Plugin
+    </a>
+  );
+};
+
+const WordpressButton = ({ path }: { path: string }) => {
+  return (
+    <a className='btn-nav' href='/wordpress-integration' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
+      Help
+    </a>
+  );
+};
+
 export function Workspace({ children }: { children: ReactNode }) {
   const [invitationToken] = useState(() => {
     const incoming = window.location.pathname === '/invite' ? new URLSearchParams(window.location.hash.slice(1)).get('token') : null;
@@ -50,7 +189,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     }
   });
   const [invitation, setInvitation] = useState<{ workspaceName: string; role: TeamRole; email: string }>();
-  const [workspaces, setWorkspaces] = useState<{ id: string; name: string; role: TeamRole }[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const tokenDialog = useRef<HTMLDialogElement>(null);
   const [session, setSession] = useState<Session>();
   const [signedOut, setSignedOut] = useState(false);
@@ -186,15 +325,32 @@ export function Workspace({ children }: { children: ReactNode }) {
     return (
       <>
         <header className='workspace-bar'>
-          <div>
-            <a className='workspace-brand' href='/'>
-              ServiceTitan Jobs
-            </a>
+          <BrandBanner />
+          <div className='d-flex gap-2 p-3 align-end'>
+            <WorkspaceSelect workspaces={DemoWorkspaces} disabled={busy} value={session.user?.workspaceId || ''} onChange={(event) => void selectWorkspace(event.target.value)} />
+            <WebsitesSelect websites={DemoWebsites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
+            <JobsButton href={jobsHref} path={path} />
+            <div style={{ flexGrow: 1 }} />
+            <TokenCount count={3} />
+            <AddTokensButton path={path} />
+            <PluginButton path={path} />
+            <WordpressButton path={path} />
+            <SettingsButton path={path} />
+            <SignOutButton onClick={() => void logout()} disabled={busy} />
           </div>
-          <span className='local-mode-note'>Local workspace</span>
-          <AppNavigation current={currentPage} jobsHref={jobsHref} />
         </header>
-        {children}
+        {path === '/add-tokens' ? (
+          <main className='account-page'>
+            <p className='eyebrow'>Local workspace</p>
+            <h1>Add Tokens</h1>
+            <p className='intro'>Local mode does not use job tokens. To manage a token balance, use a hosted workspace.</p>
+          </main>
+        ) : path === '/account' ? (
+          <main className='account-page'>
+            <h1>Settings</h1>
+            <p>Local workspace connections are configured through the server environment.</p>
+          </main>
+        ) : children}
       </>
     );
 
@@ -301,49 +457,21 @@ export function Workspace({ children }: { children: ReactNode }) {
   return (
     <>
       <header className='workspace-bar'>
-        <div>
-          <a className='workspace-brand' href='/'>
-            ServiceTitan Jobs
-          </a>
+        <BrandBanner />
+        <div className='d-flex gap-2 p-2 align-end'>
+          <WorkspaceSelect workspaces={workspaces} disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)} />
+          <WebsitesSelect websites={websites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
+          <JobsButton href={jobsHref} path={path} />
+          <div style={{ flexGrow: 1 }} />
+          <TokenCount count={user.jobTokens} />
+          <AddTokensButton path={path} />
+          <PluginButton path={path} />
+          <WordpressButton path={path} />
+          <SettingsButton path={path} />
+          <SignOutButton onClick={() => void logout()} disabled={busy} />
         </div>
-        <label className='workspace-selector'>
-          <span>Workspace</span>
-          <select aria-label='Active workspace' disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)}>
-            {workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {websites.length > 0 && (
-          <label className='workspace-selector'>
-            <span>Website</span>
-            <select aria-label='Active website' value={selected} onChange={(event) => chooseSite(event.target.value)}>
-              {websites.map((site) => (
-                <option value={site.id} key={site.id}>
-                  {site.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <span className='workspace-tokens' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
-          {user.jobTokens.toLocaleString()} job tokens available
-        </span>
-        <AppNavigation current={accountPage ? undefined : currentPage} jobsHref={jobsHref} />
-        <nav aria-label='Account'>
-          <a href='/add-tokens' aria-current={tokensPage ? 'page' : undefined}>
-            Add Tokens
-          </a>
-          <a href='/account' aria-current={accountPage ? 'page' : undefined}>
-            Settings
-          </a>
-          <button disabled={busy} onClick={() => void logout()}>
-            Sign out
-          </button>
-        </nav>
       </header>
+
       {error && (
         <p className='notice error account-notice' role='alert'>
           {error}

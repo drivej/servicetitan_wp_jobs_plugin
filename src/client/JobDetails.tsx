@@ -1,20 +1,25 @@
-import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
-import { ErrorDialog } from './ErrorDialog';
-import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
+import { ErrorDialog } from './ErrorDialog';
+import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
+import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 
+import { formatJobCopy, hasCompleteJobBody, hasFormattedJobBody, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
-import { type WordPressStatus, writeCachedWordPressStatuses } from './wordpressStatusCache';
-import {
-  formatJobCopy,
-  hasCompleteJobBody,
-  hasFormattedJobBody,
-  type GeneratedJobCopy,
-  type JobCopySource,
-} from '../shared/job-copy';
+import { writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
 
-interface JobAttachment { id: string; fileName: string; contentType: string; }
-interface JobHistoryItem { id: string; source: 'history' | 'note'; type: string; date: string; content: string; promptEligible: boolean; }
+interface JobAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+}
+interface JobHistoryItem {
+  id: string;
+  source: 'history' | 'note';
+  type: string;
+  date: string;
+  content: string;
+  promptEligible: boolean;
+}
 interface JobSummary extends JobCopySource {
   id: number;
   jobNumber: string;
@@ -42,24 +47,34 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
 
   return (
     <label className={`image-option image-${imageState}${selected ? ' selected' : ''}`}>
-      <span className="image-preview">
+      <span className='image-preview'>
         {imageState === 'loading' && (
-          <span className="image-loader" role="status">
-            <span className="image-loader-spinner" aria-hidden="true" />
-            <span className="visually-hidden">Loading {attachment.fileName}</span>
+          <span className='image-loader' role='status'>
+            <span className='image-loader-spinner' aria-hidden='true' />
+            <span className='visually-hidden'>Loading {attachment.fileName}</span>
           </span>
         )}
-        {imageState === 'error' && <span className="image-load-error" role="status">Image unavailable</span>}
+        {imageState === 'error' && (
+          <span className='image-load-error' role='status'>
+            Image unavailable
+          </span>
+        )}
         <img
           src={apiUrl(`/api/jobs/${jobId}/images/${encodeURIComponent(attachment.id)}`)}
           alt={attachment.fileName}
-          loading="lazy"
-          onLoad={() => { setImageState('loaded'); onImageState(attachment.id, 'loaded'); }}
-          onError={() => { setImageState('error'); onImageState(attachment.id, 'error'); }}
+          loading='lazy'
+          onLoad={() => {
+            setImageState('loaded');
+            onImageState(attachment.id, 'loaded');
+          }}
+          onError={() => {
+            setImageState('error');
+            onImageState(attachment.id, 'error');
+          }}
         />
       </span>
-      <span className="image-choice">
-        <input type="radio" name="job-image" checked={selected} disabled={disabled || imageState !== 'loaded'} onChange={onToggle} />
+      <span className='image-choice'>
+        <input type='radio' name='job-image' checked={selected} disabled={disabled || imageState !== 'loaded'} onChange={onToggle} />
         <span>{attachment.fileName}</span>
       </span>
     </label>
@@ -96,7 +111,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
       try {
         const response = await apiFetch(`/api/jobs/${jobId}`, {
           headers: { Accept: 'application/json' },
-          signal: controller.signal,
+          signal: controller.signal
         });
         const body = await readJson<JobDetailsResponse | { error?: string }>(response);
         if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to load job details.');
@@ -119,7 +134,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
       try {
         const response = await apiFetch(`/api/jobs/${jobId}/wordpress`, {
           headers: { Accept: 'application/json' },
-          signal: controller.signal,
+          signal: controller.signal
         });
         const body = await readJson<WordPressStatus | { error?: string }>(response);
         if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to load WordPress status.');
@@ -131,7 +146,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         setWordpressStatus({
           state: 'unknown',
           label: 'Unknown',
-          message: requestError instanceof Error ? requestError.message : 'Unable to load WordPress status.',
+          message: requestError instanceof Error ? requestError.message : 'Unable to load WordPress status.'
         });
       } finally {
         if (!controller.signal.aborted) setWordpressStatusLoading(false);
@@ -143,8 +158,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   const currentFeaturedAttachmentId = useMemo(() => {
     if (!details || wordpressStatus?.state !== 'exists') return undefined;
-    if (wordpressStatus.featuredImageAttachmentId
-      && details.attachments.some((attachment) => attachment.id === wordpressStatus.featuredImageAttachmentId)) {
+    if (wordpressStatus.featuredImageAttachmentId && details.attachments.some((attachment) => attachment.id === wordpressStatus.featuredImageAttachmentId)) {
       return wordpressStatus.featuredImageAttachmentId;
     }
     if (!wordpressStatus.featuredImageFileName) return undefined;
@@ -152,10 +166,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     return details.attachments.find((attachment) => comparableUploadedFileName(attachment.fileName) === expectedFileName)?.id;
   }, [details, wordpressStatus]);
   const hasCompleteAiCopy = hasFormattedJobBody(aiCopy);
-  const requiresCompleteAiCopy = wordpressStatus?.state === 'exists'
-    && (!wordpressStatus.seoVersion
-      || !wordpressStatus.currentSeoVersion
-      || wordpressStatus.seoVersion < wordpressStatus.currentSeoVersion);
+  const requiresCompleteAiCopy = wordpressStatus?.state === 'exists' && (!wordpressStatus.seoVersion || !wordpressStatus.currentSeoVersion || wordpressStatus.seoVersion < wordpressStatus.currentSeoVersion);
   useEffect(() => {
     if (currentFeaturedAttachmentId && selectedIds.length === 0) {
       setSelectedIds([currentFeaturedAttachmentId]);
@@ -171,13 +182,13 @@ export function JobDetails({ jobId }: { jobId: number }) {
   };
   const generateAiCopy = async () => {
     if (!hasValidImage || generatingCopy) return;
-    if (!await confirmTokenSpend('ai_generation')) return;
+    if (!(await confirmTokenSpend('ai_generation'))) return;
     setGeneratingCopy(true);
     setError('');
     try {
       const response = await apiFetch(`/api/jobs/${jobId}/ai-copy`, {
         method: 'POST',
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json' }
       });
       if (response.status === 402) return;
       const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
@@ -194,14 +205,14 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   const pushToWordPress = async () => {
     if (!selectedImageLoaded || !hasCompleteAiCopy) return;
-    if (!await confirmTokenSpend('push')) return;
+    if (!(await confirmTokenSpend('push'))) return;
     setPushing(true);
     setError('');
     try {
       const response = await apiFetch(`/api/jobs/${jobId}/wordpress`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attachmentIds: selectedIds, status: desiredStatus, aiCopy }),
+        body: JSON.stringify({ attachmentIds: selectedIds, status: desiredStatus, aiCopy })
       });
       if (response.status === 402) return;
       const body = await readJson<WordPressStatus | { error?: string }>(response);
@@ -226,7 +237,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     const replacingImage = selectedIds.length === 1 && selectedIds[0] !== currentFeaturedAttachmentId;
     if (force && !window.confirm(`This post was edited in WordPress. Rebuilding will replace its title, excerpt, and content${replacingImage ? ', and featured image' : ''}. Continue?`)) return;
 
-    if (!await confirmTokenSpend(wordpressStatus.seoState === 'current' ? 'rebuild' : 'update_seo')) return;
+    if (!(await confirmTokenSpend(wordpressStatus.seoState === 'current' ? 'rebuild' : 'update_seo'))) return;
     setRegenerating(true);
     setError('');
     try {
@@ -236,8 +247,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
         body: JSON.stringify({
           force,
           ...(replacingImage && selectedIds[0] ? { attachmentId: selectedIds[0] } : {}),
-          ...(aiCopy.trim() ? { aiCopy } : {}),
-        }),
+          ...(aiCopy.trim() ? { aiCopy } : {})
+        })
       });
       if (response.status === 402) return;
       const body = await readJson<WordPressStatus | { error?: string }>(response);
@@ -256,16 +267,22 @@ export function JobDetails({ jobId }: { jobId: number }) {
   return (
     <main>
       {tokenSpendDialog}
-      <header className="hero details-hero">
-        <a className="back-link" href={jobsHref}>← Back to jobs</a>
-        <p className="eyebrow">Job details</p>
+      <header className='hero details-hero'>
+        <a className='back-link' href={jobsHref}>
+          ← Back to jobs
+        </a>
+        <p className='eyebrow'>Job details</p>
         <h1>{details?.summary.jobName || `ServiceTitan job ${jobId}`}</h1>
-        {details && <p className="intro">Job #{details.summary.jobNumber} · {details.summary.location.city}, {details.summary.location.state} {details.summary.location.zip}</p>}
+        {details && (
+          <p className='intro'>
+            Job #{details.summary.jobNumber} · {details.summary.location.city}, {details.summary.location.state} {details.summary.location.zip}
+          </p>
+        )}
       </header>
 
-      <section className="wordpress-action-bar" aria-label="WordPress status and actions">
-        <div className="wordpress-current-status">
-          <span className="wordpress-status-label">WordPress status</span>
+      <section className='wordpress-action-bar' aria-label='WordPress status and actions'>
+        <div className='wordpress-current-status'>
+          <span className='wordpress-status-label'>WordPress status</span>
           <strong className={`wordpress-status-badge state-${wordpressStatus?.state || 'unknown'}`} title={wordpressStatus?.message}>
             {wordpressStatusLoading ? 'Checking…' : wordpressStatus?.label || 'Unknown'}
           </strong>
@@ -274,13 +291,17 @@ export function JobDetails({ jobId }: { jobId: number }) {
               {seoStatusLabel(wordpressStatus)}
             </span>
           )}
-          {wordpressStatus?.link && <a href={wordpressStatus.link} target="_blank" rel="noreferrer">View post</a>}
+          {wordpressStatus?.link && (
+            <a href={wordpressStatus.link} target='_blank' rel='noreferrer'>
+              View post
+            </a>
+          )}
         </div>
-        <div className="wordpress-push-controls">
+        <div className='wordpress-push-controls'>
           {wordpressStatus?.state === 'exists' ? (
             <button
-              className="primary wordpress-push-button"
-              type="button"
+              className='primary wordpress-push-button'
+              type='button'
               disabled={!wordpressPluginReady || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
               title={requiresCompleteAiCopy && !hasCompleteAiCopy ? 'Generate the complete AI post copy before updating SEO.' : undefined}
               onClick={() => void regenerateWordPress()}
@@ -291,23 +312,16 @@ export function JobDetails({ jobId }: { jobId: number }) {
             <>
               <label>
                 <span>Post status</span>
-                <select
-                  aria-label="Status for the new WordPress post"
-                  value={desiredStatus}
-                  disabled={pushing}
-                  onChange={(event) => setDesiredStatus(event.target.value as WordPressWritableStatus)}
-                >
-                  <option value="draft">Draft</option>
-                  <option value="publish">Published</option>
+                <select aria-label='Status for the new WordPress post' value={desiredStatus} disabled={pushing} onChange={(event) => setDesiredStatus(event.target.value as WordPressWritableStatus)}>
+                  <option value='draft'>Draft</option>
+                  <option value='publish'>Published</option>
                 </select>
               </label>
               <button
-                className="primary wordpress-push-button"
-                type="button"
+                className='primary wordpress-push-button'
+                type='button'
                 disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
-                title={!selectedImageLoaded
-                  ? 'Select a working image before pushing.'
-                  : !hasCompleteAiCopy ? 'Generate or paste the complete AI post copy before pushing.' : undefined}
+                title={!selectedImageLoaded ? 'Select a working image before pushing.' : !hasCompleteAiCopy ? 'Generate or paste the complete AI post copy before pushing.' : undefined}
                 onClick={() => void pushToWordPress()}
               >
                 {pushing ? 'Pushing…' : 'Push'}
@@ -317,83 +331,79 @@ export function JobDetails({ jobId }: { jobId: number }) {
         </div>
       </section>
 
-      {loading && <div className="notice" role="status">Loading job details and images…</div>}
+      {loading && (
+        <div className='notice' role='status'>
+          Loading job details and images…
+        </div>
+      )}
       <ErrorDialog message={error} onClose={() => setError('')} />
 
       {details && (
         <>
-          <section className="panel details-panel" aria-labelledby="images-heading">
-            <div className="details-section-heading">
+          <section className='panel details-panel' aria-labelledby='images-heading'>
+            <div className='details-section-heading'>
               <div>
-                <p className="eyebrow">Attachments</p>
-                <h2 id="images-heading">{wordpressStatus?.state === 'exists' ? 'Replace featured image' : 'Select an image'}</h2>
+                <p className='eyebrow'>Attachments</p>
+                <h2 id='images-heading'>{wordpressStatus?.state === 'exists' ? 'Replace featured image' : 'Select an image'}</h2>
               </div>
-              <div className="image-selection-summary">
-                <span className="selection-count">
-                  {wordpressStatus?.state === 'exists'
-                    ? selectedIds[0] === currentFeaturedAttachmentId && currentFeaturedAttachmentId
-                      ? 'Current featured image selected'
-                      : selectedIds.length === 1 ? 'New image selected' : 'Keeping current image'
-                    : selectedIds.length === 1 ? '1 selected' : 'None selected'}
+              <div className='image-selection-summary'>
+                <span className='selection-count'>
+                  {wordpressStatus?.state === 'exists' ? (selectedIds[0] === currentFeaturedAttachmentId && currentFeaturedAttachmentId ? 'Current featured image selected' : selectedIds.length === 1 ? 'New image selected' : 'Keeping current image') : selectedIds.length === 1 ? '1 selected' : 'None selected'}
                 </span>
                 {wordpressStatus?.state === 'exists' && selectedIds.length === 1 && selectedIds[0] !== currentFeaturedAttachmentId && (
-                  <button type="button" disabled={regenerating} onClick={() => setSelectedIds(currentFeaturedAttachmentId ? [currentFeaturedAttachmentId] : [])}>Keep current image</button>
+                  <button type='button' disabled={regenerating} onClick={() => setSelectedIds(currentFeaturedAttachmentId ? [currentFeaturedAttachmentId] : [])}>
+                    Keep current image
+                  </button>
                 )}
               </div>
             </div>
-            <p className="field-help">
-              {wordpressStatus?.state === 'exists'
-                ? 'The current featured image is selected when it can be matched. Choose a different image before rebuilding only if you want to replace it.'
-                : 'The selected image is uploaded to the WordPress Media Library and becomes the generated post’s featured image.'}
+            <p className='field-help'>
+              {wordpressStatus?.state === 'exists' ? 'The current featured image is selected when it can be matched. Choose a different image before rebuilding only if you want to replace it.' : 'The selected image is uploaded to the WordPress Media Library and becomes the generated post’s featured image.'}
             </p>
-            {(details.attachments.length === 0 || details.attachments.every((attachment) => imageStates[attachment.id] === 'error')) && <p className="notice" role="status">This job does not qualify to be pushed because it has no working images. Add or restore an image in ServiceTitan, then reload this page to check again.</p>}
-            <div className="image-grid">
+            {(details.attachments.length === 0 || details.attachments.every((attachment) => imageStates[attachment.id] === 'error')) && (
+              <p className='notice' role='status'>
+                This job does not qualify to be pushed because it has no working images. Add or restore an image in ServiceTitan, then reload this page to check again.
+              </p>
+            )}
+            <div className='image-grid'>
               {details.attachments.map((attachment) => {
                 const selected = selectedIds.includes(attachment.id);
-                return (
-                  <JobImageOption
-                    key={attachment.id}
-                    attachment={attachment}
-                    disabled={pushing || regenerating}
-                    jobId={jobId}
-                    onImageState={recordImageState}
-                    onToggle={() => toggleImage(attachment.id)}
-                    selected={selected}
-                  />
-                );
+                return <JobImageOption key={attachment.id} attachment={attachment} disabled={pushing || regenerating} jobId={jobId} onImageState={recordImageState} onToggle={() => toggleImage(attachment.id)} selected={selected} />;
               })}
             </div>
           </section>
 
-          <section className="panel details-panel ai-copy-panel" aria-labelledby="ai-copy-heading">
-            <p className="eyebrow">AI-assisted copy</p>
-            <h2 id="ai-copy-heading">Prepare the complete post</h2>
-            <button
-              className="primary generate-copy-button"
-              type="button"
-              disabled={generatingCopy || !hasValidImage}
-              title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined}
-              onClick={() => void generateAiCopy()}
-            >
-              {generatingCopy ? 'Generating…' : 'Generate Copy'}
-            </button>
-            <label className="ai-output">
+          <section className='panel details-panel ai-copy-panel' aria-labelledby='ai-copy-heading'>
+            <div>
+              <p className='eyebrow'>AI-assisted copy</p>
+              <h2 id='ai-copy-heading'>Prepare the complete post</h2>
+            </div>
+            <p>
+              <button className='primary generate-copy-button' type='button' disabled={generatingCopy || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => void generateAiCopy()}>
+                {generatingCopy ? 'Generating…' : 'Generate Copy'}
+              </button>
+            </p>
+            <label className='ai-output'>
               <span>AI-generated post copy</span>
               <textarea
-                aria-label="AI-generated post copy"
+                aria-label='AI-generated post copy'
                 rows={16}
                 maxLength={6000}
-                placeholder={'TITLE: Plumbing Service in Rancho Palos Verdes, CA\nEXCERPT: Short card description.\nINTRO: Opening project paragraph.\nCONTEXT HEADING: Why Did This Service Matter?\nCONTEXT: Job-specific explanation.\nWORK HEADING: What Did the Service Include?\nWORK ITEMS:\n- First documented scope item\n- Second documented scope item\nCLOSING: Appropriately qualified closing paragraph.'}
+                placeholder={
+                  'TITLE: Service in Local City, USA\nEXCERPT: Short card description.\nINTRO: Opening project paragraph.\nCONTEXT HEADING: Why Did This Service Matter?\nCONTEXT: Job-specific explanation.\nWORK HEADING: What Did the Service Include?\nWORK ITEMS:\n- First documented scope item\n- Second documented scope item\nCLOSING: Appropriately qualified closing paragraph.'
+                }
                 value={aiCopy}
                 onChange={(event) => {
                   setAiCopyEdited(true);
                   setAiCopy(event.target.value);
                 }}
               />
-              <span className="ai-output-meta">
-                <span>{wordpressStatus?.state === 'exists'
-                  ? 'The current title and excerpt are loaded from WordPress. Generate complete copy to replace the detail-page story, or edit the available fields before rebuilding.'
-                  : 'Required before pushing. TITLE and EXCERPT power the card; the remaining fields build the job detail page.'}</span>
+              <span className='ai-output-meta'>
+                <span>
+                  {wordpressStatus?.state === 'exists'
+                    ? 'The current title and excerpt are loaded from WordPress. Generate complete copy to replace the detail-page story, or edit the available fields before rebuilding.'
+                    : 'Required before pushing. TITLE and EXCERPT power the card; the remaining fields build the job detail page.'}
+                </span>
                 <span>{aiCopy.length}/6000</span>
               </span>
             </label>
@@ -407,8 +417,11 @@ export function JobDetails({ jobId }: { jobId: number }) {
 const readJson = async <T,>(response: Response): Promise<T> => {
   const text = await response.text();
   if (!text.trim()) throw new Error(`The app server returned an empty response (HTTP ${response.status}).`);
-  try { return JSON.parse(text) as T; }
-  catch { throw new Error(`The app server returned an invalid response (HTTP ${response.status}).`); }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`The app server returned an invalid response (HTTP ${response.status}).`);
+  }
 };
 
 const seoStatusLabel = (status: WordPressStatus): string => {
@@ -431,8 +444,11 @@ const seoStatusDescription = (status: WordPressStatus): string => {
 
 const comparableUploadedFileName = (value: string): string => {
   const decoded = (() => {
-    try { return decodeURIComponent(value); }
-    catch { return value; }
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
   })();
   return decoded
     .replace(/[^a-z0-9._-]+/gi, '-')
