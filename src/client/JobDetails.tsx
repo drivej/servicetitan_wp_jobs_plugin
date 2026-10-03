@@ -72,6 +72,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [imageStates, setImageStates] = useState<Record<string, 'loaded' | 'error'>>({});
+  const hasValidImage = Boolean(details?.attachments.some((attachment) => imageStates[attachment.id] === 'loaded'));
   const selectedImageLoaded = selectedIds.length === 1 && imageStates[selectedIds[0]!] === 'loaded';
   const recordImageState = (id: string, state: 'loaded' | 'error') => {
     setImageStates((current) => ({ ...current, [id]: state }));
@@ -169,6 +170,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     setSelectedIds([attachmentId]);
   };
   const generateAiCopy = async () => {
+    if (!hasValidImage || generatingCopy) return;
     if (!await confirmTokenSpend('ai_generation')) return;
     setGeneratingCopy(true);
     setError('');
@@ -366,7 +368,13 @@ export function JobDetails({ jobId }: { jobId: number }) {
           <section className="panel details-panel ai-copy-panel" aria-labelledby="ai-copy-heading">
             <p className="eyebrow">AI-assisted copy</p>
             <h2 id="ai-copy-heading">Prepare the complete post</h2>
-            <button className="primary generate-copy-button" type="button" disabled={generatingCopy} onClick={() => void generateAiCopy()}>
+            <button
+              className="primary generate-copy-button"
+              type="button"
+              disabled={generatingCopy || !hasValidImage}
+              title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined}
+              onClick={() => void generateAiCopy()}
+            >
               {generatingCopy ? 'Generating…' : 'Generate Copy'}
             </button>
             <label className="ai-output">

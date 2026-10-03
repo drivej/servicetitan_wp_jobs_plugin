@@ -370,8 +370,8 @@ td strong {
   table-layout: fixed;
   font-size: 0.8rem;
 }
-.jobs-table .job-number-column {
-  width: 9%;
+.jobs-table .job-image-column {
+  width: 80px;
 }
 .jobs-table .job-name-column {
   width: 17%;
@@ -1457,7 +1457,7 @@ td strong {
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .jobs-table .job-number-cell,
+  .jobs-table .job-image-cell,
   .jobs-table .job-name-cell,
   .jobs-table .st-status-cell {
     grid-column: 1;
@@ -1721,3 +1721,28 @@ td strong {
   margin: 0;
   flex-shrink: 0;
 }
+
+.job-thumbnail {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #eef1ee;
+}
+.job-thumbnail img { display: block; width: 64px; height: 64px; object-fit: cover; }
+.job-thumbnail img.is-checking { opacity: 0; }
+.job-thumbnail-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #526057;
+}
+.source-copy-status { display: block; margin-top: 5px; font-size: 11px; color: #526057; }
+.source-missing, .source-limited { color: #925a12; }

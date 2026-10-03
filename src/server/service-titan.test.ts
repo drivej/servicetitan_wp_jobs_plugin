@@ -98,6 +98,9 @@ test('lists only jobs with image metadata and securely downloads a verified job 
   });
   assert.deepEqual(jobs.data.map((job) => job.id), [2]);
   assert.equal(jobs.totalCount, 1);
+  assert.deepEqual(jobs.data[0]?.attachments, [{ id: 'image-2', fileName: 'completed.jpg', contentType: 'image/jpeg' }]);
+  assert.equal(jobs.data[0]?.sourceCopyStatus, 'limited');
+  assert.equal(jobs.data[0]?.summaryText, undefined, 'source assessment must not expose the raw summary');
   assert.equal(jobs.data[0]?.location.address, undefined, 'street addresses must not be exposed in the list response');
   assert.equal(requestedUrls.some((url) => url.includes('/jobs/attachment/')), false, 'list filtering must use metadata only');
 

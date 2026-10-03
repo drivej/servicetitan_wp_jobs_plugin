@@ -38,6 +38,8 @@ export interface JobListItem {
   summaryText?: string;
   seoDetails?: { issue?: string; action?: string; };
   equipmentNames?: string[];
+  attachments?: JobAttachment[];
+  sourceCopyStatus?: 'missing' | 'limited' | 'available';
 }
 export interface JobsResult { data: JobListItem[]; page: number; pageSize: number; hasMore: boolean; totalCount?: number; }
 export interface JobAttachment { id: string; fileName: string; contentType: string; }
@@ -80,6 +82,7 @@ export class ServiceTitanClient implements JobsProvider {
       }
       const targetCount = query.page * query.pageSize + 1;
       const matchingJobs: ServiceTitanJob[] = [];
+      const imagesByJob = new Map<number, JobAttachment[]>();
       let sourcePage = 1;
       let sourceHasMore = true;
 
@@ -90,7 +93,13 @@ export class ServiceTitanClient implements JobsProvider {
           : jobsResponse.data.data;
         const attachmentLists = await mapWithConcurrency(candidates, 8, (job) => this.getAttachments(job.id, headers, tenantPath));
         candidates.forEach((job, index) => {
-          if (attachmentLists[index]!.some((attachment) => attachmentId(attachment) && isImageAttachment(attachment))) matchingJobs.push(job);
+          const images = attachmentLists[index]!
+            .filter((attachment) => attachmentId(attachment) && isImageAttachment(attachment))
+            .map(publicAttachment);
+          if (images.length > 0) {
+            matchingJobs.push(job);
+            imagesByJob.set(job.id, images);
+          }
         });
         sourceHasMore = jobsResponse.data.hasMore;
         sourcePage += 1;
@@ -101,7 +110,15 @@ export class ServiceTitanClient implements JobsProvider {
       const enrichedJobs = await this.enrichJobs(pageJobs, headers, tenantPath);
 
       return {
-        data: enrichedJobs,
+        data: enrichedJobs.map((job, index) => {
+          const summary = redactHistoryContent(pageJobs[index]!.summary).trim();
+          const wordCount = summary.split(/\s+/).filter(Boolean).length;
+          return {
+            ...job,
+            attachments: imagesByJob.get(job.id) || [],
+            sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available',
+          };
+        }),
         page: query.page,
         pageSize: query.pageSize,
         hasMore: matchingJobs.length > firstResultIndex + query.pageSize || sourceHasMore,

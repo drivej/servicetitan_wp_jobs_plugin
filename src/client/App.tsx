@@ -1,3 +1,4 @@
+import { JobThumbnail } from './JobThumbnail';
 import { apiFetch, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -7,7 +8,8 @@ import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPre
 
 interface JobItem {
   id: number;
-  jobNumber: string;
+  attachments?: Array<{ id: string; fileName: string }>;
+  sourceCopyStatus?: 'missing' | 'limited' | 'available';
   jobName: string;
   status: string;
   location: { city: string; state: string; zip: string };
@@ -325,7 +327,7 @@ export function App() {
           <div className='table-wrap'>
             <table className='jobs-table'>
               <colgroup>
-                <col className='job-number-column' />
+                <col className='job-image-column' />
                 <col className='job-name-column' />
                 <col className='state-column' />
                 <col className='zip-column' />
@@ -361,12 +363,17 @@ export function App() {
                   const wordpressStatusValue = wordpressStatus.label === 'Loading…' || wordpressStatus.label === 'Updating…' ? '' : wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish' ? wordpressStatus.postStatus : '';
                   return (
                     <tr key={job.id}>
-                      <td className='job-cell job-number-cell' data-label='Job #'>
-                        <b>#{job.jobNumber}</b>
-                        {/* <strong>{job.jobName}</strong>
-                        <span className='job-number'>#{job.jobNumber}</span> */}
+                      <td className='job-image-cell' data-label='Image'>
+                        <JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} />
                       </td>
-                      <td className='job-name-cell' data-label='Job'><div className='job-name' title={job.jobName}>{job.jobName}</div></td>
+                      <td className='job-name-cell' data-label='Job'>
+                        <div className='job-name' title={job.jobName}>{job.jobName}</div>
+                        {wordpressStatus.state !== 'exists' && job.sourceCopyStatus && (
+                          <span className={`source-copy-status source-${job.sourceCopyStatus}`} title='Basic summary check: missing, fewer than 20 words, or at least 20 words. Review the source before generating copy.'>
+                            {job.sourceCopyStatus === 'missing' ? 'Missing source copy' : job.sourceCopyStatus === 'limited' ? 'Limited source copy' : 'Source copy available'}
+                          </span>
+                        )}
+                      </td>
                       <td className='location-cell state-cell' data-label='State'>
                         {/* <strong>{job.location.city}</strong> */}
                         {/* <span> */}
