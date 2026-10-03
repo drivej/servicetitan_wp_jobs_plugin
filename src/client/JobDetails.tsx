@@ -1,3 +1,4 @@
+import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
 import { ErrorDialog } from './ErrorDialog';
 import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 import { useEffect, useMemo, useState } from 'react';
@@ -66,6 +67,7 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
 }
 
 export function JobDetails({ jobId }: { jobId: number }) {
+  const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
   const jobsHref = `/${window.location.search}`;
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -167,6 +169,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     setSelectedIds([attachmentId]);
   };
   const generateAiCopy = async () => {
+    if (!await confirmTokenSpend('ai_generation')) return;
     setGeneratingCopy(true);
     setError('');
     try {
@@ -189,6 +192,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   const pushToWordPress = async () => {
     if (!selectedImageLoaded || !hasCompleteAiCopy) return;
+    if (!await confirmTokenSpend('push')) return;
     setPushing(true);
     setError('');
     try {
@@ -220,6 +224,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     const replacingImage = selectedIds.length === 1 && selectedIds[0] !== currentFeaturedAttachmentId;
     if (force && !window.confirm(`This post was edited in WordPress. Rebuilding will replace its title, excerpt, and content${replacingImage ? ', and featured image' : ''}. Continue?`)) return;
 
+    if (!await confirmTokenSpend(wordpressStatus.seoState === 'current' ? 'rebuild' : 'update_seo')) return;
     setRegenerating(true);
     setError('');
     try {
@@ -248,6 +253,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   return (
     <main>
+      {tokenSpendDialog}
       <header className="hero details-hero">
         <a className="back-link" href={jobsHref}>← Back to jobs</a>
         <p className="eyebrow">Job details</p>

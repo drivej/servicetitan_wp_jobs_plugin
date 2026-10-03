@@ -1707,3 +1707,17 @@ td strong {
 
 .team-invite-link { width: 100%; margin: 8px 0; }
 #team { margin-bottom: 24px; }
+
+.token-spend-preference {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 1.25rem 0;
+  text-align: left;
+}
+.token-spend-preference input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  flex-shrink: 0;
+}
