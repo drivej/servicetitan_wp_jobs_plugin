@@ -11,7 +11,10 @@ import { ServiceTitanRequestError } from './service-titan-error.js';
 import type { ApprovedPostCopy, WordPressProvider, WordPressWritableStatus } from './wordpress.js';
 import { WordPressRequestError } from './wordpress-error.js';
 
+import type { BuildTask } from '../shared/build-queue.js';
+
 interface CreateAppOptions {
+  buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
   copyGenerator?: JobCopyGenerator;
@@ -34,6 +37,7 @@ export const createApp = ({
   staticDirectory,
   wordpressPluginArchivePath = WORDPRESS_PLUGIN_ARCHIVE,
   apiPrefix = '/api',
+  buildQueue,
   spendJobToken = async (_action, operation) => operation(),
 }: CreateAppOptions) => {
   const app = express();
@@ -77,6 +81,20 @@ export const createApp = ({
     try {
       response.set('Cache-Control', 'no-store');
       response.json(await serviceTitan.getJobDetails(parseJobId(request.params.jobId)));
+    } catch (error) { next(error); }
+  });
+  app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {
+    try {
+      if (!buildQueue) throw new HttpError('Build queue is unavailable.', 503);
+      response.set('Cache-Control', 'no-store');
+      response.status(202).json(await buildQueue.enqueue(parseJobId(request.params.jobId)));
+    } catch (error) { next(error); }
+  });
+  app.post(`${apiPrefix}/build-deploy/statuses`, async (request, response, next) => {
+    try {
+      if (!buildQueue) throw new HttpError('Build queue is unavailable.', 503);
+      response.set('Cache-Control', 'no-store');
+      response.json({ tasks: await buildQueue.list(parseJobIds(request.body?.jobIds)) });
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/ai-copy`, async (request, response, next) => {

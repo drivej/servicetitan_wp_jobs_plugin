@@ -33,6 +33,8 @@ export class PostgresDatabase implements Database {
     await this.pool.query('SELECT w.job_tokens,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id LIMIT 0');
     await this.pool.query('SELECT workspace_id,amount,balance_after FROM token_transactions LIMIT 0');
     await this.pool.query('SELECT user_id FROM platform_administrators LIMIT 0');
+    const queuePermissions = await this.pool.query("SELECT has_table_privilege(current_user,'build_deploy_tasks','SELECT') AND has_table_privilege(current_user,'build_deploy_tasks','INSERT') AND has_table_privilege(current_user,'build_deploy_tasks','UPDATE') AS ready");
+    if (!queuePermissions.rows[0]?.ready) throw new Error('Build queue permissions are missing. Run migrations and grant SELECT, INSERT, UPDATE on build_deploy_tasks.');
     const ledgerPermissions = await this.pool.query(`SELECT
       has_table_privilege(current_user,'token_transactions','SELECT') AND
       has_table_privilege(current_user,'token_transactions','INSERT') AND

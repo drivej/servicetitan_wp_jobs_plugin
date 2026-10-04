@@ -1,6 +1,6 @@
 # SaaS foundation: development and deployment
 
-Phase 1 adds Google-only accounts, persistent sessions, encrypted ServiceTitan and WordPress credentials, owned websites, and website-scoped access to the existing manual publishing workflow. No billing policy has been implemented. The durable worker and pull connector are later milestones; WordPress Application Passwords are temporary credentials for the existing push adapter.
+Phase 1 adds Google-only accounts, persistent sessions, encrypted ServiceTitan and WordPress credentials, owned websites, and website-scoped access to the existing manual publishing workflow. No billing policy has been implemented. The build-and-deploy worker uses the durable queue described in the README; the pull connector remains a later milestone; WordPress Application Passwords are temporary credentials for the existing push adapter.
 
 ## Local single-user workflow
 

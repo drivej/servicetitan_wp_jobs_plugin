@@ -223,7 +223,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const userId = (res.locals.user as User).id;
       const id = uuid(req.params.id);
       const context = await store.websiteContext(userId, id, (res.locals.user as User).workspaceId);
-      if (['POST', 'PATCH'].includes(req.method)) {
+      if (['POST', 'PATCH'].includes(req.method) && req.path !== '/build-deploy/statuses') {
         const action = req.path.endsWith('/ai-copy') ? 'generation.requested' : 'wordpress.operation_requested';
         const jobMatch = req.path.match(/^\/jobs\/(\d+)\//);
         await store.recordAction(userId, action, id, (res.locals.user as User).workspaceId, jobMatch ? Number(jobMatch[1]) : undefined);

@@ -1,3 +1,4 @@
+import { PostgresBuildQueueStore } from '../build-queue.js';
 import { TokenAccounts } from './token-accounts.js';
 import { PlatformMembers } from './platform-members.js';
 import { postTokenTransaction } from './token-ledger.js';
@@ -121,7 +122,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 5);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 6);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -736,4 +737,34 @@ test('ledger HTTP endpoints enforce platform permissions, CSRF and immutable adj
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await f.close();
   }
+});
+
+
+test('durable build queue scopes results and serializes claims and duplicate submissions', async () => {
+  const f = await fixture();
+  try {
+    const alice = await f.store.login({ subject: 'queue-alice', email: 'a@example.com', name: 'Alice' });
+    const connection = await f.store.saveConnection(alice.user.id, source);
+    const site = await f.store.saveWebsite(alice.user.id, siteInput(connection.id));
+    const scope = { userId: alice.user.id, workspaceId: alice.user.workspaceId, websiteId: site.id };
+    const first = new PostgresBuildQueueStore(f.db);
+    const second = new PostgresBuildQueueStore(f.db);
+    const [a, b] = await Promise.all([first.enqueue(scope, 42), second.enqueue(scope, 42)]);
+    assert.equal(a.id, b.id);
+    assert.deepEqual(await first.list({ ...scope, workspaceId: randomUUID() }, [42]), []);
+    assert.deepEqual(await first.list({ ...scope, websiteId: randomUUID() }, [42]), []);
+    const [claimed, duplicate] = await Promise.all([first.claim(), second.claim()]);
+    assert.equal(claimed?.id, a.id);
+    assert.equal(duplicate, undefined);
+    assert.equal((await second.list(scope, [42]))[0]?.state, 'running');
+    await first.save({ ...claimed!, state: 'failed', error: 'No image' });
+    const retry = await second.enqueue(scope, 42);
+    assert.notEqual(retry.id, a.id);
+    assert.equal((await first.list(scope, [42]))[0]?.id, retry.id);
+    await second.claim();
+    await f.sql.query("UPDATE build_deploy_tasks SET updated_at=now()-interval '6 minutes' WHERE id=$1", [retry.id]);
+    assert.equal(await first.claim(), undefined);
+    assert.equal((await first.list(scope, [42]))[0]?.state, 'failed');
+    assert.match((await first.list(scope, [42]))[0]?.error || '', /Check WordPress/);
+  } finally { await f.close(); }
 });

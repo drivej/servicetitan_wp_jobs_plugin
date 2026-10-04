@@ -2125,3 +2125,7 @@ td strong {
 .token-table th, .token-table td { padding: 12px; border-bottom: 1px solid #dce3e8; vertical-align: top; }
 .token-table small { display: block; color: #526159; margin-top: 4px; }
 .token-reference { overflow-wrap: anywhere; }
+
+
+.build-deploy-button { white-space: nowrap; }
+.build-deploy-error { max-width: 260px; color: #a32626; font-size: 0.8rem; line-height: 1.4; }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { BuildTask } from '../shared/build-queue';
 import { JobThumbnail } from './JobThumbnail';
 import { apiFetch, wordpressStatusStorage } from './api';
 
@@ -50,6 +51,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [wordpressStatuses, setWordpressStatuses] = useState<Record<number, WordPressStatus>>({});
   const [busyWordpressJobs, setBusyWordpressJobs] = useState<Set<number>>(() => new Set());
+  const [buildTasks, setBuildTasks] = useState<Record<number, BuildTask>>({});
+  const [queueingJobs, setQueueingJobs] = useState<Set<number>>(() => new Set());
+  const [queueError, setQueueError] = useState('');
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
   const [actionError, setActionError] = useState<ActionError>();
   const { status: wordpressPluginStatus, loading: wordpressPluginLoading, ready: wordpressPluginReady } = useWordPressPluginStatus();
@@ -78,6 +82,54 @@ export function App() {
     void load();
     return () => controller.abort();
   }, [search]);
+
+  useEffect(() => {
+    if (!result?.data.length) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const response = await apiFetch('/api/build-deploy/statuses', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobIds: result.data.map((job) => job.id) }), signal: controller.signal,
+        });
+        const body = await readApiResponse<{ tasks: BuildTask[]; error?: string }>(response, 'Unable to check build progress.');
+        if (!response.ok) throw new Error(body.error || 'Unable to check build progress.');
+        if (controller.signal.aborted) return;
+        setQueueError('');
+        setBuildTasks(Object.fromEntries(body.tasks.map((task) => [task.jobId, task])));
+        // Read live status once per completed task so a saved queue result
+        // cannot overwrite later WordPress edits.
+        if (wordpressPluginReady) for (const task of body.tasks) {
+          if (task.state === 'succeeded' && !observed.has(task.id)) {
+            observed.add(task.id);
+            void requestWordpress(task.jobId);
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setQueueError(error instanceof Error ? error.message : 'Unable to check build progress.');
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 3000);
+      }
+    };
+    const observed = new Set<string>();
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [result, wordpressPluginReady]);
+
+  const enqueueBuild = async (jobId: number) => {
+    setQueueingJobs((current) => new Set(current).add(jobId));
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/build-deploy`, { method: 'POST' });
+      const body = await readApiResponse<BuildTask & { error?: string }>(response, 'Unable to queue build.');
+      if (!response.ok) throw new Error(body.error || 'Unable to queue build.');
+      setBuildTasks((current) => ({ ...current, [jobId]: body }));
+    } catch (error) {
+      setActionError({ title: 'Build and deploy failed', message: error instanceof Error ? error.message : 'Unable to queue build.' });
+    } finally {
+      setQueueingJobs((current) => { const next = new Set(current); next.delete(jobId); return next; });
+    }
+  };
 
   const pageCount = useMemo(() => (result?.totalCount === undefined ? undefined : Math.max(1, Math.ceil(result.totalCount / result.pageSize))), [result]);
 
@@ -248,6 +300,7 @@ export function App() {
         {/* <p className='intro'>Choose an inclusive date range to find completed jobs and their service locations.</p> */}
       </header>
 
+      {queueError && <p role='alert'>{queueError} Builds already queued continue on the server.</p>}
       {wordpressPluginLoading ? (
         <div className='plugin-compatibility-banner' role='status'>
           Checking WordPress plugin compatibility…
@@ -372,7 +425,9 @@ export function App() {
               <tbody>
                 {result.data.map((job) => {
                   const wordpressStatus = wordpressStatuses[job.id] || unknownWordPressStatus;
-                  const wordpressBusy = busyWordpressJobs.has(job.id);
+                  const buildTask = buildTasks[job.id];
+                  const buildBusy = queueingJobs.has(job.id) || buildTask?.state === 'queued' || buildTask?.state === 'running';
+                  const wordpressBusy = busyWordpressJobs.has(job.id) || buildBusy;
                   const wordpressDisplayLabel = wordpressStatus.state === 'not_found' ? 'None' : wordpressStatus.label;
                   const wordpressStatusValue = wordpressStatus.label === 'Loading…' || wordpressStatus.label === 'Updating…' ? '' : wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish' ? wordpressStatus.postStatus : '';
                   return (
@@ -441,6 +496,16 @@ export function App() {
                       </td>
                       <td className='actions-cell' data-label='Actions'>
                         <div className='row-actions'>
+                          {(wordpressStatus.state !== 'exists' || buildBusy) && (
+                            <button className='primary build-deploy-button' type='button'
+                              disabled={!wordpressPluginReady || wordpressBusy || wordpressStatus.state !== 'not_found' || Boolean(queueError)}
+                              title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens. Continues after you close this page.'
+                              onClick={() => void enqueueBuild(job.id)}>
+                              {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build & deploy'}
+                            </button>
+                          )}
+                          {buildTask?.state === 'failed' && <span className='build-deploy-error' role='status'>{buildTask.error}</span>}
+
                           {wordpressStatus.state === 'exists' && (
                             <button
                               className={`regenerate-button rebuild-${rebuildUpdateLevel(wordpressStatus)}`}
