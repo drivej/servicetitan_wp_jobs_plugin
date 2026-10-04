@@ -1,4 +1,5 @@
 import { TokenAdmin } from './TokenAdmin';
+import { AccountMembersAdmin } from './AccountMembersAdmin';
 import { TokenHistory } from './TokenHistory';
 import { BillingPlans } from './BillingPlans';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -366,6 +367,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
   const adminPage = path === '/admin/tokens';
+  const membersAdminPage = path === '/admin/members';
   const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/account' || websites.length === 0);
 
   const selectWorkspace = async (workspaceId: string) => {
@@ -476,6 +478,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WordpressButton path={path} />
           <SettingsButton path={path} />
           {user.isPlatformAdmin && <a className='btn-nav' href='/admin/tokens' aria-current={adminPage ? 'page' : undefined}>Token admin</a>}
+          {user.isPlatformAdmin && <a className='btn-nav' href='/admin/members' aria-current={membersAdminPage ? 'page' : undefined}>Account members</a>}
           <SignOutButton onClick={() => void logout()} disabled={busy} />
         </div>
       </header>
@@ -523,6 +526,8 @@ export function Workspace({ children }: { children: ReactNode }) {
         </main>
       ) : adminPage ? (
         user.isPlatformAdmin ? <TokenAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
+      ) : membersAdminPage ? (
+        user.isPlatformAdmin ? <AccountMembersAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
       ) : tokensPage ? (
         <main className='account-page'>
           <p className='eyebrow'>Your workspace</p>

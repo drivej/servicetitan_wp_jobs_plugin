@@ -259,6 +259,12 @@ admins do not automatically receive platform-admin access.
    where platform administrators can view account transaction history and post
    token adjustments with a required reason.
 
+Platform administrators also see **Account members** at `/admin/members`. It lists
+users and their roles in each workspace. Disabling a user blocks sign-in and
+invalidates all existing sessions; the action is recorded in the audit log.
+Platform administrator accounts cannot be disabled from this page. Disabling a
+workspace owner also makes that owner's workspace unavailable to its members.
+
 To revoke access, run this using the database-owner connection:
 
 ```sql

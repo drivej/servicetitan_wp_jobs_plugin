@@ -1,4 +1,5 @@
 import { TokenAccounts } from './token-accounts.js';
+import { PlatformMembers } from './platform-members.js';
 import { BillingService } from './billing.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -21,6 +22,7 @@ interface Options { config: SaaSConfig; store: AccountStore; google: GoogleLogin
 export function createSaaSApp({ config, store, google, websiteApp, staticDirectory, billing = config.billing ? new BillingService(store.db, config.billing, config.origin) : undefined }: Options) {
   const app = express();
   const tokenAccounts = new TokenAccounts(store.db);
+  const platformMembers = new PlatformMembers(store.db);
   const sessionName = sessionCookieName(config.secureCookies);
   const loginName = config.secureCookies ? '__Host-st_login' : 'st_login';
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'lax' as const, path: '/' };
@@ -127,6 +129,12 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.post('/api/admin/token-accounts/:workspaceId/transactions', async (req, res, next) => {
     try { res.json(await tokenAccounts.adjust((res.locals.user as User).id, uuid(req.params.workspaceId), req.body)); } catch (error) { next(error); }
+  });
+  app.get('/api/admin/members', async (req, res, next) => {
+    try { res.json(await platformMembers.list((res.locals.user as User).id, req.query.search, req.query.after)); } catch (error) { next(error); }
+  });
+  app.post('/api/admin/members/:memberId/disable', async (req, res, next) => {
+    try { await platformMembers.disable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
   });
   app.post('/api/tokens/test-credit', async (_req, res, next) => {
     try {

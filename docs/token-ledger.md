@@ -53,6 +53,12 @@ Every admin API request rechecks the database, including retries of older
 adjustments. Workspace owner/admin roles alone cannot make adjustments or view
 other customers' accounts.
 
+Platform administrators can view account members and their workspace roles at
+`/admin/members`. They can disable a non-platform-admin user, which revokes all
+sessions and prevents new sign-ins. The action is audited. A disabled workspace
+owner's workspace becomes unavailable to its other members until the owner is
+restored through an operator database action.
+
 ## Accounting behavior
 
 `token_transactions` is append-only and stores sequence, actual signed change,
@@ -90,6 +96,8 @@ entries do not duplicate older pages.
 - `GET /api/admin/token-accounts?search=TEXT&after=WORKSPACE_UUID`: platform-admin account search, 50 per page.
 - `GET /api/admin/token-accounts/:workspaceId/transactions?before=SEQUENCE`: 50 ledger entries per page.
 - `POST /api/admin/token-accounts/:workspaceId/transactions`: `{ "amount": 10, "reason": "Support credit", "requestId": "UUID" }`.
+- `GET /api/admin/members?search=TEXT&after=USER_UUID`: platform-admin member search, 50 per page.
+- `POST /api/admin/members/:memberId/disable`: disable a non-platform-admin account and revoke its sessions.
 
 Admin targets come from the path. The normal session, Origin/CSRF and active
 workspace checks still apply. The browser's X-Workspace-ID must describe the

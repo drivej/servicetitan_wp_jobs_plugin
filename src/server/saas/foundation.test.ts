@@ -1,4 +1,5 @@
 import { TokenAccounts } from './token-accounts.js';
+import { PlatformMembers } from './platform-members.js';
 import { postTokenTransaction } from './token-ledger.js';
 import Stripe from 'stripe';
 import { BillingService } from './billing.js';
@@ -643,6 +644,30 @@ test('platform administration is distinct from workspace roles and adjustments a
     assert.equal((await f.store.session(operator.token))!.isPlatformAdmin, false);
     await assert.rejects(accounts.history(operator.user.id, owner.user.id, '', true), /Platform administrator/);
     await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, request), /Platform administrator/);
+  } finally { await f.close(); }
+});
+
+test('platform administrators can list roles and disable members', async () => {
+  const f = await fixture();
+  try {
+    const operator = await f.store.login({ subject: 'members-operator', email: 'operator@example.com', name: 'Operator' });
+    const owner = await f.store.login({ subject: 'members-owner', email: 'owner@example.com', name: 'Owner' });
+    const member = await f.store.login({ subject: 'members-target', email: 'member@example.com', name: 'Member' });
+    await f.sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,'member')", [owner.user.id, member.user.id]);
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)', [operator.user.id]);
+    const members = new PlatformMembers(f.db);
+    await assert.rejects(members.list(member.user.id), /Platform administrator/);
+    await assert.rejects(members.disable(member.user.id, operator.user.id), /Platform administrator/);
+    const page = await members.list(operator.user.id, 'member@example.com');
+    assert.equal(page.members.length, 1);
+    assert(page.members[0]!.roles.some((role) => role.workspaceId === owner.user.id && role.role === 'member'));
+    await assert.rejects(members.disable(operator.user.id, operator.user.id), /own account/);
+    await members.disable(operator.user.id, member.user.id);
+    assert.equal((await members.list(operator.user.id, 'member@example.com')).members[0]!.disabled, true);
+    assert.equal(await f.store.session(member.token), undefined);
+    await assert.rejects(f.store.login({ subject: 'members-target', email: 'member@example.com', name: 'Member' }), /disabled/);
+    const audit = (await f.sql.query("SELECT target_id FROM audit_logs WHERE action='platform.member.disable' AND user_id=$1", [operator.user.id])).rows;
+    assert.equal(audit[0]?.target_id, member.user.id);
   } finally { await f.close(); }
 });
 
