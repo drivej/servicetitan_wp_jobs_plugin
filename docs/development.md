@@ -28,16 +28,16 @@ Google OAuth client setup must allow the exact callback `http://localhost:3000/a
 
 ## Database setup
 
-Use a database owner for migrations and a separate non-superuser runtime login with no `BYPASSRLS`. The web server checks this at startup. Apply migrations before starting the app:
+Use a non-superuser login without `BYPASSRLS`. A separate restricted runtime login is preferred where available; a single-login database may use the table owner for both migrations and runtime. The web server checks the role and ledger triggers at startup. Apply migrations before starting the app:
 
 ```sh
 npm install
 npm run db:migrate
 ```
 
-The runner uses `MIGRATION_DATABASE_URL`, falling back to `DATABASE_URL` for local setups. It serializes migrations with a transaction-scoped advisory lock, applies the batch transactionally, and refuses modified historical migration files. It does not automatically migrate when the web process starts.
+The runner uses `MIGRATION_DATABASE_URL`, falling back to `DATABASE_URL` for single-login setups. It serializes migrations with a transaction-scoped advisory lock, applies the batch transactionally, and refuses modified historical migration files. It does not automatically migrate when the web process starts.
 
-After migrations, the database administrator can grant the runtime login the following privileges (substitute the real role if different):
+After migrations, a database administrator can grant a separate runtime login the following privileges (substitute the real role if different). These grants are unnecessary when `DATABASE_URL` uses the owner of both protected tables:
 
 ```sql
 GRANT CONNECT ON DATABASE st_jobs TO st_jobs_app;
@@ -53,9 +53,9 @@ GRANT SELECT ON platform_administrators TO st_jobs_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform_administrators FROM st_jobs_app;
 ```
 
-The login itself must already exist with its password held in the secret store. Do not grant it schema creation or migration-table privileges. Connections, websites and audit tables use forced row-level security. Every workspace operation runs in one transaction with `SET LOCAL`-equivalent user and workspace context. Resource RLS also checks membership. Workspaces, memberships, and invitations are authorization control tables accessed only through the server, like sessions; callers cannot query them directly. Auth tables are intentionally accessed through narrowly scoped server code before a user is known. They are not browser APIs.
+For the restricted-login setup, the login itself must already exist with its password held in the secret store. Do not grant it schema creation or migration-table privileges. With a table-owner runtime login, the ledger triggers still enforce normal writes, but a compromised database credential could disable triggers or edit platform administrators. Connections, websites and audit tables use forced row-level security. Every workspace operation runs in one transaction with `SET LOCAL`-equivalent user and workspace context. Resource RLS also checks membership. Workspaces, memberships, and invitations are authorization control tables accessed only through the server, like sessions; callers cannot query them directly. Auth tables are intentionally accessed through narrowly scoped server code before a user is known. They are not browser APIs.
 
-For remote PostgreSQL, configure verified TLS in the connection string/provider configuration. Do not disable certificate verification. Keep the migration credential out of the web process in hosted deployments.
+For remote PostgreSQL, configure verified TLS in the connection string/provider configuration. Do not disable certificate verification. With separate logins, keep the migration credential out of the hosted web process.
 
 Run `npm run dev`, open the app, sign in with Google, and use **Account & websites** to add a connection followed by a website. Saving does not contact ServiceTitan or WordPress. Opening Jobs tests retrieval; plugin status checks test WordPress access. SaaS website URLs must use public HTTPS endpoints. Private/local WordPress sites remain available only in the local single-user mode.
 
@@ -100,9 +100,9 @@ References: [Google OpenID Connect](https://developers.google.com/identity/openi
 Use a dedicated development PostgreSQL database, separate from production. The `.env.remote` profile is ignored by Git; `.env.remote.example` documents its fields. `npm run dev:remote` runs the authenticated SaaS workflow on loopback while using the remote database for accounts, sessions, integrations, and job tokens. It does not read the usual `.env` file. ServiceTitan and WordPress credentials are entered through the account UI; optionally configure OpenAI in `.env.remote` for AI generation.
 
 1. Provision PostgreSQL with a public connection endpoint accessible from your development machine and verified TLS. If your provider uses its own CA, include the provider's CA path as `sslrootcert` in the URL; keep `sslmode=verify-full`.
-2. Create a separate runtime login without superuser or BYPASSRLS privileges. Put its URL in `DATABASE_URL` and the database owner's direct URL in `MIGRATION_DATABASE_URL`, both in `.env.remote`. URL-encode special characters in passwords.
+2. Put a non-superuser login without BYPASSRLS in `DATABASE_URL`. On a single-login database, use the table owner; otherwise use a separate restricted login and put the owner's direct URL in `MIGRATION_DATABASE_URL`. URL-encode special characters in passwords.
 3. Configure the development Google OAuth client and `http://localhost:3000/auth/google/callback`. Keep the generated encryption key stable; changing it loses access to previously saved encrypted integration credentials.
-4. Run `npm run db:migrate:remote`, then apply the runtime grants in the Database setup section using your actual database and role names.
+4. Run `npm run db:migrate:remote`. If using a separate runtime login, apply the runtime grants in the Database setup section using your actual database and role names.
 5. Run `npm run db:check:remote` to verify connectivity, runtime permissions, ownership policies, and the job-token migration.
 6. Run `npm run dev:remote` and open `http://localhost:3000`. Sign in and configure test integrations. Allocate development job tokens as described in the README.
 
@@ -114,7 +114,9 @@ Provisioned in the **ServiceTitan WP Jobs Plugin** project: **ServiceTitan Jobs 
 
 Connection verification found that this instance rejects PostgreSQL TLS negotiation (`The server does not support SSL connections`); Studio reports `ssl=off`. The supplied owner is not a superuser and has no `CREATEROLE` permission. Both versioned migrations were applied atomically through Sevalla's HTTPS Studio, preserving the repository checksums.
 
-Local app startup is not ready: arrange a verified encrypted connection (provider-enabled TLS or an encrypted tunnel), a separate runtime login through the provider, and Google OAuth development credentials. Keep `sslmode=verify-full`; do not work around this by sending application/session data over an unencrypted public database connection. External access is currently enabled without IP restrictions. No app users or test token allocations have been added.
+Local app startup against this remote database still needs a verified encrypted connection (provider-enabled TLS or an encrypted tunnel) and Google OAuth development credentials. Keep `sslmode=verify-full`; do not work around this by sending application/session data over an unencrypted public database connection. External access is currently enabled without IP restrictions. No app users or test token allocations have been added.
+
+The Sevalla app deployment workflow's `SEVALLA_TOKEN` authenticates only the deployment API call. It cannot grant SQL privileges. The `ServiceTitan Jobs Dev` database currently exposes only the `like-red-cicada` login, which owns `token_transactions` and `platform_administrators`; the app now permits this owner login at runtime. The database owner can change protected tables or triggers, so keep this credential private and switch to the restricted-login setup when available. Run `npm run db:check:remote` against the same database before deploying when a verified connection is available.
 
 
 ## Team workspaces

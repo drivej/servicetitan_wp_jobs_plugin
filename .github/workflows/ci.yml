@@ -26,6 +26,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-        continue-on-error: true
+        continue-on-error: false
       - run: npm run build
       - run: php -l wordpress-plugin/servicetitan-job-integration/servicetitan-job-integration.php

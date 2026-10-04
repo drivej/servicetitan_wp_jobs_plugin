@@ -6,8 +6,13 @@ platform administrators are separate from customer workspace owners/admins.
 ## Deployment
 
 Run the normal migrations (`npm run db:migrate`) with the migration-owner
-connection, then apply these grants using a database owner. Substitute your actual
-runtime role. Never use the migration owner as the web runtime role.
+connection. A single-login database may use that same non-superuser owner as the
+web runtime login if it owns both ledger and platform-administrator tables. The
+ledger triggers still reject ordinary updates, deletes, truncation, invalid
+balance chains, and unlogged balance changes. A database owner can disable those
+triggers or change administrator rows, so use a separate restricted login when
+your provider supports one. For a separate login, apply these grants using the
+database owner (substitute your actual runtime role):
 
 ```sql
 GRANT SELECT, INSERT ON token_transactions TO st_jobs_app;
@@ -16,9 +21,9 @@ GRANT SELECT ON platform_administrators TO st_jobs_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform_administrators FROM st_jobs_app;
 ```
 
-Inherited roles and PUBLIC grants must not reintroduce these privileges. Startup
-checks enforce them and require the ledger integrity triggers. The runtime role
-must not own these tables or inherit their owner role.
+Inherited roles and PUBLIC grants must not reintroduce these privileges for the
+restricted-login path. Startup checks accept either that path or ownership of
+both tables and require the ledger integrity triggers in either case.
 
 Migration 005 freezes balance writes while it creates an opening entry for every
 existing workspace. This preserves current balances without inventing historical

@@ -139,6 +139,10 @@ The build emits the React application to `dist/client` and the Node server to `d
 
 ## Sevalla / Kinsta deployment
 
+The [deployment workflow](.github/workflows/deploy.yml) uses `SEVALLA_TOKEN` to trigger a Sevalla app deployment. That token only authorizes the Sevalla API request; it does not create PostgreSQL roles, run migrations, or change database permissions. Apply migrations before deploying. The app accepts either a restricted non-owner PostgreSQL login or the owner of both token tables as `DATABASE_URL`; see [database setup](docs/development.md#database-setup).
+
+The current Sevalla development database has only its owner login available. It can run the app without additional PostgreSQL roles after this change. Ledger transactions and integrity triggers still enforce normal accounting, but a compromised owner credential could alter the tables or disable triggers. Use a restricted runtime login and the [grants](docs/development.md#database-setup) when the database provider supports it.
+
 Deploy this directory as a Node.js application and configure these environment variables in the hosting dashboard:
 
 - `NODE_ENV=production`

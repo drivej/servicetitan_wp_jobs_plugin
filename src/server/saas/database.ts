@@ -36,11 +36,16 @@ export class PostgresDatabase implements Database {
     const ledgerPermissions = await this.pool.query(`SELECT
       has_table_privilege(current_user,'token_transactions','SELECT') AND
       has_table_privilege(current_user,'token_transactions','INSERT') AND
-      NOT has_table_privilege(current_user,'token_transactions','UPDATE,DELETE,TRUNCATE') AND
-      has_table_privilege(current_user,'platform_administrators','SELECT') AND
-      NOT has_table_privilege(current_user,'platform_administrators','INSERT,UPDATE,DELETE,TRUNCATE') AND
-      NOT EXISTS (SELECT 1 FROM pg_class WHERE oid IN ('platform_administrators'::regclass,'token_transactions'::regclass) AND pg_has_role(current_user,relowner,'USAGE')) AS ready`);
-    if (!ledgerPermissions.rows[0]?.ready) throw new Error('Runtime role requires append-only ledger access and read-only platform administrator access.');
+      has_table_privilege(current_user,'platform_administrators','SELECT') AND (
+        (NOT has_table_privilege(current_user,'token_transactions','UPDATE,DELETE,TRUNCATE') AND
+         NOT has_table_privilege(current_user,'platform_administrators','INSERT,UPDATE,DELETE,TRUNCATE') AND
+         NOT EXISTS (SELECT 1 FROM pg_class WHERE oid IN ('platform_administrators'::regclass,'token_transactions'::regclass) AND pg_has_role(current_user,relowner,'USAGE')))
+        OR
+        (SELECT count(*)=2 FROM pg_class WHERE oid IN ('platform_administrators'::regclass,'token_transactions'::regclass) AND relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user))
+      ) AS ready`);
+    if (!ledgerPermissions.rows[0]?.ready) throw new Error(
+      'DATABASE_URL needs either a non-owner role with append-only token ledger and read-only platform administrator grants, or the owner of both tables. Check PostgreSQL permissions and run migrations first.'
+    );
     const ledgerTriggers = await this.pool.query(`SELECT count(*)::integer AS count FROM pg_trigger WHERE
       (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
        tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);
