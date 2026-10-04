@@ -1,0 +1,21 @@
+name: Deploy App to Sevalla
+
+on:
+  push:
+    branches:
+      - main # Change this to 'master' or your production branch if needed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Trigger Sevalla Deployment
+        uses: sevalla-hosting/sevalla-deploy@v2.0.0
+        with:
+          action: 'deploy-app'
+          sevalla-token: ${{ secrets.SEVALLA_TOKEN }}
+          app-id: '792d7602-e80b-40d1-9489-9af1d5c2a4f2'
+          wait-for-finish: true

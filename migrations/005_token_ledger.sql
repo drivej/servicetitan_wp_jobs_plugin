@@ -1,10 +1,10 @@
 -- Separate operator privileges from customer-owned workspace roles. The runtime
 -- role must receive SELECT only on platform_administrators (see setup guide).
-CREATE TABLE platform_administrators (
+CREATE TABLE IF NOT EXISTS platform_administrators (
   user_id uuid PRIMARY KEY REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE TABLE token_transactions (
+CREATE TABLE IF NOT EXISTS token_transactions (
   id uuid PRIMARY KEY,
   workspace_id uuid NOT NULL REFERENCES workspaces(id),
   sequence bigint NOT NULL,
@@ -27,12 +27,18 @@ CREATE TABLE token_transactions (
   CHECK(requested_amount::bigint = amount::bigint + discarded_amount),
   CHECK(kind <> 'admin_adjustment' OR actor_user_id IS NOT NULL)
 );
-CREATE INDEX token_transactions_history ON token_transactions(workspace_id,sequence DESC);
+CREATE INDEX IF NOT EXISTS token_transactions_history ON token_transactions(workspace_id,sequence DESC);
 -- Preserve only the known current balance. Historical grant rows and audit logs
 -- remain available; their old cap effects cannot be reconstructed reliably.
+DO $$
+BEGIN
+
 LOCK TABLE workspaces IN ACCESS EXCLUSIVE MODE;
 INSERT INTO token_transactions(id,workspace_id,sequence,kind,amount,requested_amount,balance_before,balance_after,reference,reason)
   SELECT id,id,1,'opening',job_tokens,job_tokens,0,job_tokens,'opening:ledger-v1','Opening balance at ledger migration' FROM workspaces;
+
+END;
+$$;
 
 CREATE FUNCTION token_ledger_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

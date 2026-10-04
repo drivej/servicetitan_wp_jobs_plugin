@@ -216,9 +216,54 @@ The dates are inclusive calendar dates and filter on a job's first appointment. 
 
 Hosted accounts display their available job tokens in the workspace header. Each successful WordPress push, rebuild, or AI copy generation costs one token; status changes and reads are free. The active workspace shares one balance across its team and websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
 
-Apply all migrations, including `003_workspaces.sql`, before starting the updated server. New workspaces start with zero tokens. An administrator can allocate tokens using a parameterized database statement such as `UPDATE workspaces SET job_tokens = job_tokens + $1 WHERE id = $2` with a positive integer amount and verified workspace UUID. When `ENABLE_TEST_TOKENS=true`, workspace owners can also add one free token at a time on Add Tokens; disable this setting before paid use.
+Apply all migrations, including `005_token_ledger.sql`, and the runtime-role grants in [the ledger setup guide](docs/token-ledger.md) before starting the updated server. New workspaces start with zero tokens. Platform administrators allocate or correct tokens through **Token admin**, which records an audited ledger transaction; direct balance updates are rejected. When `ENABLE_TEST_TOKENS=true`, workspace owners can also add one free token at a time on Add Tokens; disable this setting before paid use.
 
 Paid provider operations hold a database row lock for the account. On provider success, the server decrements the balance and records an audit entry in the same transaction, committing before returning success. Provider failures roll back without a charge, and concurrent requests cannot overspend. Do not configure a database idle-in-transaction timeout shorter than the provider request duration. External provider changes cannot be atomically committed with PostgreSQL: a server/database failure after provider success but before commit requires administrative reconciliation; automatic refunds or retries cannot establish whether the external change occurred.
+
+### Super-admin login and setup
+
+A super admin (platform administrator) uses the same Google sign-in as every other
+user. There is no separate admin login or password. Workspace owners and workspace
+admins do not automatically receive platform-admin access.
+
+1. Apply migration `005_token_ledger.sql` and the database grants in
+   [the ledger setup guide](docs/token-ledger.md). Run the app in SaaS mode
+   (`APP_MODE=saas`) and sign in with the intended administrator's Google account
+   to create its user record.
+2. Open the PostgreSQL console for the **same database the app uses**, using the
+   database-owner connection. Replace the email below with the Google account's
+   email and run:
+
+   ```sql
+   SELECT id, email, name
+   FROM users
+   WHERE lower(email) = lower('your-google-email@example.com');
+   ```
+
+   The value in the **`id` column** is the `USER_UUID`. Verify the email and name
+   before copying it. If no row appears, confirm that you have signed in using
+   SaaS mode and are querying the correct database.
+3. Replace `USER_UUID` with that exact ID and grant access:
+
+   ```sql
+   INSERT INTO platform_administrators(user_id)
+   VALUES ('USER_UUID')
+   ON CONFLICT DO NOTHING;
+   ```
+
+4. Refresh the app. The **Token admin** link appears and opens `/admin/tokens`,
+   where platform administrators can view account transaction history and post
+   token adjustments with a required reason.
+
+To revoke access, run this using the database-owner connection:
+
+```sql
+DELETE FROM platform_administrators
+WHERE user_id = 'USER_UUID';
+```
+
+The application runtime database role has read-only access to administrator
+assignments. The admin APIs check privileges on every request.
 
 ### Local app with a remote development database
 
