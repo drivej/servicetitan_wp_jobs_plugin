@@ -3,7 +3,7 @@ name: Deploy App to Sevalla
 on:
   push:
     branches:
-      - main # Change this to 'master' or your production branch if needed
+      - feat/saas-foundation # Change this to 'master' or your production branch if needed
 
 jobs:
   deploy:
