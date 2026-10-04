@@ -31,6 +31,20 @@ export class PostgresDatabase implements Database {
       throw new Error('DATABASE_URL must use a non-superuser role without BYPASSRLS.');
     }
     await this.pool.query('SELECT w.job_tokens,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id LIMIT 0');
+    await this.pool.query('SELECT workspace_id,amount,balance_after FROM token_transactions LIMIT 0');
+    await this.pool.query('SELECT user_id FROM platform_administrators LIMIT 0');
+    const ledgerPermissions = await this.pool.query(`SELECT
+      has_table_privilege(current_user,'token_transactions','SELECT') AND
+      has_table_privilege(current_user,'token_transactions','INSERT') AND
+      NOT has_table_privilege(current_user,'token_transactions','UPDATE,DELETE,TRUNCATE') AND
+      has_table_privilege(current_user,'platform_administrators','SELECT') AND
+      NOT has_table_privilege(current_user,'platform_administrators','INSERT,UPDATE,DELETE,TRUNCATE') AND
+      NOT EXISTS (SELECT 1 FROM pg_class WHERE oid IN ('platform_administrators'::regclass,'token_transactions'::regclass) AND pg_has_role(current_user,relowner,'USAGE')) AS ready`);
+    if (!ledgerPermissions.rows[0]?.ready) throw new Error('Runtime role requires append-only ledger access and read-only platform administrator access.');
+    const ledgerTriggers = await this.pool.query(`SELECT count(*)::integer AS count FROM pg_trigger WHERE
+      (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
+       tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);
+    if (ledgerTriggers.rows[0]?.count !== 5) throw new Error('Required token ledger integrity triggers are missing. Run migrations first.');
     const tables = await this.pool.query("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid IN ('servicetitan_connections'::regclass, 'websites'::regclass, 'audit_logs'::regclass)");
     if (tables.rows.length !== 3 || tables.rows.some((row) => !row.relrowsecurity || !row.relforcerowsecurity)) {
       throw new Error('Required database ownership policies are missing. Run migrations first.');

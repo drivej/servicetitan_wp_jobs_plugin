@@ -8,7 +8,7 @@ await build({
   target: 'node22',
   sourcemap: true,
   outdir: 'dist/server',
-  external: ['express', 'vite', 'dotenv', 'dotenv/config', 'pg', 'openid-client', 'undici', 'ipaddr.js'],
+  external: ['express', 'vite', 'dotenv', 'dotenv/config', 'pg', 'openid-client', 'undici', 'ipaddr.js', 'stripe'],
   banner: {
     js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },

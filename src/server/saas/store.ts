@@ -1,3 +1,4 @@
+import { postTokenTransaction } from './token-ledger.js';
 import { randomUUID } from 'node:crypto';
 import type { Database, Sql } from './database.js';
 import { hashToken, randomToken, type SecretVault } from './crypto.js';
@@ -6,7 +7,7 @@ import { HttpError, type ConnectionInput, type WebsiteInput } from './validation
 export interface Identity { subject: string; email: string; name: string; avatarUrl?: string; }
 export type Role = 'owner' | 'admin' | 'member';
 const allRoles: Role[] = ['owner','admin','member'];
-export interface User { workspaceId: string; workspaceName: string; role: Role; id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; }
+export interface User { workspaceId: string; workspaceName: string; role: Role; id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; isPlatformAdmin?: boolean; }
 export interface Connection { id: string; name: string; environment: 'integration' | 'production'; tenantId: string; version: number; }
 export interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; version: number; }
 export interface WebsiteContext {
@@ -15,7 +16,7 @@ export interface WebsiteContext {
   connection: Connection & Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>;
   wordpress?: NonNullable<WebsiteInput['wordpress']>;
 }
-const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, jobTokens: Number(row.job_tokens), workspaceId: String(row.workspace_id), workspaceName: String(row.workspace_name), role: row.role as Role });
+const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, jobTokens: Number(row.job_tokens), isPlatformAdmin: row.is_platform_admin === true, workspaceId: String(row.workspace_id), workspaceName: String(row.workspace_name), role: row.role as Role });
 const connectionFrom = (row: Record<string, unknown>): Connection => ({ id: String(row.id), name: String(row.name), environment: row.environment as Connection['environment'], tenantId: String(row.tenant_id), version: Number(row.version) });
 const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), version: Number(row.version) });
 const audit = async (sql: Sql, userId: string, action: string, target: string, jobId?: number): Promise<void> => {
@@ -47,7 +48,8 @@ export class AccountStore {
   async session(token: string): Promise<User | undefined> {
     if (!/^[a-zA-Z0-9_-]{43}$/.test(token)) return undefined;
     return this.db.transaction(undefined, async (sql) => {
-      const row = (await sql.query(`SELECT u.*,w.id AS workspace_id,w.name AS workspace_name,w.job_tokens,m.role
+      const row = (await sql.query(`SELECT u.*,w.id AS workspace_id,w.name AS workspace_name,w.job_tokens,m.role,
+        EXISTS(SELECT 1 FROM platform_administrators pa WHERE pa.user_id=u.id) AS is_platform_admin
         FROM sessions s JOIN users u ON u.id=s.user_id
         JOIN workspaces w ON w.id=CASE WHEN EXISTS(SELECT 1 FROM workspace_memberships active WHERE active.workspace_id=s.workspace_id AND active.user_id=u.id) THEN s.workspace_id ELSE u.id END
         JOIN users owner ON owner.id=w.owner_user_id
@@ -248,10 +250,10 @@ export class AccountStore {
   }
   async addTestJobToken(userId: string, workspaceId = userId): Promise<number> {
     return this.workspaceTransaction(userId, workspaceId, ['owner'], async (sql) => {
-      const row = (await sql.query('UPDATE workspaces SET job_tokens=job_tokens+1 WHERE id=$1 RETURNING job_tokens', [workspaceId])).rows[0];
-      if (!row) throw new HttpError('Account not available.', 403);
+      const entry = await postTokenTransaction(sql, { workspaceId, kind: 'test_credit', requestedAmount: 1, actorUserId: userId,
+        reference: `test:${randomUUID()}`, reason: 'Manual test token' });
       await audit(sql, userId, 'job_token.credited.test', userId);
-      return Number(row.job_tokens);
+      return entry.balanceAfter;
     });
   }
   async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>, workspaceId = userId, jobId?: number): Promise<T> {
@@ -262,7 +264,8 @@ export class AccountStore {
       const row = (await sql.query('SELECT job_tokens FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
       if (!row || Number(row.job_tokens) < 1) throw new HttpError('No job tokens available. Add tokens before trying again.', 402);
       const result = await operation();
-      await sql.query('UPDATE workspaces SET job_tokens=job_tokens-1 WHERE id=$1', [workspaceId]);
+      await postTokenTransaction(sql, { workspaceId, kind: 'spend', requestedAmount: -1, actorUserId: userId, websiteId,
+        ...(jobId === undefined ? {} : { jobId }), reference: `spend:${randomUUID()}`, reason: action });
       await audit(sql, userId, `job_token.spent.${action}`, websiteId, jobId);
       // The transaction commits before the caller sends the success response.
       return result;

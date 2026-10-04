@@ -30,6 +30,7 @@
     "pg": "^8.23.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "stripe": "^23.0.0",
     "undici": "^8.11.2"
   },
   "devDependencies": {

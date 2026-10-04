@@ -45,8 +45,12 @@ GRANT USAGE ON SCHEMA public TO st_jobs_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   users, sessions, oauth_attempts, rate_limits,
   workspaces, workspace_memberships, workspace_invitations,
-  servicetitan_connections, websites, audit_logs
+  servicetitan_connections, websites, audit_logs, workspace_billing, stripe_token_grants
 TO st_jobs_app;
+GRANT SELECT, INSERT ON token_transactions TO st_jobs_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON token_transactions FROM st_jobs_app;
+GRANT SELECT ON platform_administrators TO st_jobs_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform_administrators FROM st_jobs_app;
 ```
 
 The login itself must already exist with its password held in the secret store. Do not grant it schema creation or migration-table privileges. Connections, websites and audit tables use forced row-level security. Every workspace operation runs in one transaction with `SET LOCAL`-equivalent user and workspace context. Resource RLS also checks membership. Workspaces, memberships, and invitations are authorization control tables accessed only through the server, like sessions; callers cannot query them directly. Auth tables are intentionally accessed through narrowly scoped server code before a user is known. They are not browser APIs.
@@ -124,3 +128,7 @@ Settings → Team lets an owner invite admins or members. Admins can invite/remo
 Invitation links expire after seven days and require the exact verified Google email (case-insensitive). Only the token hash is stored. Links put the token in a URL fragment so it is not sent in HTTP URLs/access logs. The recipient signs in, previews the workspace and role, and accepts. Reissuing revokes the old link; accepted/expired/revoked links cannot be reused. The UI provides Copy link and Open email invitation; there is no automatic email sender configured.
 
 The workspace selector changes the current session. Other tabs refresh when they notice the change; requests carry an expected workspace header to prevent stale tabs from mutating the wrong workspace. Shared spending locks the workspace row and rechecks membership, balances, and website ownership. Successful charges include the actor, workspace, website, action, and job ID in audit logs. Failed provider calls do not charge tokens.
+
+See [Stripe subscriptions](stripe.md) for sandbox setup and billing migration requirements.
+
+See [token ledger and platform administration](token-ledger.md) for migration 005, operator bootstrap and adjustment APIs.

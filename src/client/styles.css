@@ -194,7 +194,7 @@ button:focus-visible {
   outline-offset: 2px;
 }
 button {
-  min-height: 44px;
+  /* min-height: 44px; */
   padding: 10px 17px;
   color: #253129;
   background: #f8f9f6;
@@ -1898,14 +1898,54 @@ td strong {
   }
 }
 
-.workspace-tokens {
-  align-self: end;
-  padding: 8px 12px;
+.workspace-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+}
+.workspace-token-control {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 36px;
+  border: 1px solid #d7e5dd;
   border-radius: 8px;
   background: #eef5f3;
   color: #234f42;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+.workspace-token-balance {
+  padding: 7px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-token-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: stretch;
+  padding: 7px 10px;
+  border-left: 1px solid #d7e5dd;
+  border-radius: 0 7px 7px 0;
+  color: #234f42;
+  font-weight: 750;
+  text-decoration: none;
+}
+.workspace-token-add:hover {
+  background: #dfece5;
+}
+.workspace-token-add[aria-current='page'] {
+  background: #263b31;
+  color: #fff;
+}
+.workspace-icon-link:focus-visible,
+.workspace-token-add:focus-visible {
+  outline: 2px solid #186d4c;
+  outline-offset: 3px;
 }
 
 .workspace-bar .app-nav {
@@ -1990,3 +2030,14 @@ td strong {
 .source-limited {
   color: #925a12;
 }
+
+.billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-top: 20px; }
+.billing-plan-price { font-size: 1.8rem; font-weight: 750; }
+.billing-plan-price small { font-size: .85rem; font-weight: 400; }
+
+.token-history { margin-top: 24px; }
+.token-table-scroll { overflow-x: auto; }
+.token-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88rem; }
+.token-table th, .token-table td { padding: 12px; border-bottom: 1px solid #dce3e8; vertical-align: top; }
+.token-table small { display: block; color: #526159; margin-top: 4px; }
+.token-reference { overflow-wrap: anywhere; }

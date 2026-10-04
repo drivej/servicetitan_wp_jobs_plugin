@@ -1,8 +1,12 @@
+import { TokenAdmin } from './TokenAdmin';
+import { TokenHistory } from './TokenHistory';
+import { BillingPlans } from './BillingPlans';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { TeamSettings, type TeamRole } from './TeamSettings';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 
 interface User {
+  isPlatformAdmin?: boolean;
   workspaceId: string;
   workspaceName: string;
   role: TeamRole;
@@ -120,35 +124,33 @@ const WebsitesSelect = ({ websites, onChange, selected }: { websites: Website[];
   );
 };
 
-const TokenCount = ({ count }: { count: number }) => {
+const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   return (
-    <div style={{ alignSelf: 'end' }}>
-      <div className='workspace-tokens' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
-        {count.toLocaleString()} job tokens available
-      </div>
+    <div className='workspace-token-control' role='group' aria-label='Job tokens'>
+      <span className='workspace-token-balance' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
+        <strong>{count.toLocaleString()}</strong> tokens
+      </span>
+      <a className='workspace-token-add' href='/add-tokens' aria-label='Add tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
+        <span aria-hidden='true'>+</span> Add
+      </a>
     </div>
-  );
-};
-
-const AddTokensButton = ({ path }: { path: string }) => {
-  return (
-    <a className='btn-nav' href='/add-tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
-      + Tokens
-    </a>
   );
 };
 
 const SettingsButton = ({ path }: { path: string }) => {
   return (
-    <a className='btn-nav' href='/account' aria-current={path === '/account' ? 'page' : undefined}>
-      Settings
+    <a className='btn-nav workspace-icon-link' href='/account' aria-label='Settings' title='Settings' aria-current={path === '/account' ? 'page' : undefined}>
+      <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+        <path d='m9 3-.6 2.4-1.8 1.1-2.4-.7-3 5.2 1.8 1.7v2.1l-1.8 1.7 3 5.2 2.4-.7 1.8 1.1L9 24h6l.6-2.4 1.8-1.1 2.4.7 3-5.2-1.8-1.7v-2.1l1.8-1.7-3-5.2-2.4.7-1.8-1.1L15 3Z' transform='translate(2 0) scale(.8333)' />
+        <circle cx='12' cy='11.25' r='3' />
+      </svg>
     </a>
   );
 };
 
 const SignOutButton = ({ onClick, disabled }: { onClick: React.MouseEventHandler<HTMLButtonElement>; disabled: boolean }) => {
   return (
-    <button disabled={disabled} onClick={onClick}>
+    <button className='btn-nav' disabled={disabled} onClick={onClick}>
       Sign out
     </button>
   );
@@ -156,7 +158,7 @@ const SignOutButton = ({ onClick, disabled }: { onClick: React.MouseEventHandler
 
 const JobsButton = ({ href, path }: { href: string; path: string }) => {
   return (
-    <a className='btn-nav' href={href} aria-current={(path === '/' || path.startsWith('/jobs/')) ? 'page' : undefined}>
+    <a className='btn-nav' href={href} aria-current={path === '/' || path.startsWith('/jobs/') ? 'page' : undefined}>
       Jobs
     </a>
   );
@@ -172,8 +174,12 @@ const PluginButton = ({ path }: { path: string }) => {
 
 const WordpressButton = ({ path }: { path: string }) => {
   return (
-    <a className='btn-nav' href='/wordpress-integration' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
-      Help
+    <a className='btn-nav workspace-icon-link' href='/wordpress-integration' aria-label='Help' title='Help' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
+      <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+        <circle cx='12' cy='12' r='9' />
+        <path d='M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5' />
+        <path d='M12 16.5h.01' />
+      </svg>
     </a>
   );
 };
@@ -329,10 +335,9 @@ export function Workspace({ children }: { children: ReactNode }) {
           <div className='d-flex gap-2 p-3 align-end'>
             <WorkspaceSelect workspaces={DemoWorkspaces} disabled={busy} value={session.user?.workspaceId || ''} onChange={(event) => void selectWorkspace(event.target.value)} />
             <WebsitesSelect websites={DemoWebsites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
-            <JobsButton href={jobsHref} path={path} />
             <div style={{ flexGrow: 1 }} />
-            <TokenCount count={3} />
-            <AddTokensButton path={path} />
+            <JobsButton href={jobsHref} path={path} />
+            <WorkspaceTokens count={3} path={path} />
             <PluginButton path={path} />
             <WordpressButton path={path} />
             <SettingsButton path={path} />
@@ -343,14 +348,16 @@ export function Workspace({ children }: { children: ReactNode }) {
           <main className='account-page'>
             <p className='eyebrow'>Local workspace</p>
             <h1>Add Tokens</h1>
-            <p className='intro'>Local mode does not use job tokens. To manage a token balance, use a hosted workspace.</p>
+            <p className='intro'>Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.</p>
           </main>
         ) : path === '/account' ? (
           <main className='account-page'>
             <h1>Settings</h1>
             <p>Local workspace connections are configured through the server environment.</p>
           </main>
-        ) : children}
+        ) : (
+          children
+        )}
       </>
     );
 
@@ -358,7 +365,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
-  const accountPage = !invitePage && !tokensPage && (path === '/account' || websites.length === 0);
+  const adminPage = path === '/admin/tokens';
+  const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/account' || websites.length === 0);
 
   const selectWorkspace = async (workspaceId: string) => {
     setBusy(true);
@@ -461,13 +469,13 @@ export function Workspace({ children }: { children: ReactNode }) {
         <div className='d-flex gap-2 p-2 align-end'>
           <WorkspaceSelect workspaces={workspaces} disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)} />
           <WebsitesSelect websites={websites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
-          <JobsButton href={jobsHref} path={path} />
           <div style={{ flexGrow: 1 }} />
-          <TokenCount count={user.jobTokens} />
-          <AddTokensButton path={path} />
+          <JobsButton href={jobsHref} path={path} />
+          <WorkspaceTokens count={user.jobTokens} path={path} />
           <PluginButton path={path} />
           <WordpressButton path={path} />
           <SettingsButton path={path} />
+          {user.isPlatformAdmin && <a className='btn-nav' href='/admin/tokens' aria-current={adminPage ? 'page' : undefined}>Token admin</a>}
           <SignOutButton onClick={() => void logout()} disabled={busy} />
         </div>
       </header>
@@ -513,6 +521,8 @@ export function Workspace({ children }: { children: ReactNode }) {
             Cancel
           </button>
         </main>
+      ) : adminPage ? (
+        user.isPlatformAdmin ? <TokenAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
       ) : tokensPage ? (
         <main className='account-page'>
           <p className='eyebrow'>Your workspace</p>
@@ -521,7 +531,8 @@ export function Workspace({ children }: { children: ReactNode }) {
           <section className='panel account-panel'>
             <h2>{user.jobTokens.toLocaleString()} job tokens available</h2>
             <p>Each successful action costs 1 token. Failed requests do not spend tokens.</p>
-            <p>Token purchases are coming soon. The workspace owner manages tokens for the team.</p>
+            <BillingPlans key={user.workspaceId} workspaceId={user.workspaceId} />
+            {canManage && <TokenHistory key={`history:${user.workspaceId}`} workspaceId={user.workspaceId} />}
             {session?.testTokensEnabled && user.role === 'owner' && (
               <>
                 <h3>Testing</h3>

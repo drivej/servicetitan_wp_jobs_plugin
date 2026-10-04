@@ -1,3 +1,7 @@
+import { TokenAccounts } from './token-accounts.js';
+import { postTokenTransaction } from './token-ledger.js';
+import Stripe from 'stripe';
+import { BillingService } from './billing.js';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,6 +51,7 @@ async function fixture(beforeWorkspaceMigration?: (sql: Sql) => Promise<void>) {
   await migrate(sql);
   await sql.query('COMMIT');
   await sql.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${role}`);
+  await sql.query(`REVOKE INSERT,UPDATE,DELETE ON platform_administrators FROM ${role}; REVOKE UPDATE,DELETE ON token_transactions FROM ${role}`);
   let tail = Promise.resolve();
   const db: Database = {
     async transaction<T>(userId: string | undefined, action: (sql: Sql) => Promise<T>) {
@@ -115,7 +120,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 3);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 5);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -271,7 +276,7 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     const operation = async () => { calls++; return 'done'; };
     await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', operation), /No job tokens/);
     assert.equal(calls, 0);
-    await f.sql.query('UPDATE workspaces SET job_tokens=3 WHERE id=$1', [alice.user.id]);
+    await f.db.transaction(alice.user.id, (sql) => postTokenTransaction(sql, { workspaceId: alice.user.id, kind: 'test_credit', requestedAmount: 3, reference: 'test:seed', reason: 'Test setup' }));
     await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', async () => { throw new Error('Provider failed'); }), /Provider failed/);
     assert.equal((await f.store.session(alice.token))?.jobTokens, 3);
     for (const action of ['push', 'rebuild', 'ai_generation']) {
@@ -281,7 +286,7 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     assert.equal((await f.store.session(bob.token))?.jobTokens, 0);
     const audit = await f.sql.query("SELECT action FROM audit_logs WHERE action LIKE 'job_token.spent.%'");
     assert.equal(audit.rows.length, 3);
-    await f.sql.query('UPDATE workspaces SET job_tokens=1 WHERE id=$1', [alice.user.id]);
+    await f.db.transaction(alice.user.id, (sql) => postTokenTransaction(sql, { workspaceId: alice.user.id, kind: 'test_credit', requestedAmount: 1, reference: 'test:refill', reason: 'Test setup' }));
     const before = calls;
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => f.store.spendJobToken(alice.user.id, site.id, 'push', operation)));
     assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
@@ -431,4 +436,279 @@ test('team HTTP endpoints bind invitations and permissions to the authenticated 
     assert.equal((await post('/api/workspaces/select',member.token,{ workspaceId: owner.user.id })).status,403);
     assert.equal((await f.store.session(member.token))!.workspaceId,member.user.id);
   } finally { server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done())); await f.close(); }
+});
+
+
+test('Stripe invoice grants are capped, atomic, deduplicated and workspace isolated', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'billing-owner', email: 'billing@example.com', name: 'Billing' });
+    const other = await f.store.login({ subject: 'billing-other', email: 'other-billing@example.com', name: 'Other' });
+    await f.sql.query('INSERT INTO workspace_billing(workspace_id,customer_id) VALUES($1,$2)', [owner.user.id, 'cus_test']);
+    const billing = new BillingService(f.db, { secretKey: 'sk_test_example', webhookSecret: 'whsec_example', prices: [], development: true, maxTokens: 200 }, 'http://localhost:3000');
+    const plan = { id: 'price_test', name: 'Test', amount: 1000, currency: 'usd', tokens: 100, maxTokens: 200, interval: 'month' as const, intervalCount: 1 };
+    await Promise.all([1, 2].map(() => billing.creditInvoice('cus_test', 'in_first', 'sub_test', 1, plan)));
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 100);
+    await billing.creditInvoice('cus_test', 'in_duplicate_period', 'sub_test', 1, plan);
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 100);
+    await billing.creditInvoice('cus_test', 'in_second', 'sub_test', 2, plan);
+    await billing.creditInvoice('cus_test', 'in_third', 'sub_test', 3, plan);
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 200);
+    assert.equal((await f.store.session(other.token))?.jobTokens, 0);
+    // Changing the environment cap applies to new grants; stale plan caps do not.
+    billing.config.maxTokens = 250;
+    await billing.creditInvoice('cus_test', 'in_new_cap', 'sub_test', 4, { ...plan, maxTokens: 999 });
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 250);
+    await billing.creditInvoice('cus_test', 'in_new_cap', 'sub_test', 4, plan);
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 250);
+    await assert.rejects(billing.creditInvoice('cus_test', 'in_bad', 'sub_test', 5, { ...plan, tokens: -1 }));
+    assert.equal((await f.sql.query("SELECT * FROM stripe_token_grants WHERE invoice_id='in_bad'")).rows.length, 0);
+  } finally { await f.close(); }
+});
+
+test('Stripe Checkout reuses sessions and enforces workspace ownership', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'checkout-owner', email: 'checkout@example.com', name: 'Checkout' });
+    const other = await f.store.login({ subject: 'checkout-other', email: 'checkout-other@example.com', name: 'Other' });
+    let customers = 0, sessions = 0;
+    const stripe = {
+      prices: { retrieve: async () => ({ id: 'price_test', active: true, type: 'recurring', recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' }, billing_scheme: 'per_unit', unit_amount: 1000, currency: 'usd', metadata: { token_count: '100' }, product: 'prod_test' }) },
+      customers: { create: async () => { customers++; return { id: 'cus_checkout' }; } },
+      subscriptions: { list: async () => ({ data: [] }) },
+      checkout: { sessions: {
+        create: async () => {
+          sessions++;
+          assert.equal((await f.sql.query("SELECT * FROM workspace_billing WHERE customer_id='cus_checkout'")).rows.length, 1);
+          return { id: 'cs_checkout', url: 'https://checkout.stripe.com/test' };
+        },
+        retrieve: async () => ({ status: 'open', url: 'https://checkout.stripe.com/test' }),
+      } },
+    } as unknown as Stripe;
+    const billing = new BillingService(f.db, { secretKey: 'sk_test_example', webhookSecret: 'whsec_example', prices: ['price_test'], development: true, maxTokens: 200 }, 'http://localhost:3000', stripe);
+    await assert.rejects(billing.checkout({ ...other.user, workspaceId: owner.user.workspaceId }, 'price_test'), /owner/);
+    await assert.rejects(billing.checkout(owner.user, 'price_unknown'), /available/);
+    const first = await billing.checkout(owner.user, 'price_test');
+    const second = await billing.checkout(owner.user, 'price_test');
+    assert.equal(first.url, second.url);
+    assert.equal(customers, 1); assert.equal(sessions, 1);
+  } finally { await f.close(); }
+});
+
+test('billing HTTP preserves raw webhook signatures and protects checkout with session and CSRF', async () => {
+  const f = await fixture();
+  const billing = new BillingService(f.db, { secretKey: 'sk_test_example', webhookSecret: 'whsec_example', prices: [], development: true, maxTokens: 200 }, 'http://localhost:3000');
+  const config: SaaSConfig = { databaseUrl: 'unused', origin: 'http://localhost:3000', googleClientId: 'test', googleClientSecret: 'test', secureCookies: false, trustProxyHops: 0, vault };
+  const app = createSaaSApp({ config, store: f.store, billing, google: { authorization: async () => '', exchange: async () => { throw new Error('unused'); } }, websiteApp: () => express() });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  try {
+    const address = server.address(); assert(address && typeof address === 'object');
+    const base = `http://127.0.0.1:${address.port}`;
+    const owner = await f.store.login({ subject: 'billing-http', email: 'billing-http@example.com', name: 'Owner' });
+    const payload = JSON.stringify({ id: 'evt_http', type: 'customer.subscription.updated', livemode: false, data: { object: {} } }, null, 2);
+    const signature = billing.stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_example' });
+    assert.equal((await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signature }, body: payload })).status, 200);
+    assert.equal((await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signature }, body: payload + ' ' })).status, 400);
+    assert.equal((await fetch(base + '/api/billing/checkout', { method: 'POST' })).status, 401);
+    assert.equal((await fetch(base + '/api/billing/checkout', { method: 'POST', headers: { Cookie: `st_session=${owner.token}`, Origin: config.origin } })).status, 403);
+    assert.equal((await fetch(base + '/api/billing/portal', { method: 'POST', headers: { Cookie: `st_session=${owner.token}`, Origin: config.origin, 'X-CSRF-Token': csrfToken(owner.token), 'X-Workspace-ID': randomUUID() } })).status, 409);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await f.close();
+  }
+});
+
+
+test('free Stripe Checkout is owner-only, flag-gated and requires a zero-cost price', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'free-owner', email: 'free-owner@example.com', name: 'Owner' });
+    const member = await f.store.login({ subject: 'free-member', email: 'free-member@example.com', name: 'Member' });
+    await f.sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,'member')", [owner.user.id, member.user.id]);
+    const memberUser = { ...member.user, workspaceId: owner.user.id, role: 'member' as const };
+    let freeAmount = 0;
+    let checkoutCalls = 0;
+    const stripe = {
+      prices: { retrieve: async (id: string) => ({ id, active: true, type: 'recurring', recurring: { interval: 'year', interval_count: 1, usage_type: 'licensed' }, billing_scheme: 'per_unit', unit_amount: id === 'price_free' ? freeAmount : 1000, currency: 'usd', metadata: { token_count: '10' }, product: 'prod_test' }) },
+      customers: { create: async () => ({ id: 'cus_free' }) },
+      subscriptions: { list: async () => ({ data: [] }) },
+      checkout: { sessions: { create: async (params: Stripe.Checkout.SessionCreateParams) => {
+        checkoutCalls++;
+        assert.equal(params.mode, 'subscription');
+        assert.equal(params.line_items?.[0]?.price, 'price_free');
+        return { id: 'cs_free', url: 'https://checkout.stripe.com/free' };
+      } } },
+    } as unknown as Stripe;
+    const config = { secretKey: 'sk_test_example', webhookSecret: 'whsec_example', prices: ['price_paid'], freePrice: 'price_free', testTokensEnabled: false, development: true, maxTokens: 200 };
+    const billing = new BillingService(f.db, config, 'http://localhost:3000', stripe);
+    assert.equal((await billing.summary(owner.user)).testPlan, null);
+    await assert.rejects(billing.checkout(owner.user, 'price_free'), /available/);
+    config.testTokensEnabled = true;
+    assert.equal((await billing.summary(owner.user)).testPlan?.id, 'price_free');
+    assert.equal((await billing.summary(memberUser)).testPlan, null);
+    await assert.rejects(billing.checkout(memberUser, 'price_free'), /owner/);
+    freeAmount = 100;
+    await assert.rejects(billing.checkout(owner.user, 'price_free'), /zero price/);
+    freeAmount = 0;
+    assert.equal((await billing.checkout(owner.user, 'price_free')).url, 'https://checkout.stripe.com/free');
+    assert.equal(checkoutCalls, 1);
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 0);
+  } finally { await f.close(); }
+});
+
+test('ledger records actual credits, cap loss, spending and immutable reconciled balances', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'ledger-owner', email: 'ledger-owner@example.com', name: 'Owner' });
+    const connection = await f.store.saveConnection(owner.user.id, source);
+    const site = await f.store.saveWebsite(owner.user.id, siteInput(connection.id));
+    const accounts = new TokenAccounts(f.db);
+    await f.store.addTestJobToken(owner.user.id);
+    await f.sql.query('INSERT INTO workspace_billing(workspace_id,customer_id) VALUES($1,$2)', [owner.user.id, 'cus_ledger']);
+    const billing = new BillingService(f.db, { secretKey: 'sk_test_example', webhookSecret: 'whsec_example', prices: [], development: true, maxTokens: 5 }, 'http://localhost:3000');
+    const plan = { id: 'price_ledger', name: 'Plan', amount: 1000, currency: 'usd', tokens: 10, maxTokens: 5, interval: 'week' as const, intervalCount: 1 };
+    await Promise.all([1, 2].map(() => billing.creditInvoice('cus_ledger', 'in_ledger', 'sub_ledger', 1, plan)));
+    await f.store.spendJobToken(owner.user.id, site.id, 'push', async () => 'ok', owner.user.id, 123);
+    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'push', async () => { throw new Error('failed'); }));
+    const history = await accounts.history(owner.user.id, owner.user.id);
+    assert.equal(history.balance, 4);
+    assert.equal(history.ledgerBalance, 4);
+    assert.equal(history.reconciled, true);
+    assert.equal(history.transactions.length, 3);
+    assert.equal(history.transactions[0]!.kind, 'spend');
+    assert.equal(history.transactions[0]!.amount, -1);
+    assert.equal(history.transactions[0]!.jobId, 123);
+    assert.equal(history.transactions[0]!.actorUserId, owner.user.id);
+    const credit = history.transactions[1]!;
+    assert.equal(credit.requestedAmount, 10);
+    assert.equal(credit.amount, 4);
+    assert.equal(credit.discardedAmount, 6);
+    assert.equal(credit.balanceBefore, 1);
+    assert.equal(credit.balanceAfter, 5);
+    assert.equal(credit.stripeInvoiceId, 'in_ledger');
+    await assert.rejects(f.sql.query('UPDATE token_transactions SET amount=0 WHERE id=$1', [credit.id]), /append-only/);
+    await assert.rejects(f.sql.query('DELETE FROM token_transactions WHERE id=$1', [credit.id]), /append-only/);
+    await assert.rejects(f.sql.query('TRUNCATE token_transactions'), /append-only/);
+    await assert.rejects(f.sql.query('UPDATE workspaces SET job_tokens=999 WHERE id=$1', [owner.user.id]), /ledger/);
+    assert.equal((await f.store.session(owner.token))!.jobTokens, 4);
+    await assert.rejects(f.db.transaction(owner.user.id, async (sql) => {
+      await postTokenTransaction(sql, { workspaceId: owner.user.id, kind: 'test_credit', requestedAmount: 3, reference: 'rollback:test', reason: 'Rollback test' });
+      throw new Error('Abort');
+    }));
+    assert.equal((await accounts.history(owner.user.id, owner.user.id)).transactions.length, 3);
+    // A cap reduction has an explicit negative net change, not an unexplained loss.
+    billing.config.maxTokens = 2;
+    await billing.creditInvoice('cus_ledger', 'in_lower_cap', 'sub_ledger', 2, plan);
+    const capped = (await accounts.history(owner.user.id, owner.user.id)).transactions[0]!;
+    assert.equal(capped.amount, -2); assert.equal(capped.discardedAmount, 12); assert.equal(capped.balanceAfter, 2);
+  } finally { await f.close(); }
+});
+
+test('platform administration is distinct from workspace roles and adjustments are retry safe', async () => {
+  const f = await fixture();
+  try {
+    const operator = await f.store.login({ subject: 'platform-operator', email: 'operator@example.com', name: 'Operator' });
+    const owner = await f.store.login({ subject: 'platform-customer', email: 'customer@example.com', name: 'Customer' });
+    const admin = await f.store.login({ subject: 'workspace-admin', email: 'admin@example.com', name: 'Workspace admin' });
+    const member = await f.store.login({ subject: 'ledger-member', email: 'member@example.com', name: 'Member' });
+    await f.sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,'admin'),($1,$3,'member')", [owner.user.id, admin.user.id, member.user.id]);
+    const accounts = new TokenAccounts(f.db);
+    for (const user of [owner.user, admin.user, member.user, operator.user]) {
+      await assert.rejects(accounts.list(user.id), /Platform administrator/);
+      await assert.rejects(accounts.adjust(user.id, owner.user.id, { amount: 10, reason: 'Unauthorized', requestId: randomUUID() }), /Platform administrator/);
+    }
+    await assert.rejects(accounts.history(member.user.id, owner.user.id), /owner or admin/);
+    await assert.rejects(accounts.history(operator.user.id, owner.user.id), /owner or admin/);
+    assert.equal((await accounts.history(admin.user.id, owner.user.id)).balance, 0);
+    await assert.rejects(f.db.transaction(operator.user.id, (sql) => sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)', [operator.user.id])), /permission/);
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)', [operator.user.id]);
+    assert.equal((await f.store.session(operator.token))!.isPlatformAdmin, true);
+    assert.equal((await accounts.list(operator.user.id, 'customer@example.com')).accounts.length, 1);
+    const request = { amount: 50, reason: 'Customer service credit', requestId: randomUUID() };
+    const replies = await Promise.all([1, 2].map(() => accounts.adjust(operator.user.id, owner.user.id, request)));
+    assert.equal(replies[0]!.transaction.id, replies[1]!.transaction.id);
+    assert.equal(replies[0]!.balance, 50);
+    await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, { ...request, amount: 51 }), /different details/);
+    await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, { ...request, reason: 'Changed' }), /different details/);
+    await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, { ...request, requestId: randomUUID(), amount: -51 }), /allowed range/);
+    await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, { ...request, requestId: randomUUID(), reason: ' ' }), /reason/);
+    await accounts.adjust(operator.user.id, owner.user.id, { amount: -5, reason: 'Correction', requestId: randomUUID() });
+    const history = await accounts.history(operator.user.id, owner.user.id, '', true);
+    assert.equal(history.balance, 45); assert.equal(history.reconciled, true);
+    assert.equal(history.transactions[0]!.actorUserId, operator.user.id);
+    assert.equal(history.transactions[0]!.actorName, 'Operator');
+    assert.equal(history.transactions[1]!.reason, 'Customer service credit');
+    await f.sql.query('DELETE FROM platform_administrators WHERE user_id=$1', [operator.user.id]);
+    assert.equal((await f.store.session(operator.token))!.isPlatformAdmin, false);
+    await assert.rejects(accounts.history(operator.user.id, owner.user.id, '', true), /Platform administrator/);
+    await assert.rejects(accounts.adjust(operator.user.id, owner.user.id, request), /Platform administrator/);
+  } finally { await f.close(); }
+});
+
+test('ledger history pagination does not duplicate transactions and opening balances survive migration', async () => {
+  const f = await fixture(async (sql) => {
+    const id = randomUUID();
+    await sql.query('INSERT INTO users(id,google_subject,email,name,job_tokens) VALUES($1,$2,$3,$4,23)', [id, 'pre-ledger-user', 'legacy@example.com', 'Legacy']);
+  });
+  try {
+    const owner = await f.store.login({ subject: 'pre-ledger-user', email: 'legacy@example.com', name: 'Legacy' });
+    const accounts = new TokenAccounts(f.db);
+    const opening = await accounts.history(owner.user.id, owner.user.id);
+    assert.equal(opening.balance, 23);
+    assert.equal(opening.transactions[0]!.kind, 'opening');
+    assert.equal(opening.transactions[0]!.amount, 23);
+    for (let i = 0; i < 52; i++) await f.store.addTestJobToken(owner.user.id);
+    const first = await accounts.history(owner.user.id, owner.user.id);
+    assert.equal(first.transactions.length, 50);
+    assert(first.nextCursor);
+    await f.store.addTestJobToken(owner.user.id);
+    const second = await accounts.history(owner.user.id, owner.user.id, first.nextCursor);
+    assert.equal(second.transactions.length, 3);
+    assert.equal(new Set([...first.transactions, ...second.transactions].map((t) => t.id)).size, 53);
+    assert.equal(second.reconciled, true);
+    await assert.rejects(accounts.history(owner.user.id, owner.user.id, 'invalid'), /cursor/);
+  } finally { await f.close(); }
+});
+
+test('ledger HTTP endpoints enforce platform permissions, CSRF and immutable adjustment references', async () => {
+  const f = await fixture();
+  const config: SaaSConfig = { databaseUrl: 'unused', origin: 'http://localhost:3000', googleClientId: 'test', googleClientSecret: 'test', secureCookies: false, trustProxyHops: 0, vault };
+  const app = createSaaSApp({ config, store: f.store, google: { authorization: async () => '', exchange: async () => { throw new Error('unused'); } }, websiteApp: () => express() });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  try {
+    const address = server.address(); assert(address && typeof address === 'object');
+    const base = `http://127.0.0.1:${address.port}`;
+    const operator = await f.store.login({ subject: 'ledger-http-admin', email: 'ledger-admin@example.com', name: 'Operator' });
+    const customer = await f.store.login({ subject: 'ledger-http-customer', email: 'ledger-customer@example.com', name: 'Customer' });
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)', [operator.user.id]);
+    const endpoint = `${base}/api/admin/token-accounts/${customer.user.id}/transactions`;
+    const headers = (token: string) => ({ Cookie: `st_session=${token}`, Origin: config.origin, 'X-CSRF-Token': csrfToken(token), 'Content-Type': 'application/json' });
+    const body = JSON.stringify({ amount: 7, reason: 'Support credit', requestId: randomUUID() });
+    assert.equal((await fetch(endpoint)).status, 401);
+    assert.equal((await fetch(endpoint, { headers: headers(customer.token) })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: headers(customer.token), body })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: { Cookie: `st_session=${operator.token}`, 'Content-Type': 'application/json' }, body })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: { ...headers(operator.token), Origin: 'https://evil.example' }, body })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: { ...headers(operator.token), 'X-Workspace-ID': customer.user.id }, body })).status, 409);
+    const first = await fetch(endpoint, { method: 'POST', headers: headers(operator.token), body });
+    assert.equal(first.status, 200);
+    const posted = await first.json();
+    const replay = await fetch(endpoint, { method: 'POST', headers: headers(operator.token), body });
+    assert.equal((await replay.json()).transaction.id, posted.transaction.id);
+    const history = await fetch(endpoint, { headers: headers(operator.token) }).then((r) => r.json());
+    assert.equal(history.balance, 7); assert.equal(history.transactions.length, 1);
+    const own = await fetch(base + '/api/tokens/history', { headers: headers(customer.token) }).then((r) => r.json());
+    assert.equal(own.balance, 7);
+    // Customer cannot promote themselves by inserting privilege fields.
+    const forged = await fetch(endpoint, { method: 'POST', headers: headers(customer.token), body: JSON.stringify({ ...JSON.parse(body), isPlatformAdmin: true }) });
+    assert.notEqual(forged.status, 200);
+    await f.sql.query('DELETE FROM platform_administrators WHERE user_id=$1', [operator.user.id]);
+    assert.equal((await fetch(endpoint, { headers: headers(operator.token) })).status, 403);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await f.close();
+  }
 });

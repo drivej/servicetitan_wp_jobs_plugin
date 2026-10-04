@@ -1,6 +1,8 @@
+import { loadBillingConfig, type BillingConfig } from './billing-config.js';
 import { SecretVault } from './crypto.js';
 
 export interface SaaSConfig {
+  billing?: BillingConfig | undefined;
   testTokensEnabled?: boolean;
   databaseUrl: string;
   origin: string;
@@ -37,6 +39,7 @@ export function loadSaaSConfig(env: NodeJS.ProcessEnv = process.env): SaaSConfig
     throw new Error('CREDENTIAL_ENCRYPTION_KEYS must map key IDs to base64 keys.');
   }
   return {
+    billing: loadBillingConfig(env),
     testTokensEnabled: env.ENABLE_TEST_TOKENS === 'true',
     databaseUrl: required(env, 'DATABASE_URL'), origin: origin.origin,
     googleClientId: required(env, 'GOOGLE_CLIENT_ID'), googleClientSecret: required(env, 'GOOGLE_CLIENT_SECRET'),

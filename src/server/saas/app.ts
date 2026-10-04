@@ -1,3 +1,5 @@
+import { TokenAccounts } from './token-accounts.js';
+import { BillingService } from './billing.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import express, { type ErrorRequestHandler } from 'express';
@@ -14,10 +16,11 @@ const cookieValue = (header: string | undefined, name: string): string => {
   return values.length === 1 ? values[0]!.slice(name.length + 1) : '';
 };
 const equalToken = (left: string, right: string): boolean => Buffer.byteLength(left) === Buffer.byteLength(right) && timingSafeEqual(Buffer.from(left), Buffer.from(right));
-interface Options { config: SaaSConfig; store: AccountStore; google: GoogleLogin; websiteApp: WebsiteAppFactory; staticDirectory?: string; }
+interface Options { config: SaaSConfig; store: AccountStore; google: GoogleLogin; websiteApp: WebsiteAppFactory; staticDirectory?: string; billing?: BillingService; }
 
-export function createSaaSApp({ config, store, google, websiteApp, staticDirectory }: Options) {
+export function createSaaSApp({ config, store, google, websiteApp, staticDirectory, billing = config.billing ? new BillingService(store.db, config.billing, config.origin) : undefined }: Options) {
   const app = express();
+  const tokenAccounts = new TokenAccounts(store.db);
   const sessionName = sessionCookieName(config.secureCookies);
   const loginName = config.secureCookies ? '__Host-st_login' : 'st_login';
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'lax' as const, path: '/' };
@@ -61,6 +64,16 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.redirect('/?login=failed');
     }
   });
+  // Stripe signatures require the untouched request body and replace session/CSRF
+  // authentication on this one endpoint only.
+  app.post('/api/stripe/webhook', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res, next) => {
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.', 503);
+      if (!Buffer.isBuffer(req.body)) throw new HttpError('Expected a JSON webhook body.', 400);
+      await billing.webhook(req.body, req.get('Stripe-Signature') || '');
+      res.json({ received: true });
+    } catch (error) { next(error); }
+  });
   app.use('/api', async (req, res, next) => {
     try {
       const token = cookieValue(req.headers.cookie, sessionName);
@@ -83,6 +96,37 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/session', (_req, res) => {
     res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user, csrfToken: csrfToken(String(res.locals.sessionToken)) });
+  });
+  app.get('/api/billing', async (_req, res, next) => {
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.', 503);
+      res.json(await billing.summary(res.locals.user as User));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/billing/checkout', async (req, res, next) => {
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.', 503);
+      res.json(await billing.checkout(res.locals.user as User, req.body?.priceId));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/billing/portal', async (_req, res, next) => {
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.', 503);
+      res.json(await billing.portal(res.locals.user as User));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/tokens/history', async (req, res, next) => {
+    const user = res.locals.user as User;
+    try { res.json(await tokenAccounts.history(user.id, user.workspaceId, req.query.before)); } catch (error) { next(error); }
+  });
+  app.get('/api/admin/token-accounts', async (req, res, next) => {
+    try { res.json(await tokenAccounts.list((res.locals.user as User).id, req.query.search, req.query.after)); } catch (error) { next(error); }
+  });
+  app.get('/api/admin/token-accounts/:workspaceId/transactions', async (req, res, next) => {
+    try { res.json(await tokenAccounts.history((res.locals.user as User).id, uuid(req.params.workspaceId), req.query.before, true)); } catch (error) { next(error); }
+  });
+  app.post('/api/admin/token-accounts/:workspaceId/transactions', async (req, res, next) => {
+    try { res.json(await tokenAccounts.adjust((res.locals.user as User).id, uuid(req.params.workspaceId), req.body)); } catch (error) { next(error); }
   });
   app.post('/api/tokens/test-credit', async (_req, res, next) => {
     try {

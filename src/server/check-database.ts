@@ -12,9 +12,9 @@ try {
     has_table_privilege(current_user, name, 'INSERT') AND
     has_table_privilege(current_user, name, 'UPDATE') AND
     has_table_privilege(current_user, name, 'DELETE')) AS ready
-    FROM unnest(ARRAY['users','sessions','oauth_attempts','rate_limits','workspaces','workspace_memberships','workspace_invitations','servicetitan_connections','websites','audit_logs']) AS name`);
+    FROM unnest(ARRAY['users','sessions','oauth_attempts','rate_limits','workspaces','workspace_memberships','workspace_invitations','servicetitan_connections','websites','audit_logs','workspace_billing','stripe_token_grants']) AS name`);
   if (!permissions.rows[0]?.ready) throw new Error('missing runtime grants');
-  console.log('Remote database is reachable; runtime role, ownership policies, job tokens, and table permissions are ready.');
+  console.log('Remote database is reachable; runtime role, ownership policies, token ledger, administrator permissions, and table permissions are ready.');
 } catch {
   console.error('Database check failed. Verify the remote URL, TLS certificate, runtime role, migrations, and table grants.');
   process.exitCode = 1;
