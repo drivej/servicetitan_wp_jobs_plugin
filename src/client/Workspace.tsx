@@ -8,6 +8,7 @@ import { accountFetch, clearAccountCache, configureApi } from './api';
 
 interface User {
   isPlatformAdmin?: boolean;
+  avatarUrl?: string | null;
   workspaceId: string;
   workspaceName: string;
   role: TeamRole;
@@ -149,12 +150,41 @@ const SettingsButton = ({ path }: { path: string }) => {
   );
 };
 
-const SignOutButton = ({ onClick, disabled }: { onClick: React.MouseEventHandler<HTMLButtonElement>; disabled: boolean }) => {
-  return (
-    <button className='btn-nav' disabled={disabled} onClick={onClick}>
-      Sign out
+const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => void; busy: boolean }) => {
+  const [open, setOpen] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setOpen(false); container.current?.querySelector('button')?.focus(); }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeEscape);
+    };
+  }, [open]);
+  const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || user.email[0]?.toUpperCase() || '?';
+  return <div className='account-menu' ref={container}>
+    <button className='account-avatar-button' type='button' aria-label={`Account menu for ${user.name || user.email}`} aria-expanded={open} aria-controls='account-menu-panel' onClick={() => setOpen((value) => !value)}>
+      {user.avatarUrl && !imageFailed ? <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' onError={() => setImageFailed(true)} /> : <span aria-hidden='true'>{initials}</span>}
     </button>
-  );
+    {open && <div className='account-menu-panel' id='account-menu-panel'>
+      <div className='account-menu-identity'><strong>{user.name}</strong><small>{user.email}</small></div>
+      <a href='/account'>Settings</a>
+      <a href='/add-tokens'>Add tokens</a>
+      {user.isPlatformAdmin && <>
+        <a href='/admin/tokens'>Token admin</a>
+        <a href='/admin/members'>Account members</a>
+      </>}
+      <button type='button' disabled={busy} onClick={onSignOut}>Sign out</button>
+    </div>}
+  </div>;
 };
 
 const JobsButton = ({ href, path }: { href: string; path: string }) => {
@@ -342,7 +372,6 @@ export function Workspace({ children }: { children: ReactNode }) {
             <PluginButton path={path} />
             <WordpressButton path={path} />
             <SettingsButton path={path} />
-            <SignOutButton onClick={() => void logout()} disabled={busy} />
           </div>
         </header>
         {path === '/add-tokens' ? (
@@ -477,9 +506,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <PluginButton path={path} />
           <WordpressButton path={path} />
           <SettingsButton path={path} />
-          {user.isPlatformAdmin && <a className='btn-nav' href='/admin/tokens' aria-current={adminPage ? 'page' : undefined}>Token admin</a>}
-          {user.isPlatformAdmin && <a className='btn-nav' href='/admin/members' aria-current={membersAdminPage ? 'page' : undefined}>Account members</a>}
-          <SignOutButton onClick={() => void logout()} disabled={busy} />
+          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy} />
         </div>
       </header>
 
