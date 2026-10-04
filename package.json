@@ -1,6 +1,6 @@
 {
   "name": "service-titan-jobs-provider",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Browse ServiceTitan jobs by appointment date and service location.",
   "type": "module",
   "main": "dist/server/index.js",
