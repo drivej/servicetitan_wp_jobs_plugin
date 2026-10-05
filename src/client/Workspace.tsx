@@ -225,7 +225,6 @@ export function Workspace({ children }: { children: ReactNode }) {
   });
   const [invitation, setInvitation] = useState<{ workspaceName: string; role: TeamRole; email: string }>();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const tokenDialog = useRef<HTMLDialogElement>(null);
   const [session, setSession] = useState<Session>();
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState('');
@@ -316,14 +315,11 @@ export function Workspace({ children }: { children: ReactNode }) {
     const update = () => {
       void refreshBalance();
     };
-    const exhausted = () => tokenDialog.current?.showModal();
-    window.addEventListener('job-tokens-exhausted', exhausted);
     window.addEventListener('job-tokens-changed', update);
     window.addEventListener('focus', update);
     const interval = window.setInterval(update, 30_000);
     return () => {
       active = false;
-      window.removeEventListener('job-tokens-exhausted', exhausted);
       window.clearInterval(interval);
       window.removeEventListener('job-tokens-changed', update);
       window.removeEventListener('focus', update);
@@ -495,16 +491,6 @@ export function Workspace({ children }: { children: ReactNode }) {
           {error}
         </p>
       )}
-      <dialog ref={tokenDialog} className='error-modal token-dialog' aria-labelledby='token-dialog-title' aria-describedby='token-dialog-description'>
-        <h2 id='token-dialog-title'>No job tokens available</h2>
-        <p id='token-dialog-description'>Add tokens to push a post, rebuild a post, or generate an AI description. Your request has not been completed.</p>
-        <div className='account-actions'>
-          <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>
-            Add Tokens
-          </Button>
-          <Button onClick={() => tokenDialog.current?.close()}>Close</Button>
-        </div>
-      </dialog>
       {isLocal && tokensPage ? (
         <main className='account-page'>
           <p className='eyebrow'>Local workspace</p>

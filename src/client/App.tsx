@@ -9,6 +9,7 @@ import { apiFetch, wordpressStatusStorage } from './api';
 import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './jobsSearch';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
+import { ErrorDialog } from './ErrorDialog';
 
 interface JobItem {
   id: number;
@@ -313,7 +314,6 @@ export function App() {
         {/* <p className='intro'>Choose an inclusive date range to find completed jobs and their service locations.</p> */}
       </header>
 
-      {queueError && <Alert severity="error">{queueError} Builds already queued continue on the server.</Alert>}
       {wordpressPluginLoading ? (
         <Alert severity="info" sx={{ mb: 2 }} role='status'>
           Checking WordPress plugin compatibility…
@@ -378,11 +378,6 @@ export function App() {
           )}
         </div>
 
-        {error && (
-          <Alert severity="error" role='alert'>
-            {error}
-          </Alert>
-        )}
         {loading && (
           <Alert severity="info" role='status'>
             Loading ServiceTitan jobs…
@@ -573,6 +568,14 @@ export function App() {
           </section>
         </div>
       )}
+      <ErrorDialog
+        message={error || queueError}
+        onClose={() => { setError(''); setQueueError(''); }}
+        title={queueError && !error ? 'Unable to check build progress' : error.includes('No job tokens available') ? 'No job tokens available' : undefined}
+        actionHref={error.includes('No job tokens available') || queueError.includes('No job tokens available') ? '/add-tokens' : undefined}
+        actionLabel="Add Tokens"
+        detail={queueError ? 'Builds already queued continue on the server.' : undefined}
+      />
     </main>
   );
 }
