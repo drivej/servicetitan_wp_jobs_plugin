@@ -10,6 +10,7 @@ import { BillingPlans } from './BillingPlans';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { TeamSettings, type TeamRole } from './TeamSettings';
 import { accountFetch, clearAccountCache, configureApi } from './api';
+import { clearTokenError, setAvailableTokens, useTokenError } from './tokenState';
 
 interface User {
   isPlatformAdmin?: boolean;
@@ -228,6 +229,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>();
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState('');
+  const tokenError = useTokenError();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selected, setSelected] = useState('');
@@ -282,6 +284,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         }
         if (!current.user || !current.csrfToken) throw new Error('Invalid session response.');
         configureApi(current.user.id, '', current.csrfToken, current.user.workspaceId);
+        setAvailableTokens(current.user.jobTokens);
         await refresh(current.user, current.csrfToken);
         if (invitationToken) setInvitation(await accountFetch('/api/invitations/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: invitationToken }) }).then(json<{ workspaceName: string; role: TeamRole; email: string }>));
       } catch (reason) {
@@ -307,6 +310,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             return;
           }
           setSession(updated);
+          if (updated.user) setAvailableTokens(updated.user.jobTokens);
         }
       } catch {
         /* Keep the last confirmed balance; the API still enforces spending. */
@@ -491,6 +495,18 @@ export function Workspace({ children }: { children: ReactNode }) {
           {error}
         </p>
       )}
+      {tokenError && <div className='modal-backdrop' role='presentation'>
+        <section className='error-modal' role='alertdialog' aria-modal='true' aria-labelledby='token-dialog-title' aria-describedby='token-dialog-description'>
+          <div className='error-modal-icon' aria-hidden='true'>!</div>
+          <h2 id='token-dialog-title'>No job tokens available</h2>
+          <p id='token-dialog-description'>{tokenError}</p>
+          <p>Your request has not been completed.</p>
+          <div className='account-actions'>
+            <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>Add Tokens</Button>
+            <Button onClick={clearTokenError}>Close</Button>
+          </div>
+        </section>
+      </div>}
       {isLocal && tokensPage ? (
         <main className='account-page'>
           <p className='eyebrow'>Local workspace</p>

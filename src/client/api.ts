@@ -1,3 +1,4 @@
+
 let websiteId = '';
 let userId = 'local';
 let csrf = '';
@@ -16,7 +17,7 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
 export const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
   try {
     const response = await accountFetch(apiUrl(path), init);
-    if (isSaaSWorkspace() && response.status === 402) window.dispatchEvent(new Event('job-tokens-exhausted'));
+    if (isSaaSWorkspace() && response.status === 402) markTokensExhausted();
     return response;
   }
   finally {
@@ -44,3 +45,4 @@ export function clearAccountCache(user: string): void {
 // Browser preferences survive sign-out/cache clearing and are isolated per user.
 export const tokenPreferenceKey = (action: string, cost: number): string =>
   `user-preferences:${userId}:token-spend:${action}:${cost}`;
+import { markTokensExhausted } from './tokenState';

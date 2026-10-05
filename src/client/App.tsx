@@ -10,6 +10,7 @@ import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
 import { ErrorDialog } from './ErrorDialog';
+import { useTokensExhausted } from './tokenState';
 
 interface JobItem {
   id: number;
@@ -72,6 +73,7 @@ export function App() {
   const [actionError, setActionError] = useState<ActionError>();
   const { status: wordpressPluginStatus, loading: wordpressPluginLoading, ready: wordpressPluginReady } = useWordPressPluginStatus();
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
+  const tokensExhausted = useTokensExhausted();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -496,13 +498,13 @@ export function App() {
                           )}
                           {wordpressStatus.state === 'not_found' && (
                             <Button variant='contained' color='primary' className='build-deploy-button' type='button'
-                              disabled={!wordpressPluginReady || wordpressBusy || Boolean(queueError)}
+                              disabled={!wordpressPluginReady || tokensExhausted || wordpressBusy || Boolean(queueError)}
                               title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens.'
                               onClick={(event) => { event.stopPropagation(); void enqueueBuild(job.id); }}>
                               {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build draft'}
                             </Button>
                           )}
-                          {buildTask?.state === 'failed' && <span className='build-deploy-error' role='status'>{buildTask.error}</span>}
+                          {buildTask?.state === 'failed' && buildTask.error !== 'No job tokens available. Add tokens before trying again.' && <span className='build-deploy-error' role='status'>{buildTask.error}</span>}
 
                           {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'draft' && (
                             <Button variant='contained' className='primary' type='button' disabled={!wordpressPluginReady || wordpressBusy} onClick={(event) => { event.stopPropagation(); void updateWordpressStatus(job.id, 'publish'); }}>
