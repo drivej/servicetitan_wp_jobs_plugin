@@ -136,10 +136,14 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.post('/api/admin/members/:memberId/disable', async (req, res, next) => {
     try { await platformMembers.disable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
   });
-  app.post('/api/tokens/test-credit', async (_req, res, next) => {
+  app.post('/api/tokens/test-credit', async (req, res, next) => {
     try {
       if (!config.testTokensEnabled) throw new HttpError('Test tokens are disabled.', 403);
-      res.json({ jobTokens: await store.addTestJobToken((res.locals.user as User).id, (res.locals.user as User).workspaceId) });
+      const rawAmount = req.body?.amount;
+      const amount = rawAmount === undefined ? 1 : Number(rawAmount);
+      if (!Number.isSafeInteger(amount) || amount < 1 || amount > 2_147_483_647) throw new HttpError('Enter a positive whole token amount.');
+      const user = res.locals.user as User;
+      res.json({ jobTokens: await store.addTestJobToken(user.id, amount, user.workspaceId) });
     } catch (error) { next(error); }
   });
   app.post('/api/logout', async (_req, res, next) => {

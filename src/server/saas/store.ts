@@ -248,10 +248,10 @@ export class AccountStore {
       };
     });
   }
-  async addTestJobToken(userId: string, workspaceId = userId): Promise<number> {
+  async addTestJobToken(userId: string, amount = 1, workspaceId = userId): Promise<number> {
     return this.workspaceTransaction(userId, workspaceId, ['owner'], async (sql) => {
-      const entry = await postTokenTransaction(sql, { workspaceId, kind: 'test_credit', requestedAmount: 1, actorUserId: userId,
-        reference: `test:${randomUUID()}`, reason: 'Manual test token' });
+      const entry = await postTokenTransaction(sql, { workspaceId, kind: 'test_credit', requestedAmount: amount, actorUserId: userId,
+        reference: `test:${randomUUID()}`, reason: `Manual test credit: ${amount} token${amount === 1 ? '' : 's'}` });
       await audit(sql, userId, 'job_token.credited.test', userId);
       return entry.balanceAfter;
     });

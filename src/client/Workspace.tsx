@@ -237,6 +237,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [testTokenAmount, setTestTokenAmount] = useState('1');
   const [editingConnection, setEditingConnection] = useState<Connection>();
   const [editingWebsite, setEditingWebsite] = useState<Website>();
 
@@ -418,13 +419,18 @@ export function Workspace({ children }: { children: ReactNode }) {
     window.location.assign('/');
   };
   const addTestToken = async () => {
+    const amount = Number(testTokenAmount);
+    if (!Number.isSafeInteger(amount) || amount < 1) {
+      setError('Enter a positive whole token amount.');
+      return;
+    }
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      await accountFetch('/api/tokens/test-credit', { method: 'POST' }).then(json);
+      await accountFetch('/api/tokens/test-credit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) }).then(json);
       window.dispatchEvent(new Event('job-tokens-changed'));
-      setMessage('1 test token added.');
+      setMessage(`${amount.toLocaleString()} test token${amount === 1 ? '' : 's'} added.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to add a test token.');
     } finally {
@@ -567,10 +573,13 @@ export function Workspace({ children }: { children: ReactNode }) {
             {session?.testTokensEnabled && user.role === 'owner' && (
               <>
                 <h3>Testing</h3>
-                <p>Add one free token at a time to test the application. No payment is required.</p>
-                <Button variant='contained' className='primary' disabled={busy} onClick={() => void addTestToken()}>
-                  {busy ? 'Adding…' : 'Add 1 test token'}
-                </Button>
+                <p>Add free tokens to test the application. No payment is required.</p>
+                <div className='d-flex gap-2 align-end'>
+                  <TextField label='Amount' type='number' size='small' value={testTokenAmount} slotProps={{ htmlInput: { min: 1, step: 1 } }} disabled={busy} onChange={(event) => setTestTokenAmount(event.target.value)} />
+                  <Button variant='contained' className='primary' disabled={busy} onClick={() => void addTestToken()}>
+                    {busy ? 'Adding…' : 'Add test tokens'}
+                  </Button>
+                </div>
               </>
             )}
             {message && (
