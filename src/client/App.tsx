@@ -10,7 +10,7 @@ import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
 import { ErrorDialog } from './ErrorDialog';
-import { useTokensExhausted } from './tokenState';
+import { showTokenError, useTokensExhausted } from './tokenState';
 
 interface JobItem {
   id: number;
@@ -498,9 +498,10 @@ export function App() {
                           )}
                           {wordpressStatus.state === 'not_found' && (
                             <Button variant='contained' color='primary' className='build-deploy-button' type='button'
-                              disabled={!wordpressPluginReady || tokensExhausted || wordpressBusy || Boolean(queueError)}
+                              disabled={!wordpressPluginReady || wordpressBusy || Boolean(queueError)}
+                              aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressBusy || Boolean(queueError)}
                               title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens.'
-                              onClick={(event) => { event.stopPropagation(); void enqueueBuild(job.id); }}>
+                              onClick={(event) => { event.stopPropagation(); if (tokensExhausted) { showTokenError(); return; } if (!wordpressPluginReady || wordpressBusy || queueError) return; void enqueueBuild(job.id); }}>
                               {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build draft'}
                             </Button>
                           )}

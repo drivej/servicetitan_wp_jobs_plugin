@@ -44,6 +44,10 @@ export function clearTokenError() {
   notify();
 }
 
+export function showTokenError() {
+  markTokensExhausted();
+}
+
 export function tokenErrorMessage() {
   return exhaustedMessage;
 }

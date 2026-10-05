@@ -10,7 +10,7 @@ import { BillingPlans } from './BillingPlans';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { TeamSettings, type TeamRole } from './TeamSettings';
 import { accountFetch, clearAccountCache, configureApi } from './api';
-import { clearTokenError, setAvailableTokens, useTokenError } from './tokenState';
+import { clearTokenError, setAvailableTokens, useTokenError, useTokensExhausted } from './tokenState';
 
 interface User {
   isPlatformAdmin?: boolean;
@@ -230,6 +230,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState('');
   const tokenError = useTokenError();
+  const tokensExhausted = useTokensExhausted();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selected, setSelected] = useState('');
@@ -506,6 +507,10 @@ export function Workspace({ children }: { children: ReactNode }) {
             <Button onClick={clearTokenError}>Close</Button>
           </div>
         </section>
+      </div>}
+      {tokensExhausted && <div className='token-violator' role='status'>
+        <span>You’re out of job tokens. Add tokens to keep publishing and rebuilding posts.</span>
+        <Button component='a' href='/add-tokens' className='token-violator-link'>Get tokens</Button>
       </div>}
       {isLocal && tokensPage ? (
         <main className='account-page'>

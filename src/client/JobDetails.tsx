@@ -9,7 +9,7 @@ import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 import { formatJobCopy, hasCompleteJobBody, hasFormattedJobBody, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
-import { useTokensExhausted } from './tokenState';
+import { showTokenError, useTokensExhausted } from './tokenState';
 
 interface JobAttachment {
   id: string;
@@ -307,9 +307,10 @@ export function JobDetails({ jobId }: { jobId: number }) {
             <Button
               className='primary wordpress-push-button'
               type='button'
-              disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
+              disabled={!wordpressPluginReady || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
+              aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
               title={requiresCompleteAiCopy && !hasCompleteAiCopy ? 'Generate the complete AI post copy before updating SEO.' : undefined}
-              onClick={() => void regenerateWordPress()}
+              onClick={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }}
             >
               {regenerating ? 'Rebuilding…' : wordpressStatus.seoState === 'current' ? 'Rebuild' : 'Update SEO'}
             </Button>
@@ -325,9 +326,10 @@ export function JobDetails({ jobId }: { jobId: number }) {
               <Button
                 className='primary wordpress-push-button'
                 type='button'
-                disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
+                disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
+                aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
                 title={!selectedImageLoaded ? 'Select a working image before pushing.' : !hasCompleteAiCopy ? 'Generate or paste the complete AI post copy before pushing.' : undefined}
-                onClick={() => void pushToWordPress()}
+                onClick={() => { if (tokensExhausted) { showTokenError(); return; } void pushToWordPress(); }}
               >
                 {pushing ? 'Pushing…' : 'Push'}
               </Button>
@@ -384,7 +386,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
               <h2 id='ai-copy-heading'>Prepare the complete post</h2>
             </div>
             <p>
-              <Button variant='contained' className='primary generate-copy-button' type='button' disabled={generatingCopy || tokensExhausted || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => void generateAiCopy()}>
+              <Button variant='contained' className='primary generate-copy-button' type='button' disabled={generatingCopy || !hasValidImage} aria-disabled={generatingCopy || tokensExhausted || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => { if (tokensExhausted) { showTokenError(); return; } void generateAiCopy(); }}>
                 {generatingCopy ? 'Generating…' : 'Generate Copy'}
               </Button>
             </p>
