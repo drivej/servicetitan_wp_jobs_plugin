@@ -1,3 +1,6 @@
+import { Radio, TextField } from '@mui/material';
+import { MenuItem, Select } from '@mui/material';
+import { Button } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { ErrorDialog } from './ErrorDialog';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
@@ -74,7 +77,7 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
         />
       </span>
       <span className='image-choice'>
-        <input type='radio' name='job-image' checked={selected} disabled={disabled || imageState !== 'loaded'} onChange={onToggle} />
+        <Radio name='job-image' checked={selected} disabled={disabled || imageState !== 'loaded'} onChange={onToggle} />
         <span>{attachment.fileName}</span>
       </span>
     </label>
@@ -268,9 +271,9 @@ export function JobDetails({ jobId }: { jobId: number }) {
     <main>
       {tokenSpendDialog}
       <header className='hero details-hero'>
-        <a className='back-link' href={jobsHref}>
+        <Button component='a' className='back-link' href={jobsHref}>
           ← Back to jobs
-        </a>
+        </Button>
         <p className='eyebrow'>Job details</p>
         <h1>{details?.summary.jobName || `ServiceTitan job ${jobId}`}</h1>
         {details && (
@@ -299,7 +302,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         </div>
         <div className='wordpress-push-controls'>
           {wordpressStatus?.state === 'exists' ? (
-            <button
+            <Button
               className='primary wordpress-push-button'
               type='button'
               disabled={!wordpressPluginReady || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
@@ -307,17 +310,17 @@ export function JobDetails({ jobId }: { jobId: number }) {
               onClick={() => void regenerateWordPress()}
             >
               {regenerating ? 'Rebuilding…' : wordpressStatus.seoState === 'current' ? 'Rebuild' : 'Update SEO'}
-            </button>
+            </Button>
           ) : (
             <>
               <label>
                 <span>Post status</span>
-                <select aria-label='Status for the new WordPress post' value={desiredStatus} disabled={pushing} onChange={(event) => setDesiredStatus(event.target.value as WordPressWritableStatus)}>
-                  <option value='draft'>Draft</option>
-                  <option value='publish'>Published</option>
-                </select>
+                <Select size='small' variant='outlined' sx={{ minWidth: 128 }} aria-label='Status for the new WordPress post' value={desiredStatus} disabled={pushing} onChange={(event) => setDesiredStatus(event.target.value as WordPressWritableStatus)}>
+                  <MenuItem value='draft'>Draft</MenuItem>
+                  <MenuItem value='publish'>Published</MenuItem>
+                </Select>
               </label>
-              <button
+              <Button
                 className='primary wordpress-push-button'
                 type='button'
                 disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
@@ -325,7 +328,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 onClick={() => void pushToWordPress()}
               >
                 {pushing ? 'Pushing…' : 'Push'}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -351,9 +354,9 @@ export function JobDetails({ jobId }: { jobId: number }) {
                   {wordpressStatus?.state === 'exists' ? (selectedIds[0] === currentFeaturedAttachmentId && currentFeaturedAttachmentId ? 'Current featured image selected' : selectedIds.length === 1 ? 'New image selected' : 'Keeping current image') : selectedIds.length === 1 ? '1 selected' : 'None selected'}
                 </span>
                 {wordpressStatus?.state === 'exists' && selectedIds.length === 1 && selectedIds[0] !== currentFeaturedAttachmentId && (
-                  <button type='button' disabled={regenerating} onClick={() => setSelectedIds(currentFeaturedAttachmentId ? [currentFeaturedAttachmentId] : [])}>
+                  <Button type='button' disabled={regenerating} onClick={() => setSelectedIds(currentFeaturedAttachmentId ? [currentFeaturedAttachmentId] : [])}>
                     Keep current image
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -379,16 +382,20 @@ export function JobDetails({ jobId }: { jobId: number }) {
               <h2 id='ai-copy-heading'>Prepare the complete post</h2>
             </div>
             <p>
-              <button className='primary generate-copy-button' type='button' disabled={generatingCopy || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => void generateAiCopy()}>
+              <Button variant='contained' className='primary generate-copy-button' type='button' disabled={generatingCopy || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => void generateAiCopy()}>
                 {generatingCopy ? 'Generating…' : 'Generate Copy'}
-              </button>
+              </Button>
             </p>
             <label className='ai-output'>
               <span>AI-generated post copy</span>
-              <textarea
+              <TextField
+                variant='outlined'
+                size='small'
+                fullWidth
+                multiline
                 aria-label='AI-generated post copy'
                 rows={16}
-                maxLength={6000}
+                slotProps={{ htmlInput: { maxLength: 6000 } }}
                 placeholder={
                   'TITLE: Service in Local City, USA\nEXCERPT: Short card description.\nINTRO: Opening project paragraph.\nCONTEXT HEADING: Why Did This Service Matter?\nCONTEXT: Job-specific explanation.\nWORK HEADING: What Did the Service Include?\nWORK ITEMS:\n- First documented scope item\n- Second documented scope item\nCLOSING: Appropriately qualified closing paragraph.'
                 }

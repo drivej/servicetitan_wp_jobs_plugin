@@ -1,3 +1,5 @@
+import { Checkbox } from '@mui/material';
+import { Button } from '@mui/material';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isSaaSWorkspace, tokenPreferenceKey } from './api';
 
@@ -70,12 +72,12 @@ export function useTokenSpendConfirmation() {
     <h2 id={titleId}>{pending ? actionLabels[pending.action] : 'Confirm token spend'}</h2>
     <p id={descriptionId}>This will cost 1 token. Continue?</p>
     <label className="token-spend-preference">
-      <input type="checkbox" checked={dontShowAgain} onChange={(event) => setDontShowAgain(event.target.checked)} />
+      <Checkbox checked={dontShowAgain} onChange={(event) => setDontShowAgain(event.target.checked)} />
       <span>Don’t show this again for this action</span>
     </label>
     <div className="account-actions">
-      <button type="button" autoFocus onClick={() => finish(false)}>Cancel</button>
-      <button type="button" className="primary" onClick={() => finish(true)}>Continue</button>
+      <Button type="button" autoFocus onClick={() => finish(false)}>Cancel</Button>
+      <Button type="button" variant="contained" className="primary" onClick={() => finish(true)}>Continue</Button>
     </div>
   </dialog>;
 

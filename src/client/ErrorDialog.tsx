@@ -1,3 +1,4 @@
+import { Button } from '@mui/material';
 import { useEffect, useId, useRef } from 'react';
 
 export function ErrorDialog({ message, onClose }: { message: string; onClose: () => void }) {
@@ -13,8 +14,8 @@ export function ErrorDialog({ message, onClose }: { message: string; onClose: ()
     <h2 id={titleId}>Unable to complete the request</h2>
     <p id={descriptionId}>{message}</p>
     <div className="account-actions">
-      <a className="account-primary-link" href="/wordpress-integration#report-bug">Report bug</a>
-      <button type="button" onClick={() => dialog.current?.close()}>Close</button>
+      <Button component="a" variant="contained" className="account-primary-link" href="/wordpress-integration#report-bug">Report bug</Button>
+      <Button type="button" onClick={() => dialog.current?.close()}>Close</Button>
     </div>
   </dialog>;
 }

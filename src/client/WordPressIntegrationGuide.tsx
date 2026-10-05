@@ -1,3 +1,4 @@
+import { Button } from '@mui/material';
 import { isSaaSWorkspace } from './api';
 
 export function WordPressIntegrationGuide() {
@@ -9,7 +10,7 @@ export function WordPressIntegrationGuide() {
         <p className="eyebrow">Integration guide</p>
         <h1>Connect your WordPress site</h1>
         <p className="intro">Install the companion plugin, authorize the ServiceTitan Jobs app, and publish a ZIP-targeted job directory on any WordPress page.</p>
-        <a className="guide-setup-link" href="/wordpress-plugin">Open WordPress plugin setup</a>
+        <Button component="a" variant="contained" href="/wordpress-plugin" className="guide-setup-link">Open WordPress plugin setup</Button>
       </header>
 
       <div className="guide-layout">

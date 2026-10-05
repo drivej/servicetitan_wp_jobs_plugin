@@ -1,3 +1,5 @@
+import { TextField } from '@mui/material';
+import { Button } from '@mui/material';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
 import { TokenHistory } from './TokenHistory';
@@ -39,9 +41,9 @@ function AdjustmentForm({ account, onPosted }: { account: Account; onPosted: () 
     {error && <p className='notice error' role='alert'>{error}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
     <form className='account-form' onSubmit={(event) => void submit(event)}>
-      <label>Token amount<input name='amount' type='number' step='1' min='-2147483647' max='2147483647' required readOnly={Boolean(pending)} /></label>
-      <label>Reason<textarea name='reason' required maxLength={500} rows={3} readOnly={Boolean(pending)} placeholder='Explain the credit or correction' /></label>
-      <button className='primary' disabled={busy}>{busy ? 'Posting…' : pending ? 'Retry this transaction' : 'Post adjustment'}</button>
+      <label>Token amount<TextField variant="outlined" size="small" fullWidth name='amount' type='number' required slotProps={{ htmlInput: { step: 1, min: -2147483647, max: 2147483647, readOnly: Boolean(pending) } }} /></label>
+      <label>Reason<TextField variant="outlined" size="small" fullWidth multiline name='reason' required rows={3} slotProps={{ htmlInput: { maxLength: 500, readOnly: Boolean(pending) } }} placeholder='Explain the credit or correction' /></label>
+      <Button variant='contained' className='primary' disabled={busy}>{busy ? 'Posting…' : pending ? 'Retry this transaction' : 'Post adjustment'}</Button>
       {pending && !busy && <p className='field-help'>Keep this page open and retry to confirm the result without creating a duplicate.</p>}
     </form>
   </section>;
@@ -68,18 +70,18 @@ export function TokenAdmin() {
   return <main className='account-page'>
     <p className='eyebrow'>Platform administration</p><h1>Token accounts</h1>
     <form className='account-actions' onSubmit={(event) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((v) => v + 1); }}>
-      <label>Workspace or owner email<input value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} /></label>
-      <button disabled={loading}>Search</button>
+      <label>Workspace or owner email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
+      <Button disabled={loading}>Search</Button>
     </form>
     {error && <p className='notice error' role='alert'>{error}</p>}
     {loading && <p role='status'>Loading accounts…</p>}
     {accounts && !loading && !error && <>
       <ul className='account-resource-list'>{accounts.accounts.map((account) => <li key={account.id}>
         <div><strong>{account.name}</strong><small>{account.ownerEmail} · {account.balance.toLocaleString()} tokens</small></div>
-        <button onClick={() => setSelected(account)} aria-pressed={selected?.id === account.id}>View account</button>
+        <Button onClick={() => setSelected(account)} aria-pressed={selected?.id === account.id}>View account</Button>
       </li>)}</ul>
       {accounts.accounts.length === 0 && <p>No accounts found.</p>}
-      <div className='account-actions'>{after && <button onClick={() => setAfter('')}>First page</button>}{accounts.nextCursor && <button onClick={() => setAfter(accounts.nextCursor!)}>Next accounts</button>}</div>
+      <div className='account-actions'>{after && <Button onClick={() => setAfter('')}>First page</Button>}{accounts.nextCursor && <Button onClick={() => setAfter(accounts.nextCursor!)}>Next accounts</Button>}</div>
     </>}
     {selected && <>
       <AdjustmentForm key={selected.id} account={selected} onPosted={() => setRevision((v) => v + 1)} />

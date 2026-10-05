@@ -1,3 +1,8 @@
+import { TextField } from '@mui/material';
+import { MenuItem, Select, type SelectChangeEvent } from '@mui/material';
+import { Avatar, Button, IconButton } from '@mui/material';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { TokenAdmin } from './TokenAdmin';
 import { AccountMembersAdmin } from './AccountMembersAdmin';
 import { TokenHistory } from './TokenHistory';
@@ -92,35 +97,35 @@ const BrandBanner = () => {
   );
 };
 
-const WorkspaceSelect = ({ workspaces, disabled, onChange, value }: { workspaces: Workspace[]; disabled: boolean; value: string; onChange: React.ChangeEventHandler<HTMLSelectElement, HTMLSelectElement> }) => {
+const WorkspaceSelect = ({ workspaces, disabled, onChange, value }: { workspaces: Workspace[]; disabled: boolean; value: string; onChange: (event: SelectChangeEvent<string>) => void }) => {
   return (
     workspaces.length > 0 && (
       <label className='workspace-selector'>
         <span>Workspace</span>
-        <select aria-label='Active workspace' disabled={disabled} value={value} onChange={onChange}>
+        <Select variant='outlined' size='small' sx={{ minWidth: 180 }} aria-label='Active workspace' disabled={disabled} value={value} onChange={onChange}>
           {workspaces.map((workspace) => (
-            <option value={workspace.id} key={workspace.id}>
+            <MenuItem value={workspace.id} key={workspace.id}>
               {workspace.name}
-            </option>
+            </MenuItem>
           ))}
-        </select>
+        </Select>
       </label>
     )
   );
 };
 
-const WebsitesSelect = ({ websites, onChange, selected }: { websites: Website[]; selected: string; onChange: React.ChangeEventHandler<HTMLSelectElement, HTMLSelectElement> }) => {
+const WebsitesSelect = ({ websites, onChange, selected }: { websites: Website[]; selected: string; onChange: (event: SelectChangeEvent<string>) => void }) => {
   return (
     websites.length > 0 && (
       <label className='workspace-selector'>
         <span>Website</span>
-        <select aria-label='Active website' value={selected} onChange={onChange}>
+        <Select variant='outlined' size='small' sx={{ minWidth: 180 }} aria-label='Active website' value={selected} onChange={onChange}>
           {websites.map((site) => (
-            <option value={site.id} key={site.id}>
+            <MenuItem value={site.id} key={site.id}>
               {site.name}
-            </option>
+            </MenuItem>
           ))}
-        </select>
+        </Select>
       </label>
     )
   );
@@ -141,12 +146,9 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
 
 const SettingsButton = ({ path }: { path: string }) => {
   return (
-    <a className='btn-nav workspace-icon-link' href='/account' aria-label='Settings' title='Settings' aria-current={path === '/account' ? 'page' : undefined}>
-      <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
-        <path d='m9 3-.6 2.4-1.8 1.1-2.4-.7-3 5.2 1.8 1.7v2.1l-1.8 1.7 3 5.2 2.4-.7 1.8 1.1L9 24h6l.6-2.4 1.8-1.1 2.4.7 3-5.2-1.8-1.7v-2.1l1.8-1.7-3-5.2-2.4.7-1.8-1.1L15 3Z' transform='translate(2 0) scale(.8333)' />
-        <circle cx='12' cy='11.25' r='3' />
-      </svg>
-    </a>
+    <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/account' ? 'contained' : 'text'} href='/account' aria-label='Settings' title='Settings' aria-current={path === '/account' ? 'page' : undefined}>
+      <SettingsRoundedIcon aria-hidden='true' />
+    </Button>
   );
 };
 
@@ -171,9 +173,9 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
   }, [open]);
   const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || user.email[0]?.toUpperCase() || '?';
   return <div className='account-menu' ref={container}>
-    <button className='account-avatar-button' type='button' aria-label={`Account menu for ${user.name || user.email}`} aria-expanded={open} aria-controls='account-menu-panel' onClick={() => setOpen((value) => !value)}>
-      {user.avatarUrl && !imageFailed ? <img src={user.avatarUrl} alt='' referrerPolicy='no-referrer' onError={() => setImageFailed(true)} /> : <span aria-hidden='true'>{initials}</span>}
-    </button>
+    <IconButton className='account-avatar-button' sx={{ p: 0, width: 38, height: 38, border: '2px solid #d7e5dd', backgroundColor: '#dfece5', color: '#234f42', '&:hover, &[aria-expanded=true]': { borderColor: '#186d4c' } }} type='button' aria-label={`Account menu for ${user.name || user.email}`} aria-expanded={open} aria-controls='account-menu-panel' onClick={() => setOpen((value) => !value)}>
+      <Avatar sx={{ width: 34, height: 34, fontSize: '0.85rem' }} src={!imageFailed ? user.avatarUrl || undefined : undefined} alt='' slotProps={{ img: { referrerPolicy: 'no-referrer', onError: () => setImageFailed(true) } }}>{initials}</Avatar>
+    </IconButton>
     {open && <div className='account-menu-panel' id='account-menu-panel'>
       <div className='account-menu-identity'><strong>{user.name}</strong><small>{user.email}</small></div>
       <a href='/account'>Settings</a>
@@ -182,36 +184,32 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
         <a href='/admin/tokens'>Token admin</a>
         <a href='/admin/members'>Account members</a>
       </>}
-      <button type='button' disabled={busy} onClick={onSignOut}>Sign out</button>
+      <Button type='button' variant='text' sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }} disabled={busy} onClick={onSignOut}>Sign out</Button>
     </div>}
   </div>;
 };
 
 const JobsButton = ({ href, path }: { href: string; path: string }) => {
   return (
-    <a className='btn-nav' href={href} aria-current={path === '/' || path.startsWith('/jobs/') ? 'page' : undefined}>
+    <Button component='a' className='btn-nav' variant={path === '/' || path.startsWith('/jobs/') ? 'contained' : 'text'} href={href} aria-current={path === '/' || path.startsWith('/jobs/') ? 'page' : undefined}>
       Jobs
-    </a>
+    </Button>
   );
 };
 
 const PluginButton = ({ path }: { path: string }) => {
   return (
-    <a className='btn-nav' href='/wordpress-plugin' aria-current={path === '/wordpress-plugin' ? 'page' : undefined}>
+    <Button component='a' className='btn-nav' variant={path === '/wordpress-plugin' ? 'contained' : 'text'} href='/wordpress-plugin' aria-current={path === '/wordpress-plugin' ? 'page' : undefined}>
       Plugin
-    </a>
+    </Button>
   );
 };
 
 const WordpressButton = ({ path }: { path: string }) => {
   return (
-    <a className='btn-nav workspace-icon-link' href='/wordpress-integration' aria-label='Help' title='Help' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
-      <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
-        <circle cx='12' cy='12' r='9' />
-        <path d='M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5' />
-        <path d='M12 16.5h.01' />
-      </svg>
-    </a>
+    <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/wordpress-integration' ? 'contained' : 'text'} href='/wordpress-integration' aria-label='Help' title='Help' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
+      <HelpOutlineRoundedIcon aria-hidden='true' />
+    </Button>
   );
 };
 
@@ -274,7 +272,12 @@ export function Workspace({ children }: { children: ReactNode }) {
         if (!active) return;
         setSession(current);
         if (current.mode === 'local') {
+          if (!current.user) throw new Error('Invalid local session response.');
+          setWorkspaces(DemoWorkspaces);
+          setWebsites(DemoWebsites);
+          setConnections([]);
           configureApi('local', '', '');
+          setSelected(DemoWebsites[0]?.id || '');
           setLoaded(true);
           return;
         }
@@ -343,9 +346,9 @@ export function Workspace({ children }: { children: ReactNode }) {
             Sign-in could not be completed. Please try again.
           </p>
         )}
-        <a className='account-primary-link' href='/auth/google'>
+        <Button component='a' variant='contained' className='account-primary-link' href='/auth/google'>
           Continue with Google
-        </a>
+        </Button>
         <p className='field-help'>Your websites and integrations stay private to your account.</p>
       </main>
     );
@@ -354,44 +357,12 @@ export function Workspace({ children }: { children: ReactNode }) {
       <main className='account-page'>
         <h1>ServiceTitan Jobs</h1>
         <p role={error ? 'alert' : 'status'}>{error || 'Loading your workspace…'}</p>
-        {error && <button onClick={() => window.location.reload()}>Try again</button>}
+        {error && <Button onClick={() => window.location.reload()}>Try again</Button>}
       </main>
     );
 
-  if (session?.mode === 'local')
-    return (
-      <>
-        <header className='workspace-bar'>
-          <BrandBanner />
-          <div className='d-flex gap-2 p-3 align-end'>
-            <WorkspaceSelect workspaces={DemoWorkspaces} disabled={busy} value={session.user?.workspaceId || ''} onChange={(event) => void selectWorkspace(event.target.value)} />
-            <WebsitesSelect websites={DemoWebsites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
-            <div style={{ flexGrow: 1 }} />
-            <JobsButton href={jobsHref} path={path} />
-            <WorkspaceTokens count={3} path={path} />
-            <PluginButton path={path} />
-            <WordpressButton path={path} />
-            <SettingsButton path={path} />
-          </div>
-        </header>
-        {path === '/add-tokens' ? (
-          <main className='account-page'>
-            <p className='eyebrow'>Local workspace</p>
-            <h1>Add Tokens</h1>
-            <p className='intro'>Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.</p>
-          </main>
-        ) : path === '/account' ? (
-          <main className='account-page'>
-            <h1>Settings</h1>
-            <p>Local workspace connections are configured through the server environment.</p>
-          </main>
-        ) : (
-          children
-        )}
-      </>
-    );
-
   const user = session!.user!;
+  const isLocal = session!.mode === 'local';
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
@@ -400,6 +371,10 @@ export function Workspace({ children }: { children: ReactNode }) {
   const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/account' || websites.length === 0);
 
   const selectWorkspace = async (workspaceId: string) => {
+    if (isLocal) {
+      setSession({ ...session!, user: { ...user, workspaceId, workspaceName: DemoWorkspaces.find((workspace) => workspace.id === workspaceId)?.name || user.workspaceName } });
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -427,6 +402,10 @@ export function Workspace({ children }: { children: ReactNode }) {
     }
   };
   const chooseSite = (id: string) => {
+    if (isLocal) {
+      setSelected(id);
+      return;
+    }
     configureApi(user.id, id, session!.csrfToken!, user.workspaceId);
     try {
       window.sessionStorage.setItem(`website:${user.id}`, id);
@@ -452,6 +431,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     }
   };
   const logout = async () => {
+    if (isLocal) return;
     setBusy(true);
     setError('');
     try {
@@ -498,15 +478,15 @@ export function Workspace({ children }: { children: ReactNode }) {
       <header className='workspace-bar'>
         <BrandBanner />
         <div className='d-flex gap-2 p-2 align-end'>
-          <WorkspaceSelect workspaces={workspaces} disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)} />
-          <WebsitesSelect websites={websites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
+          <WorkspaceSelect workspaces={isLocal ? DemoWorkspaces : workspaces} disabled={busy} value={user.workspaceId} onChange={(event) => void selectWorkspace(event.target.value)} />
+          <WebsitesSelect websites={isLocal ? DemoWebsites : websites} selected={selected} onChange={(event) => chooseSite(event.target.value)} />
           <div style={{ flexGrow: 1 }} />
           <JobsButton href={jobsHref} path={path} />
-          <WorkspaceTokens count={user.jobTokens} path={path} />
+          <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <PluginButton path={path} />
           <WordpressButton path={path} />
           <SettingsButton path={path} />
-          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy} />
+          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} />
         </div>
       </header>
 
@@ -519,13 +499,25 @@ export function Workspace({ children }: { children: ReactNode }) {
         <h2 id='token-dialog-title'>No job tokens available</h2>
         <p id='token-dialog-description'>Add tokens to push a post, rebuild a post, or generate an AI description. Your request has not been completed.</p>
         <div className='account-actions'>
-          <a className='account-primary-link' href='/add-tokens'>
+          <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>
             Add Tokens
-          </a>
-          <button onClick={() => tokenDialog.current?.close()}>Close</button>
+          </Button>
+          <Button onClick={() => tokenDialog.current?.close()}>Close</Button>
         </div>
       </dialog>
-      {invitePage ? (
+      {isLocal && tokensPage ? (
+        <main className='account-page'>
+          <p className='eyebrow'>Local workspace</p>
+          <h1>Add Tokens</h1>
+          <p className='intro'>Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.</p>
+        </main>
+      ) : isLocal && path === '/account' ? (
+        <main className='account-page'>
+          <h1>Settings</h1>
+          <p>Local workspace connections are configured through the server environment.</p>
+          <p className='field-help'>Signed in as {user.name} ({user.email})</p>
+        </main>
+      ) : invitePage ? (
         <main className='account-page'>
           <h1>Join a workspace</h1>
           <p>Signed in as {user.email}. Accepting adds you to the invited team and switches your active workspace. Your own workspace stays available.</p>
@@ -535,13 +527,13 @@ export function Workspace({ children }: { children: ReactNode }) {
             </p>
           )}
           {invitationToken ? (
-            <button className='primary' disabled={busy || !invitation} onClick={() => void acceptInvite()}>
+            <Button variant='contained' className='primary' disabled={busy || !invitation} onClick={() => void acceptInvite()}>
               Accept invitation
-            </button>
+            </Button>
           ) : (
             <p className='notice error'>This invitation link is missing its token. Ask the owner for a new link.</p>
           )}
-          <button
+          <Button
             disabled={busy}
             onClick={() => {
               window.sessionStorage.removeItem('pending-team-invite');
@@ -549,7 +541,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             }}
           >
             Cancel
-          </button>
+          </Button>
         </main>
       ) : adminPage ? (
         user.isPlatformAdmin ? <TokenAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
@@ -569,9 +561,9 @@ export function Workspace({ children }: { children: ReactNode }) {
               <>
                 <h3>Testing</h3>
                 <p>Add one free token at a time to test the application. No payment is required.</p>
-                <button className='primary' disabled={busy} onClick={() => void addTestToken()}>
+                <Button variant='contained' className='primary' disabled={busy} onClick={() => void addTestToken()}>
                   {busy ? 'Adding…' : 'Add 1 test token'}
-                </button>
+                </Button>
               </>
             )}
             {message && (
@@ -609,14 +601,14 @@ export function Workspace({ children }: { children: ReactNode }) {
                           {connection.environment} · Tenant {connection.tenantId}
                         </small>
                       </div>
-                      <button
+                      <Button
                         onClick={() => {
                           setEditingConnection(connection);
                           setMessage('');
                         }}
                       >
                         Update credentials
-                      </button>
+                      </Button>
                     </li>
                   ))}
                 </ul>
@@ -624,45 +616,45 @@ export function Workspace({ children }: { children: ReactNode }) {
                   <h3>{editingConnection ? `Update ${editingConnection.name}` : 'Add a connection'}</h3>
                   <label>
                     Name
-                    <input name='name' required maxLength={100} defaultValue={editingConnection?.name} placeholder='My service business' />
+                    <TextField variant="outlined" size="small" fullWidth name='name' required defaultValue={editingConnection?.name} placeholder='My service business' slotProps={{ htmlInput: { maxLength: 100 } }}/>
                   </label>
                   <div className='account-field-pair'>
                     <label>
                       Environment
-                      <select name='environment' defaultValue={editingConnection?.environment || 'integration'}>
-                        <option value='integration'>Integration</option>
-                        <option value='production'>Production</option>
-                      </select>
+                      <Select variant='outlined' size='small' sx={{ width: '100%' }} name='environment' aria-label='Environment' defaultValue={editingConnection?.environment || 'integration'}>
+                        <MenuItem value='integration'>Integration</MenuItem>
+                        <MenuItem value='production'>Production</MenuItem>
+                      </Select>
                     </label>
                     <label>
                       Tenant ID
-                      <input name='tenantId' required pattern='[0-9]{1,20}' defaultValue={editingConnection?.tenantId} readOnly={Boolean(editingConnection)} />
+                      <TextField variant="outlined" size="small" fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection) } }} />
                     </label>
                   </div>
                   <label>
                     Client ID
-                    <input name='clientId' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={500} autoComplete='off' />
+                    <TextField variant="outlined" size="small" fullWidth name='clientId' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='off' slotProps={{ htmlInput: { maxLength: 500 } }}/>
                   </label>
                   <label>
                     Client secret
-                    <input name='clientSecret' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={2000} autoComplete='new-password' />
+                    <TextField variant="outlined" size="small" fullWidth name='clientSecret' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }}/>
                   </label>
                   <label>
                     App key
-                    <input name='appKey' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} maxLength={2000} autoComplete='new-password' />
+                    <TextField variant="outlined" size="small" fullWidth name='appKey' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }}/>
                   </label>
                   <p className='field-help'>
                     Credentials are encrypted and are not displayed again. When updating the same environment, leave a credential blank to keep its saved value. To switch environments, enter all three credentials for the new environment. The change applies to every website using this connection; existing WordPress
                     posts are not changed. Saving does not test ServiceTitan access.
                   </p>
                   <div className='account-actions'>
-                    <button className='primary' disabled={busy}>
+                    <Button variant='contained' className='primary' disabled={busy}>
                       {busy ? 'Saving…' : 'Save connection'}
-                    </button>
+                    </Button>
                     {editingConnection && (
-                      <button type='button' onClick={() => setEditingConnection(undefined)}>
+                      <Button type='button' onClick={() => setEditingConnection(undefined)}>
                         Cancel
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </form>
@@ -678,7 +670,7 @@ export function Workspace({ children }: { children: ReactNode }) {
                         <small>{site.url}</small>
                         <small>{site.wordpressConfigured ? 'WordPress credentials saved' : 'WordPress credentials needed'}</small>
                       </div>
-                      <button onClick={() => setEditingWebsite(site)}>Edit</button>
+                      <Button onClick={() => setEditingWebsite(site)}>Edit</Button>
                     </li>
                   ))}
                 </ul>
@@ -689,23 +681,23 @@ export function Workspace({ children }: { children: ReactNode }) {
                     <h3>{editingWebsite ? `Edit ${editingWebsite.name}` : 'Add a website'}</h3>
                     <label>
                       Name
-                      <input name='name' required maxLength={100} defaultValue={editingWebsite?.name} placeholder='My company website' />
+                      <TextField variant="outlined" size="small" fullWidth name='name' required defaultValue={editingWebsite?.name} placeholder='My company website' slotProps={{ htmlInput: { maxLength: 100 } }}/>
                     </label>
                     <label>
                       Website URL
-                      <input name='url' type='url' required defaultValue={editingWebsite?.url} readOnly={Boolean(editingWebsite)} placeholder='https://example.com' />
+                      <TextField variant="outlined" size="small" fullWidth name='url' type='url' required defaultValue={editingWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite) } }} placeholder='https://example.com' />
                     </label>
                     <label>
                       ServiceTitan connection
-                      <select name='connectionId' defaultValue={editingWebsite?.connectionId || connections[0]?.id}>
+                      <Select variant='outlined' size='small' sx={{ width: '100%' }} name='connectionId' aria-label='ServiceTitan connection' defaultValue={editingWebsite?.connectionId || connections[0]?.id}>
                         {connections
                           .filter((connection) => !editingWebsite || connection.id === editingWebsite.connectionId)
                           .map((connection) => (
-                            <option value={connection.id} key={connection.id}>
+                            <MenuItem value={connection.id} key={connection.id}>
                               {connection.name}
-                            </option>
+                            </MenuItem>
                           ))}
-                      </select>
+                      </Select>
                     </label>
                     <p className='field-help'>
                       Install the{' '}
@@ -716,32 +708,32 @@ export function Workspace({ children }: { children: ReactNode }) {
                     </p>
                     <label>
                       WordPress username
-                      <input name='username' maxLength={100} autoComplete='off' />
+                      <TextField variant="outlined" size="small" fullWidth name='username' autoComplete='off' slotProps={{ htmlInput: { maxLength: 100 } }}/>
                     </label>
                     <label>
                       Application password
-                      <input name='applicationPassword' type='password' maxLength={500} autoComplete='new-password' />
+                      <TextField variant="outlined" size="small" fullWidth name='applicationPassword' type='password' autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 500 } }}/>
                     </label>
                     {editingWebsite?.wordpressConfigured && <p className='field-help'>Leave both fields blank to keep existing WordPress credentials.</p>}
                     <details>
                       <summary>WordPress settings</summary>
                       <label>
                         Post type REST base
-                        <input name='restBase' defaultValue={editingWebsite?.restBase || 'st-jobs'} required />
+                        <TextField variant="outlined" size="small" fullWidth name='restBase' defaultValue={editingWebsite?.restBase || 'st-jobs'} required />
                       </label>
                       <label>
                         ZIP ACF field
-                        <input name='zipAcfField' defaultValue={editingWebsite?.zipAcfField || 'my_zip_codes'} required />
+                        <TextField variant="outlined" size="small" fullWidth name='zipAcfField' defaultValue={editingWebsite?.zipAcfField || 'my_zip_codes'} required />
                       </label>
                     </details>
                     <div className='account-actions'>
-                      <button className='primary' disabled={busy}>
+                      <Button variant='contained' className='primary' disabled={busy}>
                         {busy ? 'Saving…' : 'Save website'}
-                      </button>
+                      </Button>
                       {editingWebsite && (
-                        <button type='button' onClick={() => setEditingWebsite(undefined)}>
+                        <Button type='button' onClick={() => setEditingWebsite(undefined)}>
                           Cancel
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </form>

@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Chip, IconButton, Paper, TextField, Typography } from '@mui/material';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import LinkIcon from '@mui/icons-material/Link';
 import type { BuildTask } from '../shared/build-queue';
 import { JobThumbnail } from './JobThumbnail';
 import { apiFetch, wordpressStatusStorage } from './api';
@@ -27,7 +30,17 @@ interface ActionError {
   message: string;
 }
 type WordPressWritableStatus = 'draft' | 'publish';
+type StatusChipColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
 const unknownWordPressStatus: WordPressStatus = { state: 'unknown', label: 'Unknown' };
+
+const serviceTitanStatusColor = (status: string): StatusChipColor => {
+  const normalized = status.toLowerCase();
+  if (/completed|complete|success|closed/.test(normalized)) return 'success';
+  if (/cancel|failed|error|void/.test(normalized)) return 'error';
+  if (/progress|dispatched|started|working/.test(normalized)) return 'info';
+  if (/scheduled|hold|pending|on.?hold/.test(normalized)) return 'warning';
+  return 'default';
+};
 
 const toDateInput = (date: Date): string => {
   const year = date.getFullYear();
@@ -296,19 +309,19 @@ export function App() {
     <main>
       <header className='hero'>
         {/* <p className='eyebrow'>ServiceTitan workspace</p> */}
-        <h3>ServiceTitan Jobs Search</h3>
+        <Typography variant="h3" component="h1">ServiceTitan Jobs Search</Typography>
         {/* <p className='intro'>Choose an inclusive date range to find completed jobs and their service locations.</p> */}
       </header>
 
-      {queueError && <p role='alert'>{queueError} Builds already queued continue on the server.</p>}
+      {queueError && <Alert severity="error">{queueError} Builds already queued continue on the server.</Alert>}
       {wordpressPluginLoading ? (
-        <div className='plugin-compatibility-banner' role='status'>
+        <Alert severity="info" sx={{ mb: 2 }} role='status'>
           Checking WordPress plugin compatibility…
-        </div>
+        </Alert>
       ) : (
         !wordpressPluginReady &&
         !wordpressPluginUpdateRequired && (
-          <div className='plugin-compatibility-banner warning' role='alert'>
+          <Alert severity="warning" sx={{ mb: 2 }} role='alert'>
             <div>
               <strong>{wordpressPluginStatus?.state === 'update_required' ? 'WordPress plugin update required' : 'WordPress plugin could not be verified'}</strong>
               <span>
@@ -317,31 +330,31 @@ export function App() {
               </span>
             </div>
             <a href='/wordpress-plugin'>Open plugin setup</a>
-          </div>
+          </Alert>
         )
       )}
 
-      <section className='panel' aria-labelledby='filters-heading'>
+      <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
-        <form action='/' method='get'>
+        <form className='job-search-form' action='/' method='get'>
           <label>
             <span>Start date</span>
-            <input name='start' type='date' required value={draftRange.start} max={draftRange.end} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
+            <TextField name='start' type='date' required size="small" value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
           </label>
           <label>
             <span>End date</span>
-            <input name='end' type='date' required value={draftRange.end} min={draftRange.start} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
+            <TextField name='end' type='date' required size="small" value={draftRange.end} slotProps={{ htmlInput: { min: draftRange.start } }} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
           </label>
           <label>
             <span>ZIP code</span>
-            <input name={draftRange.zip ? 'zip' : undefined} type='text' inputMode='numeric' autoComplete='postal-code' placeholder='Optional' pattern='\d{5}(-\d{4})?' value={draftRange.zip} onChange={(event) => setDraftRange((current) => ({ ...current, zip: event.target.value.trim() }))} />
+            <TextField name={draftRange.zip ? 'zip' : undefined} type='text' size="small" slotProps={{ htmlInput: { inputMode: 'numeric', pattern: '\\d{5}(-\\d{4})?' } }} autoComplete='postal-code' placeholder='Optional' value={draftRange.zip} onChange={(event) => setDraftRange((current) => ({ ...current, zip: event.target.value.trim() }))} />
           </label>
           <input name='pageSize' type='hidden' value={search.pageSize} />
-          <button className='primary' type='submit' disabled={loading}>
+          <Button variant='contained' className='primary' type='submit' disabled={loading}>
             {loading ? 'Loading…' : 'Find jobs'}
-          </button>
+          </Button>
         </form>
-      </section>
+      </Paper>
 
       <section className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>
@@ -352,10 +365,10 @@ export function App() {
           {result && (
             <div className='results-actions'>
               {/* {result.data.length > 0 && (
-                <button className={`bulk-refresh-button${bulkRefreshing ? ' is-spinning' : ''}`} type='button' disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onClick={() => void refreshPageWordpressStatuses()}>
+                <Button className={`bulk-refresh-button${bulkRefreshing ? ' is-spinning' : ''}`} type='button' disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onClick={() => void refreshPageWordpressStatuses()}>
                   <RefreshIcon />
                   {bulkRefreshing ? 'Refreshing…' : 'Refresh page statuses'}
-                </button>
+                </Button>
               )} */}
               <p className='page-label'>
                 Page {result.page}
@@ -366,14 +379,14 @@ export function App() {
         </div>
 
         {error && (
-          <div className='notice error' role='alert'>
+          <Alert severity="error" role='alert'>
             {error}
-          </div>
+          </Alert>
         )}
         {loading && (
-          <div className='notice' role='status'>
+          <Alert severity="info" role='status'>
             Loading ServiceTitan jobs…
-          </div>
+          </Alert>
         )}
         {!loading && !error && result?.data.length === 0 && <div className='notice'>No jobs were found in this appointment date range.</div>}
 
@@ -383,42 +396,37 @@ export function App() {
               <colgroup>
                 <col className='job-image-column' />
                 <col className='job-name-column' />
-                <col className='state-column' />
-                <col className='zip-column' />
-                <col className='city-column' />
+                <col className='location-column' />
                 <col className='st-status-column' />
                 <col className='wp-status-column' />
-                <col className='wp-link-column' />
                 <col className='actions-column' />
-                <col className='refresh-column' />
               </colgroup>
               <thead>
                 <tr>
                   <th scope='colgroup' colSpan={2}>
                     Job
                   </th>
-                  <th scope='colgroup' colSpan={3}>
+                  <th scope='col'>
                     Location
                   </th>
                   <th scope='col'>ST status</th>
-                  <th scope='colgroup' colSpan={2}>
+                  <th scope='col'>
                     WordPress
                   </th>
-                  <th scope='col'>
-                    <span className='visually-hidden'>Job actions</span>
-                  </th>
-                  <th scope='col'>
-                    <span className='visually-hidden'>Refresh status</span>
-                    <button
-                      title='Refresh all'
-                      aria-label='Refresh all WordPress statuses'
-                      className={`icon-button Xbulk-refresh-button${bulkRefreshing ? ' is-spinning' : ''}`}
-                      type='button'
-                      disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0}
-                      onClick={() => void refreshPageWordpressStatuses()}
-                    >
-                      <RefreshIcon />
-                    </button>
+                  <th scope='col' className='actions-heading'>
+                    <div className='actions-heading-content'>
+                      <span>ACTIONS</span>
+                      <IconButton
+                        size='small'
+                        title='Refresh all WordPress statuses'
+                        aria-label='Refresh all WordPress statuses'
+                        className={bulkRefreshing ? 'is-spinning' : undefined}
+                        disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0}
+                        onClick={() => void refreshPageWordpressStatuses()}
+                      >
+                        <RefreshIcon />
+                      </IconButton>
+                    </div>
                   </th>
                 </tr>
               </thead>
@@ -429,9 +437,31 @@ export function App() {
                   const buildBusy = queueingJobs.has(job.id) || buildTask?.state === 'queued' || buildTask?.state === 'running';
                   const wordpressBusy = busyWordpressJobs.has(job.id) || buildBusy;
                   const wordpressDisplayLabel = wordpressStatus.state === 'not_found' ? 'None' : wordpressStatus.label;
-                  const wordpressStatusValue = wordpressStatus.label === 'Loading…' || wordpressStatus.label === 'Updating…' ? '' : wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish' ? wordpressStatus.postStatus : '';
+                  const wordpressStatusLabel = wordpressStatus.state === 'exists'
+                    ? wordpressStatus.postStatus === 'publish' ? 'Published' : wordpressStatus.postStatus === 'draft' ? 'Draft' : wordpressStatus.label
+                    : wordpressDisplayLabel;
+                  const wordpressStatusColor: StatusChipColor = wordpressStatus.state === 'not_found'
+                    ? 'default'
+                    : wordpressStatus.state === 'unknown'
+                      ? wordpressStatus.label.toLowerCase().includes('loading') ? 'info' : 'error'
+                      : wordpressStatus.postStatus === 'publish' ? 'success' : wordpressStatus.postStatus === 'draft' ? 'warning' : 'default';
+                  const detailsHref = jobDetailsUrl(job.id, search);
+                  const openJobDetails = () => window.location.assign(detailsHref);
                   return (
-                    <tr key={job.id}>
+                    <tr
+                      key={job.id}
+                      className='job-row'
+                      tabIndex={0}
+                      aria-label={`Open ${job.jobName} details`}
+                      onClick={openJobDetails}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openJobDetails();
+                        }
+                      }}
+                    >
                       <td className='job-image-cell' data-label='Image'>
                         <JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} />
                       </td>
@@ -445,87 +475,60 @@ export function App() {
                           </span>
                         )}
                       </td>
-                      <td className='location-cell state-cell' data-label='State'>
-                        {/* <strong>{job.location.city}</strong> */}
-                        {/* <span> */}
-                        {job.location.state}
-                        {/* </span> */}
-                      </td>
-                      <td className='location-cell zip-cell' data-label='ZIP'>
-                        {job.location.zip}
-                      </td>
-                      <td className='location-cell city-cell' data-label='City'>
-                        <div className='location-cell-city' title={job.location.city}>
-                          {job.location.city}
+                      <td className='location-cell' data-label='Location'>
+                        <div className='location-cell-city' title={`${job.location.city}, ${job.location.state}`}>
+                          {job.location.city}, {job.location.state}
                         </div>
+                        <span>{job.location.zip}</span>
                       </td>
                       <td className='st-status-cell' data-label='ST status'>
-                        <span className='status'>{job.status}</span>
+                        <Chip size='small' color={serviceTitanStatusColor(job.status)} label={job.status} />
                       </td>
                       <td className='wp-status-cell' data-label='WordPress'>
-                        <div className='wordpress-status' title={wordpressStatus.message}>
-                          <select
-                            className='wp-status-select'
-                            aria-label={`WordPress status for ${job.jobName}`}
-                            value={wordpressStatusValue}
-                            disabled={!wordpressPluginReady || wordpressBusy || wordpressStatus.state !== 'exists'}
-                            onChange={(event) => void updateWordpressStatus(job.id, event.target.value as WordPressWritableStatus)}
-                          >
-                            {wordpressStatusValue === '' && <option value=''>{wordpressDisplayLabel}</option>}
-                            {wordpressStatus.state === 'exists' && <option value='draft'>Draft</option>}
-                            {wordpressStatus.state === 'exists' && <option value='publish'>Published</option>}
-                          </select>
-                          {/* <button
-                            className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`}
-                            type="button"
-                            aria-label={`Refresh WordPress status for ${job.jobName}`}
-                            title="Refresh WordPress post status"
-                            disabled={!wordpressPluginReady || wordpressBusy}
-                            onClick={() => void requestWordpress(job.id)}
-                          >
-                            <RefreshIcon />
-                          </button> */}
-                        </div>
-                      </td>
-                      <td className='wp-link-cell' data-label='WordPress post'>
-                        {wordpressStatus.state === 'exists' && wordpressStatus.link && (
-                          <a className='wordpress-view-link' href={wordpressStatus.link} target='_blank' rel='noreferrer' aria-label='View post' title='View post'>
-                            <LinkIcon />
-                          </a>
-                        )}
+                        <Chip
+                          size='small'
+                          color={wordpressStatusColor}
+                          label={wordpressStatusLabel}
+                          title={wordpressStatus.message}
+                        />
                       </td>
                       <td className='actions-cell' data-label='Actions'>
                         <div className='row-actions'>
-                          {(wordpressStatus.state !== 'exists' || buildBusy) && (
-                            <button className='primary build-deploy-button' type='button'
-                              disabled={!wordpressPluginReady || wordpressBusy || wordpressStatus.state !== 'not_found' || Boolean(queueError)}
-                              title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens. Continues after you close this page.'
-                              onClick={() => void enqueueBuild(job.id)}>
-                              {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build & deploy'}
-                            </button>
+                          {wordpressStatus.state === 'exists' && wordpressStatus.link && (
+                            <Button component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' startIcon={<LinkIcon />} onClick={(event) => event.stopPropagation()}>
+                              View post
+                            </Button>
+                          )}
+                          {wordpressStatus.state === 'not_found' && (
+                            <Button variant='contained' color='primary' className='build-deploy-button' type='button'
+                              disabled={!wordpressPluginReady || wordpressBusy || Boolean(queueError)}
+                              title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens.'
+                              onClick={(event) => { event.stopPropagation(); void enqueueBuild(job.id); }}>
+                              {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build draft'}
+                            </Button>
                           )}
                           {buildTask?.state === 'failed' && <span className='build-deploy-error' role='status'>{buildTask.error}</span>}
 
-                          {wordpressStatus.state === 'exists' && (
-                            <button
+                          {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'draft' && (
+                            <Button variant='contained' className='primary' type='button' disabled={!wordpressPluginReady || wordpressBusy} onClick={(event) => { event.stopPropagation(); void updateWordpressStatus(job.id, 'publish'); }}>
+                              {wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Publishing…' : 'Publish post'}
+                            </Button>
+                          )}
+                          {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'publish' && (
+                            <Button
                               className={`regenerate-button rebuild-${rebuildUpdateLevel(wordpressStatus)}`}
                               type='button'
                               disabled={!wordpressPluginReady || wordpressBusy || wordpressStatus.seoState === 'newer'}
                               title={rebuildButtonDescription(wordpressStatus)}
-                              onClick={() => void regenerateWordpress(job.id, wordpressStatus)}
+                              onClick={(event) => { event.stopPropagation(); void regenerateWordpress(job.id, wordpressStatus); }}
                             >
                               {wordpressBusy && wordpressStatus.label === 'Regenerating…' ? 'Regenerating…' : 'Rebuild'}
-                            </button>
+                            </Button>
                           )}
-                          <a className='details-button' href={jobDetailsUrl(job.id, search)}>
-                            Details
-                          </a>
+                          <IconButton size='small' className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`} type='button' aria-label={`Refresh WordPress status for ${job.jobName}`} title='Refresh WordPress post status' disabled={!wordpressPluginReady || wordpressBusy} onClick={(event) => { event.stopPropagation(); void requestWordpress(job.id); }}>
+                            <RefreshIcon />
+                          </IconButton>
                         </div>
-                      </td>
-                      <td className='refresh-cell' data-label='Refresh'>
-                        <button className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`} type='button' aria-label={`Refresh WordPress status for ${job.jobName}`} title='Refresh WordPress post status' disabled={!wordpressPluginReady || wordpressBusy} onClick={() => void requestWordpress(job.id)}>
-                          <RefreshIcon />
-                        </button>
                       </td>
                     </tr>
                   );
@@ -538,23 +541,19 @@ export function App() {
         {result && !error && (
           <nav className='pagination' aria-label='Jobs pages'>
             {search.page > 1 ? (
-              <a className='pagination-link' href={jobsListUrl(search, search.page - 1)}>
+              <Button component='a' className='pagination-link' href={jobsListUrl(search, search.page - 1)}>
                 Previous
-              </a>
+              </Button>
             ) : (
-              <span className='pagination-link is-disabled' aria-disabled='true'>
-                Previous
-              </span>
+              <Button className='pagination-link' disabled>Previous</Button>
             )}
             <span>Page {search.page}</span>
             {result.hasMore ? (
-              <a className='pagination-link' href={jobsListUrl(search, search.page + 1)}>
+              <Button component='a' className='pagination-link' href={jobsListUrl(search, search.page + 1)}>
                 Next
-              </a>
+              </Button>
             ) : (
-              <span className='pagination-link is-disabled' aria-disabled='true'>
-                Next
-              </span>
+              <Button className='pagination-link' disabled>Next</Button>
             )}
           </nav>
         )}
@@ -568,9 +567,9 @@ export function App() {
             </div>
             <h2 id='wordpress-error-title'>{actionError.title}</h2>
             <p id='wordpress-error-message'>{actionError.message}</p>
-            <button type='button' className='primary' autoFocus onClick={() => setActionError(undefined)}>
+            <Button type='button' variant='contained' className='primary' autoFocus onClick={() => setActionError(undefined)}>
               Close
-            </button>
+            </Button>
           </section>
         </div>
       )}
@@ -578,25 +577,7 @@ export function App() {
   );
 }
 
-function RefreshIcon() {
-  return (
-    <svg aria-hidden='true' viewBox='0 0 24 24' width='16' height='16' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-      <path d='M20 6v5h-5' />
-      <path d='M4 18v-5h5' />
-      <path d='M18.4 9A7 7 0 0 0 6.1 6.1L4 8' />
-      <path d='M5.6 15A7 7 0 0 0 17.9 17.9L20 16' />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg aria-hidden='true' viewBox='0 0 24 24' width='15' height='15' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-      <path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' />
-      <path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' />
-    </svg>
-  );
-}
+const RefreshIcon = () => <RefreshRoundedIcon fontSize="small" aria-hidden="true" />;
 
 type RebuildUpdateLevel = 'unnecessary' | 'minor' | 'major' | 'required';
 

@@ -49,7 +49,16 @@ const app = saasConfig && store
       buildQueue: { enqueue: (jobId) => queue.enqueue(localScope, jobId), list: (jobIds) => queue.list(localScope, jobIds) },
     });
 worker.start();
-if (mode === 'local') app.get('/api/session', (_req, res) => { res.json({ mode: 'local' }); });
+if (mode === 'local') app.get('/api/session', (_req, res) => {
+  res.json({ mode: 'local', user: {
+    id: process.env.LOCAL_USER_ID || 'local-user',
+    name: process.env.LOCAL_USER_NAME || 'Local Test User',
+    email: process.env.LOCAL_USER_EMAIL || 'local@example.test',
+    avatarUrl: process.env.LOCAL_USER_AVATAR_URL || null,
+    workspaceId: 'local', workspaceName: 'Local Workspace', role: 'owner', jobTokens: 3,
+    isPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN === 'true'
+  } });
+});
 const port = config?.port || Number(process.env.PORT || '3000');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 

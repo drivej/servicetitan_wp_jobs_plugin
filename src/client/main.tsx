@@ -1,5 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Button, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { Workspace } from './Workspace';
 
 import { App } from './App';
@@ -32,6 +33,8 @@ function AppShell({ children }: { children: ReactNode }) {
   const updateRequired = status?.state === 'update_required';
 
   return (
+    <ThemeProvider theme={theme}>
+    <CssBaseline />
     <div className={`app-shell${updateRequired ? ' has-plugin-violator' : ''}`}>
       {children}
       {updateRequired && (
@@ -45,9 +48,17 @@ function AppShell({ children }: { children: ReactNode }) {
               version {status.requiredVersion} is required. WordPress actions are disabled.
             </p>
           </div>
-          <a href="/wordpress-plugin">Open plugin setup</a>
+          <Button component="a" href="/wordpress-plugin" variant="contained">Open plugin setup</Button>
         </aside>
       )}
     </div>
+    </ThemeProvider>
   );
 }
+
+const theme = createTheme({
+  palette: { mode: 'light', primary: { main: '#186d4c', dark: '#11593d' }, background: { default: '#f1f0ea', paper: '#fcfcf8' }, text: { primary: '#17201c', secondary: '#536159' } },
+  shape: { borderRadius: 9 },
+  typography: { fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', button: { fontWeight: 700, textTransform: 'none' } },
+  components: { MuiButton: { defaultProps: { variant: 'outlined', size: 'small' } } },
+});

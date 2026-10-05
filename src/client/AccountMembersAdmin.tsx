@@ -1,3 +1,4 @@
+import { Button, TextField } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
 
@@ -48,8 +49,8 @@ export function AccountMembersAdmin() {
     <p className='eyebrow'>Platform administration</p><h1>Account members</h1>
     <p className='intro'>View users and their roles across workspaces. Disabling a member ends their sessions and blocks new sign-ins.</p>
     <form className='account-actions' onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((value) => value + 1); }}>
-      <label>Name or email<input value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} /></label>
-      <button disabled={loading}>Search</button>
+      <label>Name or email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
+      <Button disabled={loading}>Search</Button>
     </form>
     {error && <p className='notice error' role='alert'>{error}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
@@ -61,11 +62,11 @@ export function AccountMembersAdmin() {
           <div><strong>{member.name}</strong><small>{member.email} · {member.disabled ? 'Disabled' : 'Active'}{member.isPlatformAdmin ? ' · Platform admin' : ''}</small>
             {member.roles.map((role) => <small key={role.workspaceId}>{role.workspaceName}: {role.role}</small>)}
           </div>
-          {!member.disabled && <button disabled={Boolean(busy) || protectedMember} title={protectedMember ? 'Platform administrators cannot be disabled here' : undefined} onClick={() => void disable(member)}>{busy === member.id ? 'Disabling…' : 'Disable'}</button>}
+          {!member.disabled && <Button disabled={Boolean(busy) || protectedMember} title={protectedMember ? 'Platform administrators cannot be disabled here' : undefined} onClick={() => void disable(member)}>{busy === member.id ? 'Disabling…' : 'Disable'}</Button>}
         </li>;
       })}</ul>
       {page.members.length === 0 && <p>No members found.</p>}
-      <div className='account-actions'>{after && <button onClick={() => setAfter('')}>First page</button>}{page.nextCursor && <button onClick={() => setAfter(page.nextCursor!)}>Next members</button>}</div>
+      <div className='account-actions'>{after && <Button onClick={() => setAfter('')}>First page</Button>}{page.nextCursor && <Button onClick={() => setAfter(page.nextCursor!)}>Next members</Button>}</div>
     </>}
   </main>;
 }

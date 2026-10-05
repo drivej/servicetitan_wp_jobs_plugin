@@ -1,3 +1,6 @@
+import { TextField } from '@mui/material';
+import { MenuItem, Select } from '@mui/material';
+import { Button } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
 
@@ -46,26 +49,26 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     {!team && !error && <p role="status">Loading team…</p>}
     <ul className="account-resource-list">{team?.members.map((member) => <li key={member.id}>
       <div><strong>{member.name}</strong><small>{member.email} · {member.role}</small></div>
-      {role === 'owner' && member.role !== 'owner' && <select aria-label={`Role for ${member.email}`} value={member.role} disabled={busy} onChange={(event) => void update(`/api/team/members/${member.id}`, 'PATCH', { role: event.target.value })}><option value="member">Member</option><option value="admin">Admin</option></select>}
-      {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <button disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.email} from this workspace?`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>Remove</button>}
+      {role === 'owner' && member.role !== 'owner' && <Select size="small" variant='outlined' sx={{ width: '100%' }} aria-label={`Role for ${member.email}`} value={member.role} disabled={busy} onChange={(event) => void update(`/api/team/members/${member.id}`, 'PATCH', { role: event.target.value })}><MenuItem value="member">Member</MenuItem><MenuItem value="admin">Admin</MenuItem></Select>}
+      {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <Button disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.email} from this workspace?`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>Remove</Button>}
     </li>)}</ul>
     {role !== 'member' && <>
       <form className="account-form" onSubmit={(event) => void createInvite(event)}>
         <h3>Invite a teammate</h3>
-        <label>Google account email<input name="email" type="email" required maxLength={254} placeholder="teammate@company.com" /></label>
-        <label>Role<select name="role" defaultValue="member"><option value="member">Member</option>{role === 'owner' && <option value="admin">Admin</option>}</select></label>
+        <label>Google account email<TextField variant="outlined" size="small" fullWidth name="email" type="email" required placeholder="teammate@company.com" slotProps={{ htmlInput: { maxLength: 254 } }}/></label>
+        <label>Role<Select size="small" variant='outlined' sx={{ width: '100%' }} name="role" aria-label="Role" defaultValue="member"><MenuItem value="member">Member</MenuItem>{role === 'owner' && <MenuItem value="admin">Admin</MenuItem>}</Select></label>
         <p className="field-help">Invitations expire after 7 days and must be accepted using the invited Google email. Creating a new invite for the same email replaces its previous link.</p>
-        <button className="primary" disabled={busy}>Create invitation</button>
+        <Button variant="contained" className="primary" disabled={busy}>Create invitation</Button>
       </form>
       {invite && <div className="notice" role="status">
         <p>Invitation created for {invite.email}. Share the link below; no email has been sent automatically.</p>
-        <label>Invitation link<input className="team-invite-link" readOnly value={invite.url} onFocus={(event) => event.target.select()} /></label>
-        <div className="account-actions"><button onClick={() => { void navigator.clipboard.writeText(invite.url).then(() => setMessage('Invitation link copied.'), () => setError('Select and copy the invitation link above.')); }}>Copy link</button>
+        <label>Invitation link<TextField className="team-invite-link" variant="outlined" size="small" fullWidth slotProps={{ htmlInput: { readOnly: true } }} value={invite.url} onFocus={(event) => event.target.select()} /></label>
+        <div className="account-actions"><Button onClick={() => { void navigator.clipboard.writeText(invite.url).then(() => setMessage('Invitation link copied.'), () => setError('Select and copy the invitation link above.')); }}>Copy link</Button>
         <a href={`mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`}>Open email invitation</a></div>
       </div>}
       <h3>Pending invitations</h3>
       {team?.invitations.length === 0 && <p>No pending invitations.</p>}
-      <ul className="account-resource-list">{team?.invitations.map((pending) => <li key={pending.id}><div><strong>{pending.email}</strong><small>{pending.role} · Expires {new Date(pending.expiresAt).toLocaleDateString()}</small></div>{(role === 'owner' || pending.role === 'member') && <button disabled={busy} onClick={() => void update(`/api/team/invitations/${pending.id}`, 'DELETE')}>Revoke</button>}</li>)}</ul>
+      <ul className="account-resource-list">{team?.invitations.map((pending) => <li key={pending.id}><div><strong>{pending.email}</strong><small>{pending.role} · Expires {new Date(pending.expiresAt).toLocaleDateString()}</small></div>{(role === 'owner' || pending.role === 'member') && <Button disabled={busy} onClick={() => void update(`/api/team/invitations/${pending.id}`, 'DELETE')}>Revoke</Button>}</li>)}</ul>
     </>}
   </section>;
 }

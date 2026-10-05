@@ -1,3 +1,4 @@
+import { Button } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { accountFetch } from './api';
 interface Transaction {
@@ -28,7 +29,7 @@ export function TokenHistory({ workspaceId, platform = false, revision = 0 }: { 
     return () => { active = false; };
   }, [workspaceId, platform, before, revision, refresh]);
   return <section className='panel account-panel token-history' aria-label='Token transaction history'>
-    <div className='account-actions'><h2>Token history</h2><button disabled={loading} onClick={() => setRefresh((v) => v + 1)}>Refresh history</button></div>
+    <div className='account-actions'><h2>Token history</h2><Button disabled={loading} onClick={() => setRefresh((v) => v + 1)}>Refresh history</Button></div>
     {error && <p className='notice error' role='alert'>{error}</p>}
     {loading && <p role='status'>Loading transactions…</p>}
     {history && !loading && !error && <>
@@ -46,8 +47,8 @@ export function TokenHistory({ workspaceId, platform = false, revision = 0 }: { 
         </table>
       </div>}
       <div className='account-actions'>
-        {cursors.length > 0 && <button onClick={() => { setBefore(cursors.at(-1)!); setCursors((items) => items.slice(0, -1)); }}>Newer transactions</button>}
-        {history.nextCursor && <button onClick={() => { setCursors((items) => [...items, before]); setBefore(history.nextCursor!); }}>Older transactions</button>}
+        {cursors.length > 0 && <Button onClick={() => { setBefore(cursors.at(-1)!); setCursors((items) => items.slice(0, -1)); }}>Newer transactions</Button>}
+        {history.nextCursor && <Button onClick={() => { setCursors((items) => [...items, before]); setBefore(history.nextCursor!); }}>Older transactions</Button>}
       </div>
       <p className='field-help'>Credits and debits are permanent. Corrections appear as new transactions. Opening entries preserve balances from before the ledger was introduced.</p>
     </>}

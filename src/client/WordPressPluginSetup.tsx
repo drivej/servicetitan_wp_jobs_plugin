@@ -1,3 +1,5 @@
+import { Button } from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
 import { isSaaSWorkspace } from './api';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 
@@ -33,10 +35,10 @@ export function WordPressPluginSetup() {
         </div>
 
         <div className="plugin-install-actions">
-          <a className="download-button account-primary-link" href={pluginDownload} download={pluginFilename}>
+          <Button component="a" variant="contained" className="download-button account-primary-link" href={pluginDownload} download={pluginFilename}>
             <DownloadIcon /> Download version 1.18.0
-          </a>
-          <button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</button>
+          </Button>
+          <Button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</Button>
         </div>
       </section>
 
@@ -66,15 +68,5 @@ export function WordPressPluginSetup() {
         <p>If you see <strong>“Sorry, you are not allowed to do that”</strong>, check the username, Application Password, and user permissions. A security plugin or hosting rule may also be blocking access. This message alone does not mean the companion plugin needs an update.</p>
       </section>
     </main>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v12" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M5 21h14" />
-    </svg>
   );
 }

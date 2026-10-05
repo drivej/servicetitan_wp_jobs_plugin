@@ -20,19 +20,6 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-button {
-  cursor: pointer;
-}
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
 main {
   width: min(1320px, calc(100% - 32px));
   margin: 0 auto;
@@ -93,26 +80,6 @@ END - REUSABLE CLASSES
   gap: 6px;
   margin-bottom: 0;
 }
-.btn-nav,
-.app-nav a {
-  height: min-content;
-  padding: 8px 12px;
-  color: #526159;
-  border-radius: 7px;
-  font-size: 0.86rem;
-  font-weight: 750;
-  text-decoration: none;
-}
-.btn-nav:hover,
-.app-nav a:hover {
-  color: #186d4c;
-  background: #e8ede9;
-}
-.btn-nav[aria-current='page'],
-.app-nav a[aria-current='page'] {
-  color: white;
-  background: #263b31;
-}
 .hero {
   max-width: 720px;
   margin-bottom: 36px;
@@ -164,113 +131,19 @@ h2 {
   font-weight: 800;
   letter-spacing: 0;
 }
-form {
+.job-search-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
   gap: 16px;
   align-items: end;
   /* margin-top: 18px; */
 }
-label span {
+.job-search-form label > span {
   display: block;
   margin-bottom: 7px;
   color: #46524b;
   font-size: 0.8rem;
   font-weight: 750;
-}
-input {
-  width: 100%;
-  min-height: 46px;
-  padding: 9px 12px;
-  color: #17201c;
-  background: white;
-  border: 1px solid #cbd1cc;
-  border-radius: 9px;
-}
-input:focus,
-select:focus,
-button:focus-visible {
-  outline: 3px solid rgba(24, 109, 76, 0.23);
-  outline-offset: 2px;
-}
-button {
-  /* min-height: 44px; */
-  padding: 10px 17px;
-  color: #253129;
-  background: #f8f9f6;
-  border: 1px solid #cbd1cc;
-  border-radius: 9px;
-  font-weight: 750;
-}
-button:hover:not(:disabled) {
-  border-color: #186d4c;
-}
-.primary {
-  min-height: 46px;
-  padding-inline: 24px;
-  color: white;
-  background: #186d4c;
-  border-color: #186d4c;
-}
-.primary:hover:not(:disabled) {
-  background: #11593d;
-}
-.download-button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-height: 46px;
-  padding: 10px 18px;
-  color: white;
-  background: #186d4c;
-  border: 1px solid #186d4c;
-  border-radius: 9px;
-  font-weight: 750;
-  text-decoration: none;
-}
-.download-button:hover {
-  background: #11593d;
-}
-.download-button:disabled {
-  cursor: wait;
-  opacity: 0.7;
-}
-.download-button:focus-visible {
-  outline: 3px solid rgba(24, 109, 76, 0.23);
-  outline-offset: 2px;
-}
-.plugin-compatibility-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 20px;
-  padding: 15px 18px;
-  color: #4e5b54;
-  background: #e8ede9;
-  border: 1px solid #d3dbd5;
-  border-radius: 10px;
-}
-.plugin-compatibility-banner.warning {
-  color: #6f5218;
-  background: #fff5d9;
-  border-color: #e8d196;
-}
-.plugin-compatibility-banner div {
-  display: grid;
-  gap: 3px;
-}
-.plugin-compatibility-banner span {
-  font-size: 0.86rem;
-}
-.plugin-compatibility-banner a {
-  flex: 0 0 auto;
-  color: inherit;
-  font-size: 0.86rem;
-  font-weight: 800;
-  text-underline-offset: 3px;
 }
 .plugin-update-violator {
   position: fixed;
@@ -323,18 +196,8 @@ button:hover:not(:disabled) {
   font-size: 0.8rem;
   line-height: 1.4;
 }
-.plugin-update-violator > a {
-  padding: 9px 13px;
-  color: #fff;
-  background: #5d4113;
-  border-radius: 7px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  text-decoration: none;
+.plugin-update-violator > .MuiButton-root {
   white-space: nowrap;
-}
-.plugin-update-violator > a:hover {
-  background: #432e0c;
 }
 .results {
   overflow: hidden;
@@ -350,20 +213,6 @@ button:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 14px;
-}
-.bulk-refresh-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 12px;
-  color: #315443;
-  background: #edf4ef;
-  border-color: #c7d8cd;
-  font-size: 0.78rem;
-}
-.bulk-refresh-button.is-spinning svg {
-  animation: spin 800ms linear infinite;
 }
 .page-label {
   margin: 0;
@@ -418,23 +267,17 @@ td strong {
   font-size: 0.96rem;
 }
 .jobs-table {
-  table-layout: fixed;
+  /* table-layout: fixed; */
   font-size: 0.8rem;
 }
 .jobs-table .job-image-column {
-  width: 80px;
+  width: 1%;
 }
 .jobs-table .job-name-column {
   width: 17%;
 }
-.jobs-table .state-column {
-  width: 4%;
-}
-.jobs-table .zip-column {
-  width: 6%;
-}
-.jobs-table .city-column {
-  width: 17%;
+.jobs-table .location-column {
+  width: 24%;
 }
 .jobs-table .st-status-column {
   width: 10%;
@@ -442,14 +285,8 @@ td strong {
 .jobs-table .wp-status-column {
   width: 12%;
 }
-.jobs-table .wp-link-column {
-  width: 4%;
-}
 .jobs-table .actions-column {
-  width: 17%;
-}
-.jobs-table .refresh-column {
-  width: 4%;
+  width: 27%;
 }
 .jobs-table th,
 .jobs-table td {
@@ -457,9 +294,15 @@ td strong {
   white-space: normal;
   vertical-align: middle;
 }
-.jobs-table td {
-  overflow-wrap: anywhere;
+.actions-heading-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
+/* .jobs-table td {
+  overflow-wrap: anywhere;
+} */
 .jobs-table td strong {
   font-size: 0.9rem;
   line-height: 1.25;
@@ -476,11 +319,6 @@ td strong {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.jobs-table .state-cell,
-.jobs-table .zip-cell {
-  overflow-wrap: normal;
-  white-space: nowrap;
-}
 .location-cell-city {
   max-width: 100%;
   text-overflow: ellipsis;
@@ -493,68 +331,15 @@ td strong {
   color: #7a847e;
   font-size: 0.78rem;
 }
-.status {
-  display: inline-flex;
-  padding: 5px 9px;
-  color: #315443;
-  background: #eaf2ed;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 750;
-  white-space: nowrap;
+.jobs-table tbody tr.job-row {
+  cursor: pointer;
 }
-.wordpress-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+.jobs-table tbody tr.job-row:hover {
+  background: #f2f6f2;
 }
-.wp-status-select {
-  min-width: 0;
-  max-width: 140px;
-  min-height: 32px;
-  padding: 4px 26px 4px 8px;
-  color: #33463b;
-  background: #fff;
-  border: 1px solid #cbd1cc;
-  border-radius: 7px;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-.wp-status-select:disabled {
-  opacity: 0.55;
-}
-.icon-button {
-  display: inline-grid;
-  place-items: center;
-  min-height: 30px;
-  width: 30px;
-  padding: 0;
-  color: #526159;
-  background: transparent;
-  border-color: transparent;
-  border-radius: 50%;
-}
-.icon-button:hover:not(:disabled) {
-  color: #186d4c;
-  background: #edf2ee;
-  border-color: transparent;
-}
-.icon-button.is-spinning svg {
-  animation: spin 800ms linear infinite;
-}
-.wordpress-view-link {
-  display: inline-grid;
-  place-items: center;
-  width: 30px;
-  min-height: 30px;
-  color: #315443;
-  background: #edf2ee;
-  border-radius: 50%;
-}
-.wordpress-view-link:hover {
-  color: #fff;
-  background: #186d4c;
+.jobs-table tbody tr.job-row:focus-visible {
+  outline: 2px solid #186d4c;
+  outline-offset: -2px;
 }
 .seo-status-badge {
   display: inline-flex;
@@ -581,85 +366,15 @@ td strong {
 }
 .row-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
 }
-.regenerate-button {
-  min-height: auto;
-  padding: 7px 11px;
-  font-size: 0.76rem;
-}
-.regenerate-button.rebuild-unnecessary {
-  color: #526159;
-  background: #eef0ee;
-  border-color: #cbd1cc;
-}
-.regenerate-button.rebuild-minor {
-  color: #6d5a20;
-  background: #f3edcf;
-  border-color: #d5ca98;
-}
-.regenerate-button.rebuild-major {
-  color: #754a2d;
-  background: #f1dfd1;
-  border-color: #d5b193;
-}
-.regenerate-button.rebuild-required {
-  color: #743b37;
-  background: #efd9d6;
-  border-color: #cca29d;
-}
-.regenerate-button.rebuild-unnecessary:hover:not(:disabled) {
-  background: #e3e7e4;
-  border-color: #b9c2bc;
-}
-.regenerate-button.rebuild-minor:hover:not(:disabled) {
-  background: #ebe2b9;
-  border-color: #c7b974;
-}
-.regenerate-button.rebuild-major:hover:not(:disabled) {
-  background: #e9d2c0;
-  border-color: #c89c78;
-}
-.regenerate-button.rebuild-required:hover:not(:disabled) {
-  background: #e7cbc7;
-  border-color: #be8a84;
-}
-.details-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* min-height: 36px; */
-  padding: 7px 13px;
-  color: white;
-  background: #186d4c;
-  border: 1px solid #186d4c;
-  border-radius: 9px;
-  font-size: 0.8rem;
-  font-weight: 750;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.details-button:hover {
-  background: #11593d;
-}
 .details-hero {
   max-width: 900px;
 }
-.back-link {
-  display: inline-block;
-  margin-bottom: 28px;
-  color: #315443;
-  font-size: 0.86rem;
-  font-weight: 800;
-  text-decoration: none;
-}
-.back-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
+.back-link { margin-bottom: 28px; }
 .wordpress-action-bar {
   display: flex;
   align-items: center;
@@ -721,26 +436,7 @@ td strong {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.wordpress-push-controls select {
-  min-width: 128px;
-  min-height: 44px;
-  padding: 8px 34px 8px 11px;
-  color: #243129;
-  background: #fff;
-  border: 1px solid #afbbb4;
-  border-radius: 9px;
-  font-weight: 750;
-}
-.wordpress-push-button {
-  min-width: 90px;
-  background: #d8eee1;
-  border-color: #d8eee1;
-  color: #17442d;
-}
-.wordpress-push-button:hover:not(:disabled) {
-  background: #fff;
-  border-color: #fff;
-}
+.wordpress-push-button { min-width: 90px; }
 .details-panel {
   padding: 30px;
 }
@@ -771,11 +467,6 @@ td strong {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-}
-.image-selection-summary button {
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 0.74rem;
 }
 .field-help {
   max-width: 760px;
@@ -844,13 +535,6 @@ td strong {
   gap: 9px;
   padding: 11px 12px;
 }
-.image-choice input {
-  flex: 0 0 auto;
-  width: 18px;
-  min-height: 18px;
-  margin: 0;
-  accent-color: #186d4c;
-}
 .image-choice span {
   overflow: hidden;
   margin: 0;
@@ -903,11 +587,6 @@ td strong {
   color: #657169;
   font-size: 0.8rem;
   font-weight: 750;
-}
-.history-selection-actions button {
-  min-height: 34px;
-  padding: 6px 11px;
-  font-size: 0.76rem;
 }
 .history-list {
   display: grid;
@@ -968,98 +647,8 @@ td strong {
   border-radius: 10px;
   text-align: center;
 }
-.prompt-builder {
-  margin-top: 24px;
-  padding-top: 22px;
-  border-top: 1px solid #dfe3de;
-}
-.prompt-builder-heading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 12px;
-}
-.prompt-builder-heading h3 {
-  margin: 0;
-  color: #253129;
-  font-size: 1rem;
-}
-.prompt-builder-heading p {
-  margin: 5px 0 0;
-  color: #6a756e;
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-.prompt-builder-heading button {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 7px 12px;
-  font-size: 0.78rem;
-}
-.prompt-builder-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-.prompt-builder-heading .generate-copy-button {
-  color: #fff;
-  background: #186d4c;
-  border-color: #186d4c;
-}
-.prompt-builder-heading .generate-copy-button:hover:not(:disabled) {
-  background: #11593d;
-}
-.prompt-builder textarea {
-  display: block;
-  width: 100%;
-  min-height: 280px;
-  resize: vertical;
-  padding: 16px;
-  color: #253129;
-  background: #f8f9f6;
-  border: 1px solid #cbd1cc;
-  border-radius: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.78rem;
-  line-height: 1.55;
-}
-.prompt-builder textarea:focus {
-  outline: 3px solid rgba(24, 109, 76, 0.23);
-  outline-offset: 2px;
-}
-.ai-copy-panel .prompt-builder {
-  margin-top: 20px;
-  padding-top: 0;
-  border-top: 0;
-}
-.ai-output {
-  display: grid;
-  gap: 8px;
-  margin-top: 22px;
-  color: #31443a;
-  font-size: 0.82rem;
-  font-weight: 750;
-}
-.ai-output textarea {
-  display: block;
-  width: 100%;
-  resize: vertical;
-  padding: 14px 16px;
-  color: #253129;
-  background: #fff;
-  border: 1px solid #aeb8b1;
-  border-radius: 10px;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 500;
-  line-height: 1.55;
-}
-.ai-output textarea:focus {
-  outline: 3px solid rgba(24, 109, 76, 0.23);
-  outline-offset: 2px;
-}
+.ai-output { display: grid; gap: 8px; margin-top: 22px; }
+.ai-output > span:first-child { color: #31443a; font-size: 0.82rem; font-weight: 750; }
 .ai-output-meta {
   display: flex;
   justify-content: space-between;
@@ -1134,27 +723,6 @@ td strong {
   color: #657169;
   font-size: 0.86rem;
 }
-.pagination-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 10px 17px;
-  color: #253129;
-  background: #f8f9f6;
-  border: 1px solid #cbd1cc;
-  border-radius: 9px;
-  font-size: 0.86rem;
-  font-weight: 750;
-  text-decoration: none;
-}
-.pagination-link:hover {
-  border-color: #186d4c;
-}
-.pagination-link.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
 .guide-page {
   width: min(1180px, calc(100% - 32px));
 }
@@ -1168,13 +736,7 @@ td strong {
 .guide-hero .intro {
   max-width: 720px;
 }
-.guide-setup-link {
-  display: inline-block;
-  margin-top: 24px;
-  color: #186d4c;
-  font-weight: 800;
-  text-underline-offset: 3px;
-}
+.guide-setup-link { margin-top: 24px; }
 .guide-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 760px);
@@ -1516,18 +1078,11 @@ td strong {
   .jobs-table .location-cell {
     grid-column: 2;
   }
-  .jobs-table .wp-link-cell,
-  .jobs-table .refresh-cell {
-    grid-column: 2;
-  }
   .jobs-table .wp-status-cell {
     grid-column: 1;
   }
   .jobs-table .actions-cell {
     grid-column: 1;
-  }
-  .wordpress-status {
-    align-items: center;
   }
   .row-actions {
     justify-content: flex-start;
@@ -1538,7 +1093,7 @@ td strong {
     width: min(100% - 20px, 1120px);
     padding-top: 36px;
   }
-  form {
+  .job-search-form {
     grid-template-columns: 1fr;
   }
   .primary {
@@ -1546,10 +1101,6 @@ td strong {
   }
   .app-nav {
     margin-bottom: 30px;
-  }
-  .plugin-compatibility-banner {
-    align-items: flex-start;
-    flex-direction: column;
   }
   .app-shell.has-plugin-violator main {
     padding-bottom: 270px;
@@ -1560,9 +1111,9 @@ td strong {
     gap: 12px;
     padding: 14px;
   }
-  .plugin-update-violator > a {
+  .plugin-update-violator > .MuiButton-root {
     grid-column: 1 / -1;
-    text-align: center;
+    width: 100%;
   }
   .results-header {
     align-items: start;
@@ -1632,7 +1183,7 @@ td strong {
   .wordpress-push-controls label {
     flex: 1;
   }
-  .wordpress-push-controls select {
+  .wordpress-push-controls .MuiNativeSelect-root {
     width: 100%;
   }
   .details-section-heading {
@@ -1654,15 +1205,6 @@ td strong {
     flex-direction: column;
     gap: 3px;
   }
-  .prompt-builder-heading {
-    flex-direction: column;
-  }
-  .prompt-builder-heading button {
-    width: 100%;
-  }
-  .prompt-builder-actions {
-    width: 100%;
-  }
   .details-table-wrap {
     margin: 20px -20px -20px;
   }
@@ -1677,19 +1219,13 @@ td strong {
   .jobs-table .location-cell,
   .jobs-table .st-status-cell,
   .jobs-table .wp-status-cell,
-  .jobs-table .wp-link-cell,
-  .jobs-table .actions-cell,
-  .jobs-table .refresh-cell {
+  .jobs-table .actions-cell {
     grid-column: 1;
   }
-  .wordpress-status,
   .row-actions {
     align-items: stretch;
   }
-  .wp-status-select {
-    flex: 1;
-    max-width: none;
-  }
+
 }
 @media (prefers-reduced-motion: no-preference) {
   .image-loader-spinner {
@@ -1732,29 +1268,12 @@ td strong {
   background: #17442d;
   color: #fff;
 }
-.workspace-bar nav {
-  display: flex;
-  gap: 18px;
-  align-items: center;
-  margin-left: auto;
-}
-.workspace-bar nav a {
-  font-size: 14px;
-  color: #315363;
-}
 .workspace-selector {
   display: flex;
   flex-direction: column;
   gap: 3px;
   font-size: 11px;
   color: #506773;
-}
-.workspace-selector select {
-  min-width: 180px;
-  padding: 8px;
-  border: 1px solid #ced9df;
-  border-radius: 6px;
-  background: #fff;
 }
 .account-page {
   max-width: 1180px;
@@ -1796,20 +1315,6 @@ td strong {
   font-size: 13px;
   font-weight: 600;
 }
-.account-form input,
-.account-form select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #c9d4dc;
-  border-radius: 7px;
-  padding: 11px 12px;
-  background: #fff;
-  font: inherit;
-}
-.account-form input:read-only {
-  background: #f1f5f7;
-  color: #52626d;
-}
 .account-form details label {
   margin-top: 14px;
 }
@@ -1850,24 +1355,8 @@ td strong {
   margin-top: 5px;
   overflow-wrap: anywhere;
 }
-.account-resource-list button {
-  font-size: 12px;
-  flex-shrink: 0;
-}
 .account-notice {
   margin: 20px 5%;
-}
-.account-primary-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 13px 22px;
-  border-radius: 7px;
-  background: #145c70;
-  color: #fff;
-  font-weight: 650;
-  text-decoration: none;
 }
 .login-page {
   max-width: 660px;
@@ -1889,24 +1378,11 @@ td strong {
   .workspace-bar {
     gap: 14px;
   }
-  .workspace-bar nav {
-    margin-left: 0;
-    flex-wrap: wrap;
-  }
   .account-page {
     margin-top: 30px;
   }
 }
 
-.workspace-icon-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  padding: 8px;
-}
 .workspace-token-control {
   display: inline-flex;
   align-items: center;
@@ -1942,45 +1418,11 @@ td strong {
   background: #263b31;
   color: #fff;
 }
-.workspace-icon-link:focus-visible,
-.workspace-token-add:focus-visible {
-  outline: 2px solid #186d4c;
-  outline-offset: 3px;
-}
 
 .account-menu {
   position: relative;
   flex: 0 0 auto;
   margin-left: 4px;
-}
-.account-avatar-button {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  overflow: hidden;
-  border: 2px solid #d7e5dd;
-  border-radius: 50%;
-  background: #dfece5;
-  color: #234f42;
-  font-size: 0.85rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-.account-avatar-button:hover,
-.account-avatar-button[aria-expanded='true'] {
-  border-color: #186d4c;
-}
-.account-avatar-button:focus-visible,
-.account-menu-panel a:focus-visible,
-.account-menu-panel button:focus-visible {
-  outline: 2px solid #186d4c;
-  outline-offset: 2px;
-}
-.account-avatar-button img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .account-menu-panel {
   position: absolute;
@@ -2007,8 +1449,7 @@ td strong {
   font-size: 0.76rem;
   overflow-wrap: anywhere;
 }
-.account-menu-panel a,
-.account-menu-panel button {
+.account-menu-panel a {
   display: block;
   width: 100%;
   padding: 9px 11px;
@@ -2022,24 +1463,10 @@ td strong {
   text-decoration: none;
   cursor: pointer;
 }
-.account-menu-panel a:hover,
-.account-menu-panel button:hover {
+.account-menu-panel a:hover {
   background: #e8ede9;
 }
-.account-menu-panel button {
-  border-top: 1px solid #e3ebe6;
-  border-radius: 0 0 6px 6px;
-  margin-top: 4px;
-}
 
-.workspace-bar .app-nav {
-  margin: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.workspace-bar .app-nav a[aria-current='page'] {
-  color: white;
-}
 
 .token-dialog {
   margin: auto;
@@ -2067,12 +1494,6 @@ td strong {
   gap: 0.65rem;
   margin: 1.25rem 0;
   text-align: left;
-}
-.token-spend-preference input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  margin: 0;
-  flex-shrink: 0;
 }
 
 .job-thumbnail {
