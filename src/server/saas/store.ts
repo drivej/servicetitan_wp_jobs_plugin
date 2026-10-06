@@ -222,7 +222,7 @@ export class AccountStore {
       if (update) {
         previous = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2 FOR UPDATE', [workspaceId, id])).rows[0];
         if (!previous) throw new HttpError('Website not found.', 404);
-      if (input.connectionId && previous.connection_id !== input.connectionId || previous.url !== input.url) throw new HttpError('Create a new website to change its URL or ServiceTitan connection.');
+        if (previous.url !== input.url) throw new HttpError('Create a new website to change its URL.');
       }
       if (input.connectionId) {
         const connection = (await sql.query('SELECT id FROM servicetitan_connections WHERE workspace_id=$1 AND id=$2', [workspaceId, input.connectionId])).rows[0];
@@ -230,7 +230,7 @@ export class AccountStore {
       }
       const encrypted = input.wordpress ? this.vault.encrypt(input.wordpress, `website:${workspaceId}:${id}`) : previous?.wordpress_credentials || null;
       const row = (update
-        ? await sql.query('UPDATE websites SET name=$3,wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField])
+        ? await sql.query('UPDATE websites SET name=$3,connection_id=coalesce($7,connection_id),wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField, input.connectionId || null])
         : await sql.query('INSERT INTO websites(id,workspace_id,connection_id,name,url,wordpress_credentials,rest_base,zip_acf_field) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, workspaceId, input.connectionId || null, input.name, input.url, encrypted, input.restBase, input.zipAcfField])).rows[0]!;
       await audit(sql, userId, update ? 'website.updated' : 'website.created', id);
       return websiteFrom(row);
@@ -269,6 +269,12 @@ export class AccountStore {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const result = await sql.query('UPDATE websites SET validated_at=now() WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL RETURNING id', [workspaceId, id]);
       if (result.rows.length !== 1) throw new HttpError('Website credentials are missing.', 400);
+    });
+  }
+  async attachConnection(userId: string, websiteId: string, connectionId: string, workspaceId = userId): Promise<void> {
+    await this.workspaceTransaction(userId, workspaceId, ['owner','admin'], async (sql) => {
+      const result = await sql.query('UPDATE websites SET connection_id=$3 WHERE workspace_id=$1 AND id=$2 RETURNING id', [workspaceId, websiteId, connectionId]);
+      if (result.rows.length !== 1) throw new HttpError('Website not found.', 404);
     });
   }
   async markConnectionValidated(userId: string, id: string, workspaceId = userId): Promise<void> {

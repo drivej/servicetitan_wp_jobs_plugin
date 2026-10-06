@@ -139,14 +139,14 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const user = res.locals.user as User;
       const websiteId = uuid(req.body?.websiteId);
       const context = await store.websiteContext(user.id, websiteId, user.workspaceId);
-      if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help#wp-credentials' }); return; }
+      if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help/wordpress-credentials' }); return; }
       const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField });
       try { await wordpress.validateAccess(); }
       catch (error) {
         const message = error instanceof Error ? error.message : 'WordPress REST API validation failed.';
         const status = error instanceof WordPressRequestError ? error.status : 0;
-        const code = status === 401 || status === 403 ? 'credentials' : status === 404 ? 'rest-api' : 'reachability';
-        res.status(422).json({ service: 'wordpress', code, error: message, helpUrl: `/help#wp-${code}` }); return;
+        const code = status === 401 ? 'credentials' : status === 403 ? 'permissions' : status === 404 ? 'rest-api' : 'reachability';
+        res.status(422).json({ service: 'wordpress', code, error: message, helpUrl: `/help/wordpress-${code}` }); return;
       }
       await store.markWebsiteValidated(user.id, websiteId, user.workspaceId);
       res.json({ valid: true, service: 'wordpress' });
@@ -156,6 +156,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     try {
       const user = res.locals.user as User;
       const connectionId = uuid(req.body?.connectionId);
+      const websiteId = uuid(req.body?.websiteId);
       const connections = await store.listConnections(user.id, user.workspaceId);
       const connection = connections.find((item) => item.id === connectionId);
       if (!connection) throw new HttpError('Select a saved ServiceTitan connection.');
@@ -168,8 +169,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       catch (error) {
         const message = error instanceof Error ? error.message : 'ServiceTitan rejected the connection.';
         const code = error instanceof ServiceTitanRequestError && error.status === 401 ? 'credentials' : error instanceof ServiceTitanRequestError && error.status === 403 ? 'permissions' : 'tenant';
-        res.status(422).json({ service: 'servicetitan', code, error: message, helpUrl: `/help#st-${code}` }); return;
+        res.status(422).json({ service: 'servicetitan', code, error: message, helpUrl: `/help/servicetitan-${code}` }); return;
       }
+      const site = await store.websiteContext(user.id, websiteId, user.workspaceId);
+      if (!site.website.wordpressConfigured) throw new HttpError('Validate the WordPress website first.', 409);
+      await store.attachConnection(user.id, websiteId, connectionId, user.workspaceId);
       await store.markConnectionValidated(user.id, connectionId, user.workspaceId);
       res.json({ valid: true, service: 'servicetitan' });
     } catch (error) { next(error); }

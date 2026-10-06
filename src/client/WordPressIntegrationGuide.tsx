@@ -2,8 +2,19 @@ import { Button } from '@mui/material';
 import { isSaaSWorkspace } from './api';
 import { PageHeader } from './PageHeader';
 
-export function WordPressIntegrationGuide() {
+export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
   const saas = isSaaSWorkspace();
+  const topics: Record<string, { title: string; body: string; service: string }> = {
+    'wordpress-credentials': { title: 'WordPress credentials were rejected', service: 'WordPress', body: 'Use the WordPress account login name and a generated Application Password from Users → Profile. Do not use the normal account password. Regenerate the Application Password if it may have been copied incorrectly, then save it in Settings and test the connection again.' },
+    'wordpress-rest-api': { title: 'WordPress REST API route was not found', service: 'WordPress', body: 'Check that the site URL points to the WordPress installation, the ServiceTitan Job Integration plugin is active, and permalinks are enabled. Open Settings → Permalinks and save once. The custom post route normally uses /wp-json/wp/v2/st-jobs. If WordPress is installed in a subdirectory, include that path in the site URL.' },
+    'wordpress-reachability': { title: 'The WordPress site could not be reached', service: 'WordPress', body: 'The site must be reachable by the app server over public HTTPS. Confirm the URL opens without a login wall or browser challenge and the TLS certificate is valid. Ask your host to allow inbound HTTPS requests to /wp-json/ through CDN, WAF, bot protection, security plugins, and firewall rules. Keep API authentication enabled.' },
+    'wordpress-permissions': { title: 'The WordPress user lacks publishing permissions', service: 'WordPress', body: 'Use a dedicated user that can create and edit the ServiceTitan Jobs post type and upload media. Confirm the companion plugin is active and the account is not restricted by a role editor or security plugin. Use the generated Application Password for this user.' },
+    'servicetitan-credentials': { title: 'ServiceTitan API credentials were rejected', service: 'ServiceTitan', body: 'Confirm Client ID, Client Secret, and App Key belong to the same ServiceTitan application and environment. Copy the current secret and app key carefully. If a secret was rotated, enter all updated credentials in Settings, save, and test again.' },
+    'servicetitan-permissions': { title: 'ServiceTitan Jobs permission is missing', service: 'ServiceTitan', body: 'Open the application’s ServiceTitan permissions or scopes settings and grant read access to Job Management jobs (JPM Jobs). Save the permission change and allow it to propagate, then test the connection again. Production access may require approval for your ServiceTitan account.' },
+    'servicetitan-tenant': { title: 'ServiceTitan tenant or environment does not match', service: 'ServiceTitan', body: 'The tenant ID must belong to the account associated with these API credentials. Select Integration for sandbox credentials and Production for live credentials. Check the tenant ID in ServiceTitan and make sure the application is enabled in that environment.' },
+  };
+  const selectedTopic = topic ? topics[topic] : undefined;
+  if (topic) return <main className="guide-page"><PageHeader className="guide-hero" eyebrow={`${selectedTopic?.service || 'Connection'} help`} title={selectedTopic?.title || 'Connection issue'} description={selectedTopic?.body || 'This help topic was not found.'} actions={<Button component="a" variant="contained" href="/settings">Return to setup</Button>} /><article className="guide-content"><p>{selectedTopic?.body}</p><p>After applying the fix, return to Settings and select <strong>Test Connection</strong>. The next onboarding step becomes available once the test succeeds.</p><p><a href="/help">Browse all help topics</a></p></article></main>;
   return (
     <main className="guide-page">
 
@@ -20,6 +31,13 @@ export function WordPressIntegrationGuide() {
           <a href="#job-page">Create the jobs page</a>
           <a href="#existing-posts">Existing posts</a>
           <a href="#troubleshooting">Troubleshooting</a>
+          <a href="/help/wordpress-credentials">WordPress credentials</a>
+          <a href="/help/wordpress-permissions">WordPress permissions</a>
+          <a href="/help/wordpress-rest-api">WordPress REST API</a>
+          <a href="/help/wordpress-reachability">WordPress reachability</a>
+          <a href="/help/servicetitan-credentials">ServiceTitan credentials</a>
+          <a href="/help/servicetitan-permissions">ServiceTitan permissions</a>
+          <a href="/help/servicetitan-tenant">ServiceTitan tenant and environment</a>
           <a href="#report-bug">Report a bug</a>
         </aside>
 
