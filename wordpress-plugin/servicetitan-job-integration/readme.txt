@@ -4,7 +4,7 @@ Tags: servicetitan, rest-api, custom-post-type
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.18.0
+Stable tag: 1.18.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ stji_zip_post_types filter.
 
 == Changelog ==
 
-= 1.18.0 =
+= 1.18.1 =
 * Return the current WordPress post title and excerpt so existing copy can be reviewed and edited before rebuilding.
 
 = 1.17.0 =

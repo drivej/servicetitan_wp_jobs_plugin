@@ -13,7 +13,8 @@ import { ServiceTitanClient } from '../service-titan.js';
 import { WordPressClient } from '../wordpress.js';
 import { ServiceTitanRequestError } from '../service-titan-error.js';
 import { WordPressRequestError } from '../wordpress-error.js';
-import { connectionInput, HttpError, uuid, websiteInput } from './validation.js';
+import { connectionInput, HttpError, uuid, websiteInput, websiteUrl } from './validation.js';
+import { publicFetch } from './public-fetch.js';
 
 export const sessionCookieName = (secure: boolean): string => secure ? '__Host-st_session' : 'st_session';
 const cookieValue = (header: string | undefined, name: string): string => {
@@ -134,11 +135,32 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.json({ activeProduct, ...flags, settingsReady: flags.websiteReady && flags.serviceTitanReady });
     } catch (error) { next(error); }
   });
+  app.post('/api/onboarding/validate-plugin', async (req, res, next) => {
+    try {
+      const user = res.locals.user as User;
+      const websiteId = uuid(req.body?.websiteId);
+      const context = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
+      const endpoint = `${websiteUrl(context.website.url)}/wp-json/servicetitan-job-integration/v1/status`;
+      let response: Response;
+      try { response = await publicFetch(endpoint, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) }); }
+      catch (error) { res.status(422).json({ service: 'wordpress-plugin', error: error instanceof Error ? error.message : 'Could not reach the WordPress plugin status endpoint.', helpUrl: '/help/wordpress-reachability' }); return; }
+      if (!response.ok) {
+        const code = response.status === 404 ? 'wordpress-plugin' : 'wordpress-reachability';
+        res.status(422).json({ service: 'wordpress-plugin', error: response.status === 404 ? 'The companion plugin status route was not found. Install and activate the plugin, then test again.' : `WordPress returned HTTP ${response.status} from the plugin status endpoint.`, helpUrl: code === 'wordpress-plugin' ? '/wordpress-plugin' : '/help/wordpress-reachability' }); return;
+      }
+      const body = await response.json() as { plugin?: string; version?: string; postType?: string };
+      const version = body.version?.split('.').map(Number);
+      const compatible = body.plugin === 'servicetitan-job-integration' && version?.length === 3 && version.every(Number.isFinite) && (version[0]! > 1 || version[0] === 1 && (version[1]! > 18 || version[1] === 18 && version[2]! >= 1));
+      if (!compatible) { res.status(422).json({ service: 'wordpress-plugin', error: 'The companion plugin is missing, too old, or returned an invalid status. Install the latest plugin and test again.', helpUrl: '/wordpress-plugin' }); return; }
+      await store.markPluginValidated(user.id, websiteId, user.workspaceId);
+      res.json({ valid: true, version: body.version });
+    } catch (error) { next(error); }
+  });
   app.post('/api/onboarding/validate-website', async (req, res, next) => {
     try {
       const user = res.locals.user as User;
       const websiteId = uuid(req.body?.websiteId);
-      const context = await store.websiteContext(user.id, websiteId, user.workspaceId);
+      const context = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
       if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help/wordpress-credentials' }); return; }
       const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField });
       try { await wordpress.validateAccess(); }
@@ -309,8 +331,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     } catch (error) { next(error); }
   });
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
-  app.get('/downloads/servicetitan-job-integration-1.18.0.zip', (_req, res, next) => {
-    res.download(resolve('dist/downloads/servicetitan-job-integration-1.18.0.zip'), (error) => { if (error && !res.headersSent) next(error); });
+  app.get('/downloads/servicetitan-job-integration-1.18.1.zip', (_req, res, next) => {
+    res.download(resolve('dist/downloads/servicetitan-job-integration-1.18.1.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));

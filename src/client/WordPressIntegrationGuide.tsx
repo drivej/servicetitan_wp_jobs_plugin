@@ -9,6 +9,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
     'wordpress-rest-api': { title: 'WordPress REST API route was not found', service: 'WordPress', body: 'Check that the site URL points to the WordPress installation, the ServiceTitan Job Integration plugin is active, and permalinks are enabled. Open Settings → Permalinks and save once. The custom post route normally uses /wp-json/wp/v2/st-jobs. If WordPress is installed in a subdirectory, include that path in the site URL.' },
     'wordpress-reachability': { title: 'The WordPress site could not be reached', service: 'WordPress', body: 'The site must be reachable by the app server over public HTTPS. Confirm the URL opens without a login wall or browser challenge and the TLS certificate is valid. Ask your host to allow inbound HTTPS requests to /wp-json/ through CDN, WAF, bot protection, security plugins, and firewall rules. Keep API authentication enabled.' },
     'wordpress-permissions': { title: 'The WordPress user lacks publishing permissions', service: 'WordPress', body: 'Use a dedicated user that can create and edit the ServiceTitan Jobs post type and upload media. Confirm the companion plugin is active and the account is not restricted by a role editor or security plugin. Use the generated Application Password for this user.' },
+    'wordpress-plugin': { title: 'The WordPress companion plugin is missing or incompatible', service: 'WordPress', body: 'Download the current plugin ZIP from the setup page. In WordPress, open Plugins → Add New Plugin → Upload Plugin, upload the ZIP without extracting it, install it, and activate ServiceTitan Job Integration. If updating, choose Replace current with uploaded. Then return to onboarding and test the connection again.' },
     'servicetitan-credentials': { title: 'ServiceTitan API credentials were rejected', service: 'ServiceTitan', body: 'Confirm Client ID, Client Secret, and App Key belong to the same ServiceTitan application and environment. Copy the current secret and app key carefully. If a secret was rotated, enter all updated credentials in Settings, save, and test again.' },
     'servicetitan-permissions': { title: 'ServiceTitan Jobs permission is missing', service: 'ServiceTitan', body: 'Open the application’s ServiceTitan permissions or scopes settings and grant read access to Job Management jobs (JPM Jobs). Save the permission change and allow it to propagate, then test the connection again. Production access may require approval for your ServiceTitan account.' },
     'servicetitan-tenant': { title: 'ServiceTitan tenant or environment does not match', service: 'ServiceTitan', body: 'The tenant ID must belong to the account associated with these API credentials. Select Integration for sandbox credentials and Production for live credentials. Check the tenant ID in ServiceTitan and make sure the application is enabled in that environment.' },
@@ -33,6 +34,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
           <a href="#troubleshooting">Troubleshooting</a>
           <a href="/help/wordpress-credentials">WordPress credentials</a>
           <a href="/help/wordpress-permissions">WordPress permissions</a>
+          <a href="/help/wordpress-plugin">WordPress plugin installation</a>
           <a href="/help/wordpress-rest-api">WordPress REST API</a>
           <a href="/help/wordpress-reachability">WordPress reachability</a>
           <a href="/help/servicetitan-credentials">ServiceTitan credentials</a>
@@ -67,7 +69,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
               <li>Install and activate <strong>Advanced Custom Fields</strong> if it is not already active.</li>
               <li>Open the app’s <a href="/wordpress-plugin">WordPress plugin tab</a> and download the plugin ZIP. Do not extract it.</li>
               <li>In WordPress, open <strong>Plugins → Add New Plugin → Upload Plugin</strong>.</li>
-              <li>Select <code>servicetitan-job-integration-1.18.0.zip</code>, then choose <strong>Install Now</strong>.</li>
+              <li>Select <code>servicetitan-job-integration-1.18.1.zip</code>, then choose <strong>Install Now</strong>.</li>
               <li>Activate <strong>ServiceTitan Job Integration</strong>.</li>
             </ol>
             <p>Activation requires Advanced Custom Fields and creates the ServiceTitan Jobs post type, REST endpoint, shared ZIP ACF fields, ZIP-code taxonomy, and page shortcode automatically. For an update, upload the newer ZIP and choose <strong>Replace current with uploaded</strong>.</p>

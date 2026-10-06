@@ -34,7 +34,7 @@ export function WordPressPluginStatusProvider({ children }: { children: ReactNod
     } catch (error) {
       setStatus({
         state: 'unknown',
-        requiredVersion: '1.18.0',
+        requiredVersion: '1.18.1',
         seoGeneratorVersion: 6,
         message: error instanceof Error ? error.message : 'Unable to check the WordPress plugin.',
       });

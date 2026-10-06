@@ -53,7 +53,7 @@ test('downloads the packaged WordPress plugin with an installable filename', asy
       getJobImage: async () => { throw new Error('not used'); },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.1', installedVersion: '1.18.1', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'not_found', label: 'None' }),
       pushJob: async () => { throw new Error('not used'); },
@@ -68,7 +68,7 @@ test('downloads the packaged WordPress plugin with an installable filename', asy
     await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
     const address = server.address();
     assert(address && typeof address === 'object');
-    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/servicetitan-job-integration-1.18.0.zip`);
+    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/servicetitan-job-integration-1.18.1.zip`);
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-disposition') || '', /servicetitan-job-integration-1\.18\.0\.zip/);
@@ -109,7 +109,7 @@ test('passes an optional replacement image through the regeneration route', asyn
       },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.1', installedVersion: '1.18.1', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'exists', label: 'Published', postId: 77 }),
       pushJob: async () => { throw new Error('not used'); },
@@ -175,7 +175,7 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
       getJobImage: async () => { throw new Error('not used'); },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', installedVersion: '1.18.0', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.1', installedVersion: '1.18.1', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'not_found', label: 'None' }),
       pushJob: async () => { throw new Error('not used'); },

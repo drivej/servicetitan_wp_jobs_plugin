@@ -305,7 +305,7 @@ export function App() {
               <strong>{wordpressPluginStatus?.state === 'update_required' ? 'WordPress plugin update required' : 'WordPress plugin could not be verified'}</strong>
               <span>
                 {wordpressPluginStatus?.installedVersion ? `Installed ${wordpressPluginStatus.installedVersion}; ` : ''}
-                required {wordpressPluginStatus?.requiredVersion || '1.18.0'}. WordPress actions are disabled.
+                required {wordpressPluginStatus?.requiredVersion || '1.18.1'}. WordPress actions are disabled.
               </span>
             </div>
             <a href='/wordpress-plugin'>Open plugin setup</a>

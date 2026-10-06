@@ -31,7 +31,7 @@ function fixture() {
       } };
     } },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.0', seoGeneratorVersion: 6 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.1', seoGeneratorVersion: 6 }),
       getStatus: async () => ({ state: 'not_found', label: 'None' }), getStatuses: async () => ({}),
       pushJob: async (job, images, status, copy) => {
         assert.equal(job.id, 42); assert.equal(images.length, 1); assert.equal(images[0]?.id, 'first');

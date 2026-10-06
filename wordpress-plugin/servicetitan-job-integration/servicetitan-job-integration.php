@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ServiceTitan Job Integration
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.18.0
+ * Version: 1.18.1
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.18.0');
+define('STJI_VERSION', '1.18.1');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -522,7 +522,7 @@ function stji_acf_field_compatibility_notice(): void
 add_action('admin_notices', 'stji_acf_field_compatibility_notice');
 
 /**
- * Expose the installed integration version to authenticated app users.
+ * Expose non-sensitive compatibility status for onboarding checks.
  */
 function stji_register_status_route(): void
 {
@@ -532,9 +532,10 @@ function stji_register_status_route(): void
         array(
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => 'stji_rest_status',
-            'permission_callback' => static function (): bool {
-                return current_user_can('read');
-            },
+            // This endpoint returns only the installed integration version and
+            // post type name so onboarding can confirm installation before the
+            // site owner has created an Application Password.
+            'permission_callback' => '__return_true',
         )
     );
     register_rest_route(

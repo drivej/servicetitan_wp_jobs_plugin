@@ -4,7 +4,7 @@ import { isSaaSWorkspace } from './api';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { PageHeader } from './PageHeader';
 
-const pluginFilename = 'servicetitan-job-integration-1.18.0.zip';
+const pluginFilename = 'servicetitan-job-integration-1.18.1.zip';
 const pluginDownload = `/downloads/${pluginFilename}`;
 
 export function WordPressPluginSetup() {
@@ -33,7 +33,7 @@ export function WordPressPluginSetup() {
 
         <div className="plugin-install-actions">
           <Button component="a" variant="contained" className="download-button account-primary-link" href={pluginDownload} download={pluginFilename}>
-            <DownloadIcon /> Download version 1.18.0
+            <DownloadIcon /> Download version 1.18.1
           </Button>
           <Button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</Button>
         </div>

@@ -27,7 +27,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 366;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
-const WORDPRESS_PLUGIN_FILENAME = 'servicetitan-job-integration-1.18.0.zip';
+const WORDPRESS_PLUGIN_FILENAME = 'servicetitan-job-integration-1.18.1.zip';
 const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPRESS_PLUGIN_FILENAME);
 
 export const createApp = ({
@@ -52,7 +52,7 @@ export const createApp = ({
   });
   app.get([
     '/downloads/servicetitan-job-integration.zip',
-    '/downloads/servicetitan-job-integration-1.18.0.zip',
+    '/downloads/servicetitan-job-integration-1.18.1.zip',
     '/downloads/servicetitan-job-integration-1.11.1.zip',
     '/downloads/servicetitan-job-integration-1.11.0.zip',
     '/downloads/servicetitan-job-integration-1.10.0.zip',

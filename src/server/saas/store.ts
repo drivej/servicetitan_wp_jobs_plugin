@@ -257,18 +257,35 @@ export class AccountStore {
       return { ...connectionFrom(row), ...this.vault.decrypt<Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>>(String(row.credentials), `connection:${workspaceId}:${id}`) };
     });
   }
-  async onboardingFlags(userId: string, workspaceId = userId): Promise<{ websiteReady: boolean; serviceTitanReady: boolean }> {
+  async websiteWordPressContext(userId: string, id: string, workspaceId = userId): Promise<{ website: Website; wordpress?: NonNullable<WebsiteContext['wordpress']> }> {
+    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const row = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2', [workspaceId, id])).rows[0];
+      if (!row) throw new HttpError('Website not found.', 404);
+      return {
+        website: websiteFrom(row),
+        ...(row.wordpress_credentials ? { wordpress: this.vault.decrypt<NonNullable<WebsiteContext['wordpress']>>(String(row.wordpress_credentials), `website:${workspaceId}:${id}`) } : {}),
+      };
+    });
+  }
+  async onboardingFlags(userId: string, workspaceId = userId): Promise<{ pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean }> {
     return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const row = (await sql.query(`SELECT
+        EXISTS(SELECT 1 FROM websites WHERE workspace_id=$1 AND plugin_validated_at IS NOT NULL) AS plugin_ready,
         EXISTS(SELECT 1 FROM websites WHERE workspace_id=$1 AND wordpress_credentials IS NOT NULL AND validated_at IS NOT NULL) AS website_ready,
         EXISTS(SELECT 1 FROM servicetitan_connections c WHERE c.workspace_id=$1 AND c.validated_at IS NOT NULL AND EXISTS(SELECT 1 FROM websites w WHERE w.workspace_id=$1 AND w.connection_id=c.id AND w.validated_at IS NOT NULL)) AS st_ready`, [workspaceId])).rows[0]!;
-      return { websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true };
+      return { pluginReady: row.plugin_ready === true, websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true };
     });
   }
   async markWebsiteValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const result = await sql.query('UPDATE websites SET validated_at=now() WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL RETURNING id', [workspaceId, id]);
       if (result.rows.length !== 1) throw new HttpError('Website credentials are missing.', 400);
+    });
+  }
+  async markPluginValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
+    await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const result = await sql.query('UPDATE websites SET plugin_validated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id', [workspaceId, id]);
+      if (result.rows.length !== 1) throw new HttpError('Website not found.', 404);
     });
   }
   async attachConnection(userId: string, websiteId: string, connectionId: string, workspaceId = userId): Promise<void> {
