@@ -10,6 +10,7 @@ import { formatJobCopy, hasCompleteJobBody, hasFormattedJobBody, type GeneratedJ
 import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
+import { PageHeader } from './PageHeader';
 
 interface JobAttachment {
   id: string;
@@ -86,6 +87,7 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
 export function JobDetails({ jobId }: { jobId: number }) {
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
   const tokensExhausted = useTokensExhausted();
+  const jobsHref = `/${window.location.search}`;
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [imageStates, setImageStates] = useState<Record<string, 'loaded' | 'error'>>({});
@@ -324,10 +326,12 @@ export function JobDetails({ jobId }: { jobId: number }) {
   return (
     <main>
       {tokenSpendDialog}
-      <header className='hero details-hero'>
-        <p className='eyebrow'>ServiceTitan Job #{details?.summary.jobNumber || jobId}</p>
-        <h1 className='page-title'>{details?.summary.jobName || `ServiceTitan job ${jobId}`}</h1>
-      </header>
+      <PageHeader
+        className='details-hero'
+        beforeTitle={<Button component='a' className='back-link' href={jobsHref}>← Back to jobs</Button>}
+        eyebrow={`ServiceTitan Job #${details?.summary.jobNumber || jobId}`}
+        title={details?.summary.jobName || `ServiceTitan job ${jobId}`}
+      />
 
       <div className='details-sections'>
       {/* <div className='results-header'>

@@ -15,7 +15,7 @@ export function ErrorDialog({ message, onClose, title, actionHref, actionLabel, 
     <p id={descriptionId}>{message}</p>
     {detail && <p>{detail}</p>}
     <div className="account-actions">
-      {actionHref ? <Button component="a" variant="contained" className="account-primary-link" href={actionHref}>{actionLabel || 'Open'}</Button> : <Button component="a" variant="contained" className="account-primary-link" href="/wordpress-integration#report-bug">Report bug</Button>}
+      {actionHref ? <Button component="a" variant="contained" className="account-primary-link" href={actionHref}>{actionLabel || 'Open'}</Button> : <Button component="a" variant="contained" className="account-primary-link" href="/help#report-bug">Report bug</Button>}
       <Button type="button" onClick={() => dialog.current?.close()}>Close</Button>
     </div>
   </dialog>;

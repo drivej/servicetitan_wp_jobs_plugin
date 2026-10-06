@@ -7,13 +7,16 @@ import { App } from './App';
 import { JobDetails } from './JobDetails';
 import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
+import { MarketingPage } from './MarketingPage';
 import './styles.css';
 import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);
-const page = path === '/wordpress-integration'
+const page = path === '/help'
   ? <WordPressIntegrationGuide />
+  : path === '/landing'
+    ? <MarketingPage />
   : path === '/wordpress-plugin'
     ? <WordPressPluginSetup />
     : jobDetailsMatch

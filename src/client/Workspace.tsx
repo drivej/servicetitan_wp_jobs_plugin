@@ -1,16 +1,14 @@
-import { TextField } from '@mui/material';
-import { MenuItem, Select, type SelectChangeEvent } from '@mui/material';
-import { Avatar, Button, IconButton } from '@mui/material';
-import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
-import { TokenAdmin } from './TokenAdmin';
-import { AccountMembersAdmin } from './AccountMembersAdmin';
-import { TokenHistory } from './TokenHistory';
-import { BillingPlans } from './BillingPlans';
+import { Avatar, Button, IconButton, MenuItem, Select, TextField, type SelectChangeEvent } from '@mui/material';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { AccountMembersAdmin } from './AccountMembersAdmin';
+import { BillingPlans } from './BillingPlans';
 import { TeamSettings, type TeamRole } from './TeamSettings';
+import { TokenAdmin } from './TokenAdmin';
+import { TokenHistory } from './TokenHistory';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 import { clearTokenError, setAvailableTokens, useTokenError, useTokensExhausted } from './tokenState';
+import { PageHeader } from './PageHeader';
+import { MarketingPage } from './MarketingPage';
 
 interface User {
   isPlatformAdmin?: boolean;
@@ -133,24 +131,38 @@ const WebsitesSelect = ({ websites, onChange, selected }: { websites: Website[];
 };
 
 const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
+  const href = '/add-tokens';
   return (
-    <div className='workspace-token-control' role='group' aria-label='Job tokens'>
-      <span className='workspace-token-balance' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
-        <strong>{count.toLocaleString()}</strong> tokens
-      </span>
-      <a className='workspace-token-add' href='/add-tokens' aria-label='Add tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
-        <span aria-hidden='true'>+</span> Add
-      </a>
-    </div>
+    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
+      Tokens
+    </Button>
   );
+
+  // return (
+  //   <div className='workspace-token-control' role='group' aria-label='Job tokens'>
+  //     <span className='workspace-token-balance' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
+  //       <strong>{count.toLocaleString()}</strong> tokens
+  //     </span>
+  //     <a className='workspace-token-add' href='/add-tokens' aria-label='Add tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
+  //       <span aria-hidden='true'>+</span> Add
+  //     </a>
+  //   </div>
+  // );
 };
 
 const SettingsButton = ({ path }: { path: string }) => {
+  const href = '/settings';
   return (
-    <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/account' ? 'contained' : 'text'} href='/account' aria-label='Settings' title='Settings' aria-current={path === '/account' ? 'page' : undefined}>
-      <SettingsRoundedIcon aria-hidden='true' />
+    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
+      Settings
     </Button>
   );
+
+  // return (
+  //   <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/settings' ? 'contained' : 'text'} href='/settings' aria-label='Settings' title='Settings' aria-current={path === '/settings' ? 'page' : undefined}>
+  //     <SettingsRoundedIcon aria-hidden='true' />
+  //   </Button>
+  // );
 };
 
 const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => void; busy: boolean }) => {
@@ -163,7 +175,10 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
       if (!container.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setOpen(false); container.current?.querySelector('button')?.focus(); }
+      if (event.key === 'Escape') {
+        setOpen(false);
+        container.current?.querySelector('button')?.focus();
+      }
     };
     document.addEventListener('pointerdown', closeOutside);
     document.addEventListener('keydown', closeEscape);
@@ -172,22 +187,52 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
       document.removeEventListener('keydown', closeEscape);
     };
   }, [open]);
-  const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || user.email[0]?.toUpperCase() || '?';
-  return <div className='account-menu' ref={container}>
-    <IconButton className='account-avatar-button' sx={{ p: 0, width: 38, height: 38, border: '2px solid #d7e5dd', backgroundColor: '#dfece5', color: '#234f42', '&:hover, &[aria-expanded=true]': { borderColor: '#186d4c' } }} type='button' aria-label={`Account menu for ${user.name || user.email}`} aria-expanded={open} aria-controls='account-menu-panel' onClick={() => setOpen((value) => !value)}>
-      <Avatar sx={{ width: 34, height: 34, fontSize: '0.85rem' }} src={!imageFailed ? user.avatarUrl || undefined : undefined} alt='' slotProps={{ img: { referrerPolicy: 'no-referrer', onError: () => setImageFailed(true) } }}>{initials}</Avatar>
-    </IconButton>
-    {open && <div className='account-menu-panel' id='account-menu-panel'>
-      <div className='account-menu-identity'><strong>{user.name}</strong><small>{user.email}</small></div>
-      <a href='/account'>Settings</a>
-      <a href='/add-tokens'>Add tokens</a>
-      {user.isPlatformAdmin && <>
-        <a href='/admin/tokens'>Token admin</a>
-        <a href='/admin/members'>Account members</a>
-      </>}
-      <Button type='button' variant='text' sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }} disabled={busy} onClick={onSignOut}>Sign out</Button>
-    </div>}
-  </div>;
+  const initials =
+    user.name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') ||
+    user.email[0]?.toUpperCase() ||
+    '?';
+  return (
+    <div className='account-menu' ref={container}>
+      <IconButton
+        className='account-avatar-button'
+        sx={{ p: 0, width: 38, height: 38, border: '2px solid #d7e5dd', backgroundColor: '#dfece5', color: '#234f42', '&:hover, &[aria-expanded=true]': { borderColor: '#186d4c' } }}
+        type='button'
+        aria-label={`Account menu for ${user.name || user.email}`}
+        aria-expanded={open}
+        aria-controls='account-menu-panel'
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Avatar sx={{ width: 34, height: 34, fontSize: '0.85rem' }} src={!imageFailed ? user.avatarUrl || undefined : undefined} alt='' slotProps={{ img: { referrerPolicy: 'no-referrer', onError: () => setImageFailed(true) } }}>
+          {initials}
+        </Avatar>
+      </IconButton>
+      {open && (
+        <div className='account-menu-panel' id='account-menu-panel'>
+          <div className='account-menu-identity'>
+            <strong>{user.name}</strong>
+            <small>{user.email}</small>
+          </div>
+          <a href='/settings'>Settings</a>
+          <a href='/add-tokens'>Tokens</a>
+          {user.isPlatformAdmin && (
+            <>
+              <a href='/admin/tokens'>Token admin</a>
+              <a href='/admin/members'>Account members</a>
+            </>
+          )}
+          <a href='/help'>Help</a>
+          <Button type='button' variant='text' sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }} disabled={busy} onClick={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const JobsButton = ({ href, path }: { href: string; path: string }) => {
@@ -207,11 +252,27 @@ const PluginButton = ({ path }: { path: string }) => {
 };
 
 const WordpressButton = ({ path }: { path: string }) => {
+  const href = '/help';
   return (
-    <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/wordpress-integration' ? 'contained' : 'text'} href='/wordpress-integration' aria-label='Help' title='Help' aria-current={path === '/wordpress-integration' ? 'page' : undefined}>
-      <HelpOutlineRoundedIcon aria-hidden='true' />
+    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
+      Help
     </Button>
   );
+  // return (
+  //   <a
+  //   className=''
+  //   href='/help'
+  //   aria-label='Help'
+  //   title='Help'
+  //   aria-current={path === '/help' ? 'page' : undefined}>
+  //     Help
+  //   </a>
+  // );
+  // return (
+  //   <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/help' ? 'contained' : 'text'} href='/help' aria-label='Help' title='Help' aria-current={path === '/help' ? 'page' : undefined}>
+  //     <HelpOutlineRoundedIcon aria-hidden='true' />
+  //   </Button>
+  // );
 };
 
 export function Workspace({ children }: { children: ReactNode }) {
@@ -308,7 +369,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         const updated = await accountFetch('/api/session').then(json<Session>);
         if (active && current === revision) {
           if (updated.user?.workspaceId !== session.user?.workspaceId || updated.user?.role !== session.user?.role) {
-            window.location.assign('/account');
+            window.location.assign('/settings');
             return;
           }
           setSession(updated);
@@ -333,27 +394,11 @@ export function Workspace({ children }: { children: ReactNode }) {
   }, [session?.mode, session?.user?.workspaceId, session?.user?.role]);
 
   const path = window.location.pathname.replace(/\/$/, '') || '/';
-  const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/wordpress-integration' ? 'guide' : path === '/' || path.startsWith('/jobs/') ? 'jobs' : undefined;
+  const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/help' ? 'guide' : path === '/' || path.startsWith('/jobs/') ? 'jobs' : undefined;
   const jobsHref = currentPage === 'jobs' ? `/${window.location.search}` : '/';
 
   if (signedOut)
-    return (
-      <main className='account-page login-page'>
-        <p className='eyebrow'>ServiceTitan Jobs</p>
-        <h1>Turn completed jobs into local stories.</h1>
-        {invitationToken && <p className='notice'>Sign in with the Google email address that received the team invitation. You can then accept it.</p>}
-        <p className='intro'>Connect your ServiceTitan account, review project copy, and publish it to your WordPress websites.</p>
-        {new URLSearchParams(window.location.search).get('login') === 'failed' && (
-          <p className='notice error' role='alert'>
-            Sign-in could not be completed. Please try again.
-          </p>
-        )}
-        <Button component='a' variant='contained' className='account-primary-link' href='/auth/google'>
-          Continue with Google
-        </Button>
-        <p className='field-help'>Your websites and integrations stay private to your account.</p>
-      </main>
-    );
+    return <><MarketingPage />{invitationToken && <p className='marketing-invite-notice'>Sign in with the Google email address that received your team invitation. <a href='/auth/google'>Continue with Google</a></p>}{new URLSearchParams(window.location.search).get('login') === 'failed' && <p className='marketing-login-error' role='alert'>Sign-in could not be completed. Please try again.</p>}</>;
   if (!loaded)
     return (
       <main className='account-page'>
@@ -370,7 +415,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const tokensPage = path === '/add-tokens';
   const adminPage = path === '/admin/tokens';
   const membersAdminPage = path === '/admin/members';
-  const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/account' || websites.length === 0);
+  const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/settings' || websites.length === 0);
 
   const selectWorkspace = async (workspaceId: string) => {
     if (isLocal) {
@@ -502,33 +547,42 @@ export function Workspace({ children }: { children: ReactNode }) {
           {error}
         </p>
       )}
-      {tokenError && <div className='modal-backdrop' role='presentation'>
-        <section className='error-modal' role='alertdialog' aria-modal='true' aria-labelledby='token-dialog-title' aria-describedby='token-dialog-description'>
-          <div className='error-modal-icon' aria-hidden='true'>!</div>
-          <h2 id='token-dialog-title'>No job tokens available</h2>
-          <p id='token-dialog-description'>{tokenError}</p>
-          <p>Your request has not been completed.</p>
-          <div className='account-actions'>
-            <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>Add Tokens</Button>
-            <Button onClick={clearTokenError}>Close</Button>
-          </div>
-        </section>
-      </div>}
-      {tokensExhausted && <div className='token-violator' role='status'>
-        <span>You’re out of job tokens. Add tokens to keep publishing and rebuilding posts.</span>
-        <Button component='a' href='/add-tokens' className='token-violator-link'>Get tokens</Button>
-      </div>}
+      {tokenError && (
+        <div className='modal-backdrop' role='presentation'>
+          <section className='error-modal' role='alertdialog' aria-modal='true' aria-labelledby='token-dialog-title' aria-describedby='token-dialog-description'>
+            <div className='error-modal-icon' aria-hidden='true'>
+              !
+            </div>
+            <h2 id='token-dialog-title'>No job tokens available</h2>
+            <p id='token-dialog-description'>{tokenError}</p>
+            <p>Your request has not been completed.</p>
+            <div className='account-actions'>
+              <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>
+                Add Tokens
+              </Button>
+              <Button onClick={clearTokenError}>Close</Button>
+            </div>
+          </section>
+        </div>
+      )}
+      {tokensExhausted && (
+        <div className='token-violator' role='status'>
+          <span>You’re out of job tokens. Add tokens to keep publishing and rebuilding posts.</span>
+          <Button component='a' href='/add-tokens' className='token-violator-link'>
+            Get tokens
+          </Button>
+        </div>
+      )}
       {isLocal && tokensPage ? (
         <main className='account-page'>
-          <p className='eyebrow'>Local workspace</p>
-          <h1>Add Tokens</h1>
-          <p className='intro'>Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.</p>
+          <PageHeader className='account-page-hero' eyebrow='Local workspace' title='Add Tokens' description='Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.' />
         </main>
-      ) : isLocal && path === '/account' ? (
+      ) : isLocal && path === '/settings' ? (
         <main className='account-page'>
-          <h1>Settings</h1>
-          <p>Local workspace connections are configured through the server environment.</p>
-          <p className='field-help'>Signed in as {user.name} ({user.email})</p>
+          <PageHeader className='account-page-hero' eyebrow='Local workspace' title='Settings' description='Local workspace connections are configured through the server environment.' />
+          <p className='field-help'>
+            Signed in as {user.name} ({user.email})
+          </p>
         </main>
       ) : invitePage ? (
         <main className='account-page'>
@@ -557,14 +611,26 @@ export function Workspace({ children }: { children: ReactNode }) {
           </Button>
         </main>
       ) : adminPage ? (
-        user.isPlatformAdmin ? <TokenAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
+        user.isPlatformAdmin ? (
+          <TokenAdmin />
+        ) : (
+          <main className='account-page'>
+            <h1>Access denied</h1>
+            <p>Platform administrator access is required.</p>
+          </main>
+        )
       ) : membersAdminPage ? (
-        user.isPlatformAdmin ? <AccountMembersAdmin /> : <main className='account-page'><h1>Access denied</h1><p>Platform administrator access is required.</p></main>
+        user.isPlatformAdmin ? (
+          <AccountMembersAdmin />
+        ) : (
+          <main className='account-page'>
+            <h1>Access denied</h1>
+            <p>Platform administrator access is required.</p>
+          </main>
+        )
       ) : tokensPage ? (
         <main className='account-page'>
-          <p className='eyebrow'>Your workspace</p>
-          <h1>Add Tokens</h1>
-          <p className='intro'>Use job tokens to publish posts, rebuild posts, and generate AI descriptions.</p>
+          <PageHeader className='account-page-hero' eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to publish posts, rebuild posts, and generate AI descriptions.' />
           <section className='panel account-panel'>
             <h2>{user.jobTokens.toLocaleString()} job tokens available</h2>
             <p>Each successful action costs 1 token. Failed requests do not spend tokens.</p>
@@ -591,9 +657,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         </main>
       ) : accountPage ? (
         <main className='account-page'>
-          <p className='eyebrow'>Your workspace</p>
-          <h1>{websites.length ? 'Settings' : `Welcome, ${user.name.split(' ')[0]}.`}</h1>
-          <p className='intro'>{websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'}</p>
+          <PageHeader className='account-page-hero' eyebrow='Your workspace' title={websites.length ? 'Settings' : `Welcome, ${user.name.split(' ')[0]}.`} description={websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'} />
           <p className='field-help'>Signed in as {user.email}</p>
           <p>Each successful push, rebuild, or AI description generation costs 1 job token. Failed requests do not spend tokens.</p>
           {message && (
@@ -632,7 +696,7 @@ export function Workspace({ children }: { children: ReactNode }) {
                   <h3>{editingConnection ? `Update ${editingConnection.name}` : 'Add a connection'}</h3>
                   <label>
                     Name
-                    <TextField variant="outlined" size="small" fullWidth name='name' required defaultValue={editingConnection?.name} placeholder='My service business' slotProps={{ htmlInput: { maxLength: 100 } }}/>
+                    <TextField variant='outlined' size='small' fullWidth name='name' required defaultValue={editingConnection?.name} placeholder='My service business' slotProps={{ htmlInput: { maxLength: 100 } }} />
                   </label>
                   <div className='account-field-pair'>
                     <label>
@@ -644,20 +708,20 @@ export function Workspace({ children }: { children: ReactNode }) {
                     </label>
                     <label>
                       Tenant ID
-                      <TextField variant="outlined" size="small" fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection) } }} />
+                      <TextField variant='outlined' size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection) } }} />
                     </label>
                   </div>
                   <label>
                     Client ID
-                    <TextField variant="outlined" size="small" fullWidth name='clientId' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='off' slotProps={{ htmlInput: { maxLength: 500 } }}/>
+                    <TextField variant='outlined' size='small' fullWidth name='clientId' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='off' slotProps={{ htmlInput: { maxLength: 500 } }} />
                   </label>
                   <label>
                     Client secret
-                    <TextField variant="outlined" size="small" fullWidth name='clientSecret' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }}/>
+                    <TextField variant='outlined' size='small' fullWidth name='clientSecret' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }} />
                   </label>
                   <label>
                     App key
-                    <TextField variant="outlined" size="small" fullWidth name='appKey' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }}/>
+                    <TextField variant='outlined' size='small' fullWidth name='appKey' type='password' required={!editingConnection} placeholder={editingConnection ? 'Saved — leave blank to keep' : undefined} autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 2000 } }} />
                   </label>
                   <p className='field-help'>
                     Credentials are encrypted and are not displayed again. When updating the same environment, leave a credential blank to keep its saved value. To switch environments, enter all three credentials for the new environment. The change applies to every website using this connection; existing WordPress
@@ -697,11 +761,11 @@ export function Workspace({ children }: { children: ReactNode }) {
                     <h3>{editingWebsite ? `Edit ${editingWebsite.name}` : 'Add a website'}</h3>
                     <label>
                       Name
-                      <TextField variant="outlined" size="small" fullWidth name='name' required defaultValue={editingWebsite?.name} placeholder='My company website' slotProps={{ htmlInput: { maxLength: 100 } }}/>
+                      <TextField variant='outlined' size='small' fullWidth name='name' required defaultValue={editingWebsite?.name} placeholder='My company website' slotProps={{ htmlInput: { maxLength: 100 } }} />
                     </label>
                     <label>
                       Website URL
-                      <TextField variant="outlined" size="small" fullWidth name='url' type='url' required defaultValue={editingWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite) } }} placeholder='https://example.com' />
+                      <TextField variant='outlined' size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite) } }} placeholder='https://example.com' />
                     </label>
                     <label>
                       ServiceTitan connection
@@ -724,22 +788,22 @@ export function Workspace({ children }: { children: ReactNode }) {
                     </p>
                     <label>
                       WordPress username
-                      <TextField variant="outlined" size="small" fullWidth name='username' autoComplete='off' slotProps={{ htmlInput: { maxLength: 100 } }}/>
+                      <TextField variant='outlined' size='small' fullWidth name='username' autoComplete='off' slotProps={{ htmlInput: { maxLength: 100 } }} />
                     </label>
                     <label>
                       Application password
-                      <TextField variant="outlined" size="small" fullWidth name='applicationPassword' type='password' autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 500 } }}/>
+                      <TextField variant='outlined' size='small' fullWidth name='applicationPassword' type='password' autoComplete='new-password' slotProps={{ htmlInput: { maxLength: 500 } }} />
                     </label>
                     {editingWebsite?.wordpressConfigured && <p className='field-help'>Leave both fields blank to keep existing WordPress credentials.</p>}
                     <details>
                       <summary>WordPress settings</summary>
                       <label>
                         Post type REST base
-                        <TextField variant="outlined" size="small" fullWidth name='restBase' defaultValue={editingWebsite?.restBase || 'st-jobs'} required />
+                        <TextField variant='outlined' size='small' fullWidth name='restBase' defaultValue={editingWebsite?.restBase || 'st-jobs'} required />
                       </label>
                       <label>
                         ZIP ACF field
-                        <TextField variant="outlined" size="small" fullWidth name='zipAcfField' defaultValue={editingWebsite?.zipAcfField || 'my_zip_codes'} required />
+                        <TextField variant='outlined' size='small' fullWidth name='zipAcfField' defaultValue={editingWebsite?.zipAcfField || 'my_zip_codes'} required />
                       </label>
                     </details>
                     <div className='account-actions'>

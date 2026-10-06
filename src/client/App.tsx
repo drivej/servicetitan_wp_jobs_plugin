@@ -1,4 +1,4 @@
-import { Alert, Button, Pagination, Paper, TextField, Typography } from '@mui/material';
+import { Alert, Button, Pagination, Paper, TextField } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
@@ -9,6 +9,7 @@ import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './
 import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
+import { PageHeader } from './PageHeader';
 
 interface JobsResponse {
   data: JobTableItem[];
@@ -290,12 +291,7 @@ export function App() {
 
   return (
     <main>
-      <header className='hero'>
-        {/* <p className='eyebrow'>ServiceTitan workspace</p> */}
-        <p className='eyebrow'>ServiceTitan Jobs</p>
-        <h1 className='page-title'>Job search</h1>
-        {/* <p className='intro'>Choose an inclusive date range to find completed jobs and their service locations.</p> */}
-      </header>
+      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
 
       {wordpressPluginLoading ? (
         <Alert severity="info" sx={{ mb: 2 }} role='status'>

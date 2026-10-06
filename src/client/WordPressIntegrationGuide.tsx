@@ -1,17 +1,13 @@
 import { Button } from '@mui/material';
 import { isSaaSWorkspace } from './api';
+import { PageHeader } from './PageHeader';
 
 export function WordPressIntegrationGuide() {
   const saas = isSaaSWorkspace();
   return (
     <main className="guide-page">
 
-      <header className="guide-hero">
-        <p className="eyebrow">Integration guide</p>
-        <h1>Connect your WordPress site</h1>
-        <p className="intro">Install the companion plugin, authorize the ServiceTitan Jobs app, and publish a ZIP-targeted job directory on any WordPress page.</p>
-        <Button component="a" variant="contained" href="/wordpress-plugin" className="guide-setup-link">Open WordPress plugin setup</Button>
-      </header>
+      <PageHeader className='guide-hero' eyebrow='ServiceTitan Jobs' title='Connect your WordPress site' description='Install the companion plugin, authorize the ServiceTitan Jobs app, and publish a ZIP-targeted job directory on any WordPress page.' actions={<Button component="a" variant="contained" href="/wordpress-plugin" className="guide-setup-link">Open WordPress plugin setup</Button>} />
 
       <div className="guide-layout">
         <aside className="guide-toc">
@@ -74,7 +70,7 @@ export function WordPressIntegrationGuide() {
           <section id="configure-app">
             <p className="guide-step">Step 3</p>
             <h2>Configure the ServiceTitan Jobs app</h2>
-            {saas ? <p>Open <a href="/account">Settings</a>, add your website under the correct ServiceTitan connection, and enter the WordPress username and Application Password. The default REST base is <code>st-jobs</code>. Save, select that website, and check its connection in the WordPress plugin tab.</p> : <>
+            {saas ? <p>Open <a href="/settings">Settings</a>, add your website under the correct ServiceTitan connection, and enter the WordPress username and Application Password. The default REST base is <code>st-jobs</code>. Save, select that website, and check its connection in the WordPress plugin tab.</p> : <>
             <p>Add these server-side environment variables locally or in the Sevalla/Kinsta application settings:</p>
             <pre><code>{`WORDPRESS_URL=https://www.example.com
 WORDPRESS_USERNAME=servicetitan-integration

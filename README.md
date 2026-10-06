@@ -9,7 +9,7 @@ production now requires SaaS configuration and will not run in local mode.
 A React and Express application that queries completed ServiceTitan jobs with image attachments by first appointment date, resolves each job type name and location, and safely creates correlated WordPress custom posts with selected job images.
 
 The user-facing setup documentation is available in the running app at
-`/wordpress-integration`.
+`/help`.
 
 ## Local development
 

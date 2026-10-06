@@ -25,6 +25,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   const platformMembers = new PlatformMembers(store.db);
   const sessionName = sessionCookieName(config.secureCookies);
   const loginName = config.secureCookies ? '__Host-st_login' : 'st_login';
+  let publicPlansCache: { expiresAt: number; plans: Omit<Awaited<ReturnType<BillingService['plans']>>[number], 'id'>[] } | undefined;
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'lax' as const, path: '/' };
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxyHops);
@@ -74,6 +75,18 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       if (!Buffer.isBuffer(req.body)) throw new HttpError('Expected a JSON webhook body.', 400);
       await billing.webhook(req.body, req.get('Stripe-Signature') || '');
       res.json({ received: true });
+    } catch (error) { next(error); }
+  });
+  app.get('/api/public/plans', async (_req, res, next) => {
+    try {
+      if (!billing) throw new HttpError('Pricing is not configured.', 503);
+      // Only publish the same display fields shown during checkout; customer and payment data remain private.
+      if (!publicPlansCache || publicPlansCache.expiresAt <= Date.now()) {
+        const plans = (await billing.plans()).map(({ name, amount, currency, tokens, maxTokens, interval, intervalCount }) => ({ name, amount, currency, tokens, maxTokens, interval, intervalCount }));
+        publicPlansCache = { plans, expiresAt: Date.now() + 5 * 60_000 };
+      }
+      res.set('Cache-Control', 'public, max-age=300');
+      res.json({ plans: publicPlansCache.plans });
     } catch (error) { next(error); }
   });
   app.use('/api', async (req, res, next) => {

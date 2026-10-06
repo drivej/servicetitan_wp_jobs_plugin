@@ -2,6 +2,7 @@ import { Button } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { isSaaSWorkspace } from './api';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
+import { PageHeader } from './PageHeader';
 
 const pluginFilename = 'servicetitan-job-integration-1.18.0.zip';
 const pluginDownload = `/downloads/${pluginFilename}`;
@@ -12,11 +13,7 @@ export function WordPressPluginSetup() {
   return (
     <main className="plugin-page">
 
-      <header className="plugin-page-hero">
-        <p className="eyebrow">One-time WordPress setup</p>
-        <h1>Companion plugin</h1>
-        <p className="intro">Install the plugin and connect your site with a WordPress Application Password so the app can verify the plugin version and publish jobs.</p>
-      </header>
+      <PageHeader className='plugin-page-hero' eyebrow='ServiceTitan Jobs' title='Companion plugin' description='Install the plugin and connect your site with a WordPress Application Password so the app can verify the plugin version and publish jobs.' />
 
       <section className={`plugin-install-card plugin-install-card-${status?.state || 'checking'}`}>
         <div className="plugin-version-status" aria-live="polite">
@@ -61,7 +58,7 @@ export function WordPressPluginSetup() {
           <li>In WordPress, open <strong>Users → Profile</strong> for the user you want the app to connect as. Use a dedicated integration user with permission to edit and publish job posts and upload media.</li>
           <li>Find <strong>Application Passwords</strong>, enter <strong>ServiceTitan Jobs</strong> as the name, and select <strong>Add New Application Password</strong>.</li>
           <li>Copy the generated password immediately; WordPress shows it only once.</li>
-          <li>{saas ? <>Open <a href="/account">Settings</a>, edit the matching website, and save that user’s WordPress username and Application Password.</> : <>Set <code>WORDPRESS_USERNAME</code> and <code>WORDPRESS_APPLICATION_PASSWORD</code> in your local server configuration, then restart the app.</>}</li>
+          <li>{saas ? <>Open <a href="/settings">Settings</a>, edit the matching website, and save that user’s WordPress username and Application Password.</> : <>Set <code>WORDPRESS_USERNAME</code> and <code>WORDPRESS_APPLICATION_PASSWORD</code> in your local server configuration, then restart the app.</>}</li>
           <li>Return to this page and select <strong>Check again</strong>.</li>
         </ol>
         <p>If Application Passwords is missing, confirm your site uses HTTPS and ask your WordPress administrator or host whether a security setting has disabled the feature.</p>
