@@ -152,7 +152,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const version = body.version?.split('.').map(Number);
       const compatible = body.plugin === 'servicetitan-job-integration' && version?.length === 3 && version.every(Number.isFinite) && (version[0]! > 1 || version[0] === 1 && (version[1]! > 18 || version[1] === 18 && version[2]! >= 1));
       if (!compatible) { res.status(422).json({ service: 'wordpress-plugin', error: 'The companion plugin is missing, too old, or returned an invalid status. Install the latest plugin and test again.', helpUrl: '/wordpress-plugin' }); return; }
-      await store.markPluginValidated(user.id, websiteId, user.workspaceId);
+      try {
+        await store.markPluginValidated(user.id, websiteId, user.workspaceId);
+      } catch {
+        throw new HttpError('The plugin was detected, but the onboarding check could not be saved. Retry, and ask an administrator to verify that the latest database migrations are applied if this continues.', 503);
+      }
       res.json({ valid: true, version: body.version });
     } catch (error) { next(error); }
   });

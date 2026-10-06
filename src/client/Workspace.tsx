@@ -84,8 +84,8 @@ const DemoWorkspaces: Workspace[] = [
 ];
 
 async function json<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(body.error || 'The request could not be completed.');
+  const body = (await response.json()) as T & { error?: string; requestId?: string };
+  if (!response.ok) throw new Error(`${body.error || 'The request could not be completed.'}${body.requestId ? ` (Request ID: ${body.requestId})` : ''}`);
   return body;
 }
 
@@ -565,9 +565,10 @@ export function Workspace({ children }: { children: ReactNode }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteId: saved.id }),
       });
-      const body = await response.json() as { error?: string; helpUrl?: string; version?: string };
+      const body = await response.json() as { error?: string; helpUrl?: string; version?: string; requestId?: string };
       if (!response.ok) {
-        setValidationError({ message: body.error || 'The plugin test failed.', helpUrl: body.helpUrl || '/help/wordpress-plugin' });
+        const details = `${body.error || 'The plugin test failed.'}${body.requestId ? ` (Request ID: ${body.requestId})` : ''}`;
+        setValidationError({ message: details, helpUrl: body.helpUrl || '/help/wordpress-plugin' });
         return;
       }
       await refresh(user, session!.csrfToken!);
@@ -575,7 +576,11 @@ export function Workspace({ children }: { children: ReactNode }) {
       setValidationSuccess(`Plugin installed and validated (version ${body.version}).`);
       setMessage('Plugin check passed. Continue to connect WordPress access.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to save and test the WordPress plugin.');
+      setError('');
+      setValidationError({
+        message: reason instanceof Error ? reason.message : 'Unable to save and test the WordPress plugin.',
+        helpUrl: '/help/wordpress-plugin',
+      });
     } finally {
       setBusy(false);
     }
