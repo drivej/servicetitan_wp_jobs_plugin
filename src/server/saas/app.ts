@@ -9,6 +9,10 @@ import { csrfToken, randomToken } from './crypto.js';
 import type { GoogleLogin } from './google.js';
 import type { WebsiteAppFactory } from './providers.js';
 import { AccountStore, type User } from './store.js';
+import { ServiceTitanClient } from '../service-titan.js';
+import { WordPressClient } from '../wordpress.js';
+import { ServiceTitanRequestError } from '../service-titan-error.js';
+import { WordPressRequestError } from '../wordpress-error.js';
 import { connectionInput, HttpError, uuid, websiteInput } from './validation.js';
 
 export const sessionCookieName = (secure: boolean): string => secure ? '__Host-st_session' : 'st_session';
@@ -61,7 +65,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const identity = await google.exchange(new URL(req.originalUrl, config.origin), state, attempt.nonce, attempt.verifier);
       const result = await store.login(identity, cookieValue(req.headers.cookie, sessionName));
       res.cookie(sessionName, result.token, { ...cookieOptions, maxAge: 7 * 86_400_000 });
-      res.redirect('/');
+      res.redirect('/pricing');
     } catch {
       // Provider errors may contain tokens/codes; never log them or put them in the redirect.
       res.redirect('/?login=failed');
@@ -116,6 +120,44 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     try {
       if (!billing) throw new HttpError('Billing is not configured.', 503);
       res.json(await billing.summary(res.locals.user as User));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/onboarding/status', async (_req, res, next) => {
+    try {
+      const user = res.locals.user as User;
+      const [connections, websites, activeProduct] = await Promise.all([
+        store.listConnections(user.id, user.workspaceId),
+        store.listWebsites(user.id, user.workspaceId),
+        billing ? billing.hasActiveProduct(user) : Promise.resolve(false),
+      ]);
+      res.json({ activeProduct, settingsReady: connections.length > 0 && websites.length > 0 && websites.every((website) => website.wordpressConfigured && connections.some((connection) => connection.id === website.connectionId)) });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/onboarding/validate', async (req, res, next) => {
+    try {
+      const user = res.locals.user as User;
+      const websiteId = uuid(req.body?.websiteId);
+      const context = await store.websiteContext(user.id, websiteId, user.workspaceId);
+      const production = context.connection.environment === 'production';
+      const serviceTitan = new ServiceTitanClient({ ...context.connection,
+        apiBaseUrl: production ? 'https://api.servicetitan.io' : 'https://api-integration.servicetitan.io',
+        authUrl: production ? 'https://auth.servicetitan.io/connect/token' : 'https://auth-integration.servicetitan.io/connect/token' });
+      try { await serviceTitan.validateAccess(); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : 'ServiceTitan rejected the connection.';
+        const code = error instanceof ServiceTitanRequestError && error.status === 401 ? 'credentials' : error instanceof ServiceTitanRequestError && error.status === 403 ? 'permissions' : 'tenant';
+        res.status(422).json({ service: 'servicetitan', code, error: message, helpUrl: `/help#st-${code}` }); return;
+      }
+      if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help#wp-credentials' }); return; }
+      const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField });
+      try { await wordpress.validateAccess(); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : 'WordPress REST API validation failed.';
+        const status = error instanceof WordPressRequestError ? error.status : 0;
+        const code = status === 401 || status === 403 ? 'credentials' : status === 404 ? 'rest-api' : 'reachability';
+        res.status(422).json({ service: 'wordpress', code, error: message, helpUrl: `/help#wp-${code}` }); return;
+      }
+      res.json({ valid: true });
     } catch (error) { next(error); }
   });
   app.post('/api/billing/checkout', async (req, res, next) => {

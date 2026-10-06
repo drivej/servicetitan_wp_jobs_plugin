@@ -110,6 +110,18 @@ export class ServiceTitanClient implements JobsProvider {
     }
   }
 
+  /** Verify auth and the tenant-level job read permission without returning customer data. */
+  async validateAccess(): Promise<void> {
+    try {
+      const token = await this.getAccessToken();
+      const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
+      await this.api.get(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs`, {
+        headers: { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey },
+        params: { page: 1, pageSize: 1 },
+      });
+    } catch (error) { throw this.toRequestError(error); }
+  }
+
   async getJobImageCandidates(jobId: number): Promise<JobAttachment[]> {
     try {
       const token = await this.getAccessToken();

@@ -149,6 +149,29 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
             </div>
           </section>
 
+          <section id="st-troubleshooting">
+            <p className="guide-step">Connection help</p>
+            <h2>ServiceTitan connection problems</h2>
+            <div className="troubleshooting-list">
+              <details id="st-credentials"><summary>ServiceTitan rejects the client credentials</summary><p>Confirm the Client ID and Client Secret belong to the same ServiceTitan application and that the app key is copied without extra characters. Re-enter all credentials if you rotated the secret. The secret is not shown after saving.</p></details>
+              <details id="st-permissions"><summary>The app authenticates but does not have Jobs access</summary><p>In ServiceTitan, open the application’s permission or scopes configuration and grant read access to Job Management jobs (the JPM Jobs scope). Save the app configuration, then wait for changes to propagate before validating again. This app only checks read access during setup.</p></details>
+              <details id="st-tenant"><summary>Tenant ID or environment does not match</summary><p>Use the tenant ID for the same ServiceTitan account as the app credentials. Select Integration for sandbox credentials and Production for live credentials. Production access may need to be enabled by ServiceTitan for your account.</p></details>
+            </div>
+          </section>
+
+          <section id="wp-troubleshooting">
+            <p className="guide-step">Connection help</p>
+            <h2>WordPress REST API problems</h2>
+            <p>The WordPress API must be reachable by the ServiceTitan Jobs server over public HTTPS. In a browser, check that <code>https://your-site.example/wp-json/</code> returns JSON. A login page, firewall block, or hosting “coming soon” page means the API is not reachable yet.</p>
+            <div className="troubleshooting-list">
+              <details id="wp-credentials"><summary>WordPress says the username or password is invalid</summary><p>Enter the WordPress login name and a generated Application Password from Users → Profile. Do not use the normal account password. Ensure this user can edit the ServiceTitan Jobs post type.</p></details>
+              <details id="wp-rest-api"><summary>The REST API or companion status route returns 404</summary><p>Confirm WordPress is installed at the saved site URL, permalinks are enabled (Settings → Permalinks → Save Changes), and the ServiceTitan Job Integration plugin is active. The route should be under <code>/wp-json/wp/v2/st-jobs</code>; if your WordPress installation is in a subdirectory, include that path in the site URL.</p></details>
+              <details id="wp-reachability"><summary>The site cannot be reached or returns a firewall/challenge page</summary><p>Allow inbound HTTPS requests from the app’s server at your hosting provider. Disable bot challenges or Basic Auth for <code>/wp-json/</code> and allow authenticated REST API requests through your CDN, WAF, security plugin, and host firewall. Do not expose wp-admin or disable authentication; only the REST API needs to be reachable.</p></details>
+              <details><summary>Application Passwords are missing</summary><p>Use HTTPS, check that the WordPress user is not blocked from application passwords by a plugin or policy, and ask your host or administrator to enable WordPress Application Passwords.</p></details>
+              <details><summary>The API returns 401 or 403</summary><p>Regenerate the Application Password, verify the exact username, and ensure the integration user can edit and publish the custom job post type. Security plugins can block Application Password authentication; allow it for this account and the REST API.</p></details>
+            </div>
+          </section>
+
           <section id="report-bug">
             <h2>Report a bug</h2>
             <p>Please describe the problem you were having and what you were doing when it happened.</p>

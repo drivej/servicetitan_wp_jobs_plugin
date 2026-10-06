@@ -8,6 +8,7 @@ import { JobDetails } from './JobDetails';
 import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
 import { MarketingPage } from './MarketingPage';
+import { BillingPlans } from './BillingPlans';
 import './styles.css';
 import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 
@@ -17,6 +18,8 @@ const page = path === '/help'
   ? <WordPressIntegrationGuide />
   : path === '/landing'
     ? <MarketingPage />
+  : path === '/pricing'
+    ? <main className='account-page'><PageHeaderFallback /><BillingPlans workspaceId='current' /></main>
   : path === '/wordpress-plugin'
     ? <WordPressPluginSetup />
     : jobDetailsMatch
@@ -57,6 +60,10 @@ function AppShell({ children }: { children: ReactNode }) {
     </div>
     </ThemeProvider>
   );
+}
+
+function PageHeaderFallback() {
+  return <header className='account-page-hero'><p className='eyebrow'>Choose a plan</p><h1>Pricing</h1><p>Select a subscription to continue to setup.</p></header>;
 }
 
 const theme = createTheme({

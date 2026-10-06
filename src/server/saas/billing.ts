@@ -58,7 +58,13 @@ export class BillingService {
     });
   }
   private async subscriptions(customer: string) {
-    return (await this.stripe.subscriptions.list({ customer, status: 'all', limit: 100 })).data.filter((s) => !['canceled', 'incomplete_expired'].includes(s.status));
+    return (await this.stripe.subscriptions.list({ customer, status: 'all', limit: 100 })).data.filter((s) => ['active', 'trialing'].includes(s.status));
+  }
+  async hasActiveProduct(user: User): Promise<boolean> {
+    return this.owned(user, false, async (_sql, row) => {
+      if (!row.customer_id) return false;
+      return (await this.subscriptions(String(row.customer_id))).length > 0;
+    });
   }
   async summary(user: User) {
     const plans = await this.plans();

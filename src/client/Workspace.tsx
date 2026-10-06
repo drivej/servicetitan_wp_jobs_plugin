@@ -47,6 +47,7 @@ interface Session {
   user?: User;
   csrfToken?: string;
 }
+interface OnboardingStatus { activeProduct: boolean; settingsReady: boolean; }
 
 const DemoWebsites: Website[] = [
   {
@@ -301,6 +302,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [testTokenAmount, setTestTokenAmount] = useState('1');
   const [editingConnection, setEditingConnection] = useState<Connection>();
   const [editingWebsite, setEditingWebsite] = useState<Website>();
+  const [onboarding, setOnboarding] = useState<OnboardingStatus>();
+  const [validationError, setValidationError] = useState<{ message: string; helpUrl: string }>();
 
   async function refresh(user: User, token: string) {
     const [connectionResult, siteResult, workspaceResult] = await Promise.all([
@@ -311,6 +314,10 @@ export function Workspace({ children }: { children: ReactNode }) {
     setWorkspaces(workspaceResult.workspaces);
     setConnections(connectionResult.connections);
     setWebsites(siteResult.websites);
+    if (session?.mode === 'saas') {
+      try { setOnboarding(await accountFetch('/api/onboarding/status').then(json<OnboardingStatus>)); }
+      catch { setOnboarding({ activeProduct: false, settingsReady: false }); }
+    }
     let saved = '';
     try {
       saved = window.sessionStorage.getItem(`website:${user.id}`) || '';
@@ -410,6 +417,9 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   const user = session!.user!;
   const isLocal = session!.mode === 'local';
+  if (!isLocal && onboarding && !onboarding.activeProduct && path !== '/pricing' && !invitationToken) window.location.replace('/pricing');
+  if (!isLocal && onboarding?.activeProduct && !onboarding.settingsReady && path !== '/settings' && !invitationToken) window.location.replace('/settings');
+  if (!isLocal && onboarding?.settingsReady && (path === '/pricing' || path === '/settings')) window.location.replace('/');
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
@@ -658,6 +668,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       ) : accountPage ? (
         <main className='account-page'>
           <PageHeader className='account-page-hero' eyebrow='Your workspace' title={websites.length ? 'Settings' : `Welcome, ${user.name.split(' ')[0]}.`} description={websites.length ? 'Manage the connections that power your project stories.' : 'Add a ServiceTitan connection, then connect your first website.'} />
+          {!isLocal && !onboarding?.settingsReady && onboarding?.activeProduct && <p className='notice'>Complete setup by saving a ServiceTitan connection and a website with WordPress credentials. Then validate access from Jobs.</p>}
           <p className='field-help'>Signed in as {user.email}</p>
           <p>Each successful push, rebuild, or AI description generation costs 1 job token. Failed requests do not spend tokens.</p>
           {message && (
@@ -823,7 +834,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           )}
         </main>
       ) : (
-        <div key={`${user.id}:${selected}`}>{children}</div>
+        <div key={`${user.id}:${selected}`}>{!isLocal && !onboarding?.settingsReady ? <main className='account-page'><h1>Validate your setup</h1><p>Save a ServiceTitan connection and a website before validating access. This checks ServiceTitan Jobs read permissions and the WordPress REST API.</p>{validationError && <p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open the matching troubleshooting guide</a>.</p>}<Button variant='contained' className='primary' disabled={busy || websites.length === 0} onClick={async () => { setBusy(true); setValidationError(undefined); try { const response = await accountFetch('/api/onboarding/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ websiteId: selected || websites[0]?.id }) }); const body = await response.json() as { valid?: boolean; error?: string; helpUrl?: string }; if (!response.ok) { setValidationError({ message: body.error || 'Validation failed.', helpUrl: body.helpUrl || '/help#troubleshooting' }); return; } const status = await accountFetch('/api/onboarding/status').then(json<OnboardingStatus>); setOnboarding(status); if (status.settingsReady) window.location.assign('/'); } catch (reason) { setValidationError({ message: reason instanceof Error ? reason.message : 'Unable to validate setup.', helpUrl: '/help#troubleshooting' }); } finally { setBusy(false); } }}>{busy ? 'Checking APIs…' : 'Validate ServiceTitan and WordPress'}</Button><p><a href='/help#st-troubleshooting'>ServiceTitan connection help</a> · <a href='/help#wp-troubleshooting'>WordPress REST API help</a></p></main> : children}</div>
       )}
     </>
   );

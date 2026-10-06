@@ -72,6 +72,15 @@ export class WordPressClient implements WordPressProvider {
     this.authorization = `Basic ${Buffer.from(`${config.username}:${config.applicationPassword}`).toString('base64')}`;
   }
 
+  /** Check authenticated REST API access and companion endpoint permissions. */
+  async validateAccess(): Promise<void> {
+    try {
+      const response = await this.request(pluginApiUrl(this.config.collectionUrl, 'status'));
+      const body = await parseJson<{ version?: string }>(response);
+      if (!body.version || !/^\d+\.\d+\.\d+$/.test(body.version)) throw new WordPressRequestError('The companion plugin did not return a valid status.', 502);
+    } catch (error) { throw this.toRequestError(error); }
+  }
+
   async getPluginStatus(): Promise<WordPressPluginStatus> {
     try {
       const response = await this.request(pluginApiUrl(this.config.collectionUrl, 'status'));
