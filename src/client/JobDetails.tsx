@@ -1,15 +1,15 @@
-import { Radio, TextField } from '@mui/material';
-import { MenuItem, Select } from '@mui/material';
-import { Button } from '@mui/material';
+import { Button, Radio, TextField } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
+import type { BuildTask } from '../shared/build-queue';
 import { ErrorDialog } from './ErrorDialog';
+import { JobTableHeader, JobTableRow } from './JobTable';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
 import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
 
 import { formatJobCopy, hasCompleteJobBody, hasFormattedJobBody, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy';
+import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
-import { showTokenError, useTokensExhausted } from './tokenState';
 
 interface JobAttachment {
   id: string;
@@ -35,8 +35,6 @@ interface JobDetailsResponse {
   attachments: JobAttachment[];
   history: JobHistoryItem[];
 }
-type WordPressWritableStatus = 'draft' | 'publish';
-
 interface JobImageOptionProps {
   attachment: JobAttachment;
   disabled: boolean;
@@ -88,24 +86,23 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
 export function JobDetails({ jobId }: { jobId: number }) {
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
   const tokensExhausted = useTokensExhausted();
-  const jobsHref = `/${window.location.search}`;
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [imageStates, setImageStates] = useState<Record<string, 'loaded' | 'error'>>({});
   const hasValidImage = Boolean(details?.attachments.some((attachment) => imageStates[attachment.id] === 'loaded'));
-  const selectedImageLoaded = selectedIds.length === 1 && imageStates[selectedIds[0]!] === 'loaded';
   const recordImageState = (id: string, state: 'loaded' | 'error') => {
     setImageStates((current) => ({ ...current, [id]: state }));
     if (state === 'error') setSelectedIds((current) => current.filter((selected) => selected !== id));
   };
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [pushing, setPushing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [buildTask, setBuildTask] = useState<BuildTask>();
+  const [queueingBuild, setQueueingBuild] = useState(false);
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [wordpressStatus, setWordpressStatus] = useState<WordPressStatus>();
   const [wordpressStatusLoading, setWordpressStatusLoading] = useState(true);
-  const [desiredStatus, setDesiredStatus] = useState<WordPressWritableStatus>('draft');
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
   const { ready: wordpressPluginReady } = useWordPressPluginStatus();
@@ -208,30 +205,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     }
   };
 
-  const pushToWordPress = async () => {
-    if (!selectedImageLoaded || !hasCompleteAiCopy) return;
-    if (!(await confirmTokenSpend('push'))) return;
-    setPushing(true);
-    setError('');
-    try {
-      const response = await apiFetch(`/api/jobs/${jobId}/wordpress`, {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attachmentIds: selectedIds, status: desiredStatus, aiCopy })
-      });
-      if (response.status === 402) return;
-      const body = await readJson<WordPressStatus | { error?: string }>(response);
-      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to create the WordPress post.');
-      const status = body as WordPressStatus;
-      setWordpressStatus(status);
-      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to create the WordPress post.');
-    } finally {
-      setPushing(false);
-    }
-  };
-
   const regenerateWordPress = async () => {
     if (wordpressStatus?.state !== 'exists') return;
     if (requiresCompleteAiCopy && !hasCompleteAiCopy) {
@@ -269,81 +242,110 @@ export function JobDetails({ jobId }: { jobId: number }) {
     }
   };
 
+  const refreshWordPressStatus = async () => {
+    setWordpressStatusLoading(true);
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress`, { headers: { Accept: 'application/json' } });
+      const body = await readJson<WordPressStatus | { error?: string }>(response);
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to refresh WordPress status.');
+      const status = body as WordPressStatus;
+      setWordpressStatus(status);
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to refresh WordPress status.');
+    } finally {
+      setWordpressStatusLoading(false);
+    }
+  };
+
+  const publishWordPressPost = async () => {
+    if (wordpressStatus?.state !== 'exists' || !wordpressPluginReady || publishing) return;
+    setPublishing(true);
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/status`, {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'publish' })
+      });
+      const body = await readJson<WordPressStatus | { error?: string }>(response);
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not publish the post.');
+      const status = body as WordPressStatus;
+      setWordpressStatus(status);
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'WordPress could not publish the post.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const enqueueBuild = async () => {
+    if (!wordpressPluginReady || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running') return;
+    setQueueingBuild(true);
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/build-deploy`, { method: 'POST' });
+      const body = await readJson<BuildTask | { error?: string }>(response);
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to queue build.');
+      setBuildTask(body as BuildTask);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to queue build.');
+    } finally {
+      setQueueingBuild(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!buildTask || !['queued', 'running'].includes(buildTask.state)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const response = await apiFetch('/api/build-deploy/statuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobIds: [jobId] }) });
+        const body = await readJson<{ tasks: BuildTask[]; error?: string }>(response);
+        if (!response.ok) throw new Error(body.error || 'Unable to check build progress.');
+        if (cancelled) return;
+        const task = body.tasks[0];
+        if (task) {
+          setBuildTask(task);
+          if (task.state === 'succeeded' && task.result) {
+            setWordpressStatus(task.result);
+            writeCachedWordPressStatuses({ [jobId]: task.result }, wordpressStatusStorage());
+          }
+        }
+      } catch (requestError) {
+        if (!cancelled) setError(requestError instanceof Error ? requestError.message : 'Unable to check build progress.');
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void poll(), 3000);
+      }
+    };
+    timer = setTimeout(() => void poll(), 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [buildTask?.state, jobId]);
+
   return (
     <main>
       {tokenSpendDialog}
       <header className='hero details-hero'>
-        <Button component='a' className='back-link' href={jobsHref}>
-          ← Back to jobs
-        </Button>
-        <p className='eyebrow'>Job details</p>
-        <h1>{details?.summary.jobName || `ServiceTitan job ${jobId}`}</h1>
-        {details && (
-          <p className='intro'>
-            Job #{details.summary.jobNumber} · {details.summary.location.city}, {details.summary.location.state} {details.summary.location.zip}
-          </p>
-        )}
+        <p className='eyebrow'>ServiceTitan Job #{details?.summary.jobNumber || jobId}</p>
+        <h1 className='page-title'>{details?.summary.jobName || `ServiceTitan job ${jobId}`}</h1>
       </header>
 
-      <section className='wordpress-action-bar' aria-label='WordPress status and actions'>
-        <div className='wordpress-current-status'>
-          <span className='wordpress-status-label'>WordPress status</span>
-          <strong className={`wordpress-status-badge state-${wordpressStatus?.state || 'unknown'}`} title={wordpressStatus?.message}>
-            {wordpressStatusLoading ? 'Checking…' : wordpressStatus?.label || 'Unknown'}
-          </strong>
-          {wordpressStatus?.state === 'exists' && wordpressStatus.seoState && (
-            <span className={`seo-status-badge seo-${wordpressStatus.seoState}`} title={seoStatusDescription(wordpressStatus)}>
-              {seoStatusLabel(wordpressStatus)}
-            </span>
-          )}
-          {wordpressStatus?.link && (
-            <a href={wordpressStatus.link} target='_blank' rel='noreferrer'>
-              View post
-            </a>
-          )}
-        </div>
-        <div className='wordpress-push-controls'>
-          {wordpressStatus?.state === 'exists' ? (
-            <Button
-              className='primary wordpress-push-button'
-              type='button'
-              disabled={!wordpressPluginReady || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
-              aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || regenerating || wordpressStatus.seoState === 'newer' || Boolean(requiresCompleteAiCopy && !hasCompleteAiCopy)}
-              title={requiresCompleteAiCopy && !hasCompleteAiCopy ? 'Generate the complete AI post copy before updating SEO.' : undefined}
-              onClick={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }}
-            >
-              {regenerating ? 'Rebuilding…' : wordpressStatus.seoState === 'current' ? 'Rebuild' : 'Update SEO'}
-            </Button>
-          ) : (
-            <>
-              <label>
-                <span>Post status</span>
-                <Select size='small' variant='outlined' sx={{ minWidth: 128 }} aria-label='Status for the new WordPress post' value={desiredStatus} disabled={pushing} onChange={(event) => setDesiredStatus(event.target.value as WordPressWritableStatus)}>
-                  <MenuItem value='draft'>Draft</MenuItem>
-                  <MenuItem value='publish'>Published</MenuItem>
-                </Select>
-              </label>
-              <Button
-                className='primary wordpress-push-button'
-                type='button'
-                disabled={!wordpressPluginReady || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
-                aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressStatusLoading || wordpressStatus?.state !== 'not_found' || !selectedImageLoaded || !hasCompleteAiCopy || pushing}
-                title={!selectedImageLoaded ? 'Select a working image before pushing.' : !hasCompleteAiCopy ? 'Generate or paste the complete AI post copy before pushing.' : undefined}
-                onClick={() => { if (tokensExhausted) { showTokenError(); return; } void pushToWordPress(); }}
-              >
-                {pushing ? 'Pushing…' : 'Push'}
-              </Button>
-            </>
-          )}
-        </div>
-      </section>
+      <div className='details-sections'>
+      {/* <div className='results-header'>
+        <p className='page-label'>Job actions</p>
+      </div> */}
+      {details && <div className='table-wrap'>
+        <table className='jobs-table' aria-label='Job list row'>
+          <colgroup><col className='readiness-column' /><col className='job-image-column' /><col className='job-name-column' /><col className='location-column' /><col className='wp-status-column' /><col className='actions-column' /></colgroup>
+          <JobTableHeader disabled={!wordpressPluginReady || wordpressStatusLoading || publishing || regenerating || queueingBuild} onRefresh={() => void refreshWordPressStatus()} />
+          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 20 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void publishWordPressPost()} onRebuild={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
+        </table>
+      </div>}
 
       {loading && (
         <div className='notice' role='status'>
           Loading job details and images…
         </div>
       )}
-      <ErrorDialog message={error.includes('No job tokens available') ? '' : error} onClose={() => setError('')} />
 
       {details && (
         <>
@@ -375,7 +377,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
             <div className='image-grid'>
               {details.attachments.map((attachment) => {
                 const selected = selectedIds.includes(attachment.id);
-                return <JobImageOption key={attachment.id} attachment={attachment} disabled={pushing || regenerating} jobId={jobId} onImageState={recordImageState} onToggle={() => toggleImage(attachment.id)} selected={selected} />;
+                return <JobImageOption key={attachment.id} attachment={attachment} disabled={regenerating || publishing || queueingBuild} jobId={jobId} onImageState={recordImageState} onToggle={() => toggleImage(attachment.id)} selected={selected} />;
               })}
             </div>
           </section>
@@ -413,7 +415,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 <span>
                   {wordpressStatus?.state === 'exists'
                     ? 'The current title and excerpt are loaded from WordPress. Generate complete copy to replace the detail-page story, or edit the available fields before rebuilding.'
-                    : 'Required before pushing. TITLE and EXCERPT power the card; the remaining fields build the job detail page.'}
+                    : 'Build creates the initial draft and generates its copy automatically. This editor is used when preparing an SEO update.'}
                 </span>
                 <span>{aiCopy.length}/6000</span>
               </span>
@@ -421,6 +423,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
           </section>
         </>
       )}
+      </div>
+      <ErrorDialog message={error.includes('No job tokens available') ? '' : error} onClose={() => setError('')} />
     </main>
   );
 }
@@ -433,24 +437,6 @@ const readJson = async <T,>(response: Response): Promise<T> => {
   } catch {
     throw new Error(`The app server returned an invalid response (HTTP ${response.status}).`);
   }
-};
-
-const seoStatusLabel = (status: WordPressStatus): string => {
-  if (status.seoState === 'current') return `SEO v${status.seoVersion} current`;
-  if (status.seoState === 'outdated') return `SEO v${status.seoVersion} → v${status.currentSeoVersion}`;
-  if (status.seoState === 'legacy') return 'Legacy SEO';
-  if (status.seoState === 'modified') return 'SEO manually edited';
-  if (status.seoState === 'newer') return `SEO v${status.seoVersion} newer`;
-  return 'SEO unknown';
-};
-
-const seoStatusDescription = (status: WordPressStatus): string => {
-  if (status.seoState === 'current') return 'This post uses the current SEO generator.';
-  if (status.seoState === 'outdated') return 'A newer SEO generator is available for this post.';
-  if (status.seoState === 'legacy') return 'This post predates SEO version tracking and should be regenerated.';
-  if (status.seoState === 'modified') return 'The generated title, excerpt, or content was edited in WordPress.';
-  if (status.seoState === 'newer') return 'This post was generated by a newer app version.';
-  return 'SEO generation status is unavailable.';
 };
 
 const comparableUploadedFileName = (value: string): string => {

@@ -8,7 +8,7 @@ import { publicFetch } from './saas/public-fetch.js';
 
 interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
-interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; }
+interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
 interface ServiceTitanJobType { id: number; name: string; }
 interface ServiceTitanLocation { id: number; address?: { street?: string; unit?: string; city?: string; state?: string; zip?: string; }; }
 interface ServiceTitanInstalledEquipment { id: number; name?: string | null; }
@@ -49,6 +49,7 @@ export interface JobDetails { job: ServiceTitanJob; summary: JobListItem; attach
 export interface JobImage { id: string; fileName: string; contentType: string; bytes: Uint8Array; }
 export interface JobsProvider {
   getJobs(query: JobsQuery): Promise<JobsResult>;
+  getJobImageCandidates?(jobId: number): Promise<JobAttachment[]>;
   getJob(jobId: number): Promise<JobListItem>;
   getJobDetails(jobId: number): Promise<JobDetails>;
   getJobImage(jobId: number, attachmentId: string): Promise<JobImage>;
@@ -57,7 +58,14 @@ export interface JobsProvider {
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jfif', 'jpeg', 'jpg', 'png', 'tif', 'tiff', 'webp']);
 const IMAGE_MEDIA_TYPES = new Set(['image/avif', 'image/bmp', 'image/gif', 'image/heic', 'image/heif', 'image/jpeg', 'image/pjpeg', 'image/png', 'image/tiff', 'image/webp']);
 const ATTACHMENT_CACHE_MS = 5 * 60_000;
+const ZIP_LOCATIONS_CACHE_MS = 24 * 60 * 60_000;
+const ZIP_LOCATIONS_CACHE_MAX_ENTRIES = 50;
+const ZIP_LOCATIONS_CACHE_MAX_IDS = 500;
+const ZIP_SCAN_PAGE_SIZE = 500;
+const ZIP_SCAN_MAX_PAGES = 20;
+const ZIP_SCAN_MAX_JOBS = ZIP_SCAN_PAGE_SIZE * ZIP_SCAN_MAX_PAGES;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const zipLocationsCache = new Map<string, { expiresAt: number; request: Promise<Set<number>> }>();
 
 export class ServiceTitanClient implements JobsProvider {
   private readonly api: AxiosInstance;
@@ -77,37 +85,9 @@ export class ServiceTitanClient implements JobsProvider {
       const token = await this.getAccessToken();
       const headers = { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey };
       const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
-      const locationIds = query.zip ? await this.getLocationIdsByZip(query.zip, headers, tenantPath) : undefined;
-      if (locationIds && locationIds.size === 0) {
-        return { data: [], page: query.page, pageSize: query.pageSize, hasMore: false, totalCount: 0 };
-      }
-      const targetCount = query.page * query.pageSize + 1;
-      const matchingJobs: ServiceTitanJob[] = [];
-      const imagesByJob = new Map<number, JobAttachment[]>();
-      let sourcePage = 1;
-      let sourceHasMore = true;
-
-      while (sourceHasMore && matchingJobs.length < targetCount) {
-        const jobsResponse = await this.getJobsPage({ ...query, page: sourcePage, pageSize: 50 }, headers, tenantPath);
-        const candidates = locationIds
-          ? filterJobsByLocationIds(jobsResponse.data.data, locationIds) as ServiceTitanJob[]
-          : jobsResponse.data.data;
-        const attachmentLists = await mapWithConcurrency(candidates, 8, (job) => this.getAttachments(job.id, headers, tenantPath));
-        candidates.forEach((job, index) => {
-          const images = attachmentLists[index]!
-            .filter((attachment) => attachmentId(attachment) && isImageAttachment(attachment))
-            .map(publicAttachment);
-          if (images.length > 0) {
-            matchingJobs.push(job);
-            imagesByJob.set(job.id, images);
-          }
-        });
-        sourceHasMore = jobsResponse.data.hasMore;
-        sourcePage += 1;
-      }
-
-      const firstResultIndex = (query.page - 1) * query.pageSize;
-      const pageJobs = matchingJobs.slice(firstResultIndex, firstResultIndex + query.pageSize);
+      const zipResults = query.zip ? await this.getZipFilteredJobs(query, headers, tenantPath) : undefined;
+      const jobsResponse = query.zip ? undefined : await this.getJobsPage(query, headers, tenantPath);
+      const pageJobs = zipResults?.data ?? jobsResponse!.data.data;
       const enrichedJobs = await this.enrichJobs(pageJobs, headers, tenantPath);
 
       return {
@@ -116,15 +96,28 @@ export class ServiceTitanClient implements JobsProvider {
           const wordCount = summary.split(/\s+/).filter(Boolean).length;
           return {
             ...job,
-            attachments: imagesByJob.get(job.id) || [],
-            sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available',
+            attachments: [],
+            sourceCopyStatus: pageJobs[index]!.sourceCopyStatus || (wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available'),
           };
         }),
         page: query.page,
         pageSize: query.pageSize,
-        hasMore: matchingJobs.length > firstResultIndex + query.pageSize || sourceHasMore,
-        ...(!sourceHasMore ? { totalCount: matchingJobs.length } : {}),
+        hasMore: query.zip ? zipResults!.hasMore : jobsResponse!.data.hasMore,
+        ...(!query.zip && jobsResponse!.data.totalCount !== undefined ? { totalCount: jobsResponse!.data.totalCount } : {}),
       };
+    } catch (error) {
+      throw this.toRequestError(error);
+    }
+  }
+
+  async getJobImageCandidates(jobId: number): Promise<JobAttachment[]> {
+    try {
+      const token = await this.getAccessToken();
+      const headers = { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey };
+      const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
+      return (await this.getAttachments(jobId, headers, tenantPath))
+        .filter((attachment) => attachmentId(attachment) && isImageAttachment(attachment))
+        .map(publicAttachment);
     } catch (error) {
       throw this.toRequestError(error);
     }
@@ -256,14 +249,40 @@ export class ServiceTitanClient implements JobsProvider {
     headers: Record<string, string>,
     tenantPath: string,
   ): Promise<Set<number>> {
+    const cacheKey = `${this.config.apiBaseUrl}:${this.config.tenantId}:${this.config.clientId}:${zip}`;
+    const cached = zipLocationsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.request;
+    for (const [key, value] of zipLocationsCache) {
+      if (value.expiresAt <= Date.now()) zipLocationsCache.delete(key);
+    }
+    if (zipLocationsCache.size >= ZIP_LOCATIONS_CACHE_MAX_ENTRIES) zipLocationsCache.delete(zipLocationsCache.keys().next().value!);
+
+    const request = this.fetchLocationIdsByZip(zip, headers, tenantPath);
+    zipLocationsCache.set(cacheKey, { expiresAt: Date.now() + ZIP_LOCATIONS_CACHE_MS, request });
+    try {
+      const ids = await request;
+      if (ids.size > ZIP_LOCATIONS_CACHE_MAX_IDS) zipLocationsCache.delete(cacheKey);
+      return ids;
+    } catch (error) {
+      zipLocationsCache.delete(cacheKey);
+      throw error;
+    }
+  }
+
+  private async fetchLocationIdsByZip(
+    zip: string,
+    headers: Record<string, string>,
+    tenantPath: string,
+  ): Promise<Set<number>> {
     const ids = new Set<number>();
     let page = 1;
     let hasMore = true;
 
     while (hasMore) {
+      if (page > ZIP_SCAN_MAX_PAGES) throw new ServiceTitanRequestError('ServiceTitan returned too many locations for this ZIP search.', 502);
       const response = await this.api.get<PaginatedResponse<ServiceTitanLocation>>(
         `${this.config.apiBaseUrl}/crm/v2/${tenantPath}/locations`,
-        { headers, params: { zip, active: 'Any', page, pageSize: 50 } },
+        { headers, params: { zip, active: 'Any', page, pageSize: ZIP_SCAN_PAGE_SIZE } },
       );
       for (const location of response.data.data) ids.add(location.id);
       hasMore = response.data.hasMore;
@@ -271,6 +290,63 @@ export class ServiceTitanClient implements JobsProvider {
     }
 
     return ids;
+  }
+
+  private async getZipFilteredJobs(
+    query: JobsQuery,
+    headers: Record<string, string>,
+    tenantPath: string,
+  ): Promise<{ data: ServiceTitanJob[]; hasMore: boolean }> {
+    return this.fetchZipFilteredJobs(query, headers, tenantPath);
+  }
+
+  private async fetchZipFilteredJobs(
+    query: JobsQuery,
+    headers: Record<string, string>,
+    tenantPath: string,
+  ): Promise<{ data: ServiceTitanJob[]; hasMore: boolean }> {
+    const locationIds = await this.getLocationIdsByZip(query.zip!, headers, tenantPath);
+    if (locationIds.size === 0) return { data: [], hasMore: false };
+
+    const matchingJobs: ServiceTitanJob[] = [];
+    const firstResultIndex = (query.page - 1) * query.pageSize;
+    const targetCount = firstResultIndex + query.pageSize + 1;
+    if (targetCount > ZIP_SCAN_MAX_JOBS) {
+      throw new ServiceTitanRequestError('This page is too deep to safely filter by ZIP. Narrow the date range or move closer to the first page.', 422);
+    }
+    let page = 1;
+    let hasMore = true;
+    while (hasMore && matchingJobs.length < targetCount) {
+      if (page > ZIP_SCAN_MAX_PAGES) {
+        throw new ServiceTitanRequestError('This date range has too many jobs to safely filter by ZIP. Narrow the date range and try again.', 422);
+      }
+      const response = await this.getJobsPage(
+        { ...query, page, pageSize: ZIP_SCAN_PAGE_SIZE },
+        headers,
+        tenantPath,
+      );
+      for (const job of filterJobsByLocationIds(response.data.data, locationIds) as ServiceTitanJob[]) {
+        const summary = redactHistoryContent(job.summary).trim();
+        const wordCount = summary.split(/\s+/).filter(Boolean).length;
+        matchingJobs.push({
+          id: job.id,
+          jobNumber: job.jobNumber,
+          locationId: job.locationId,
+          jobTypeId: job.jobTypeId,
+          jobStatus: job.jobStatus,
+          ...(job.completedOn ? { completedOn: job.completedOn } : {}),
+          sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available',
+        });
+        if (matchingJobs.length >= targetCount) break;
+      }
+      hasMore = response.data.hasMore;
+      page += 1;
+    }
+
+    return {
+      data: matchingJobs.slice(firstResultIndex, firstResultIndex + query.pageSize),
+      hasMore: matchingJobs.length > firstResultIndex + query.pageSize,
+    };
   }
 
   private getJobsPage(
@@ -471,20 +547,6 @@ const publicAttachment = (attachment: ServiceTitanAttachment): JobAttachment => 
   fileName: attachmentName(attachment),
   contentType: String(attachment.contentType || attachment.mimeType || attachment.mediaType || attachment.type || '').slice(0, 100),
 });
-
-const mapWithConcurrency = async <T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>): Promise<R[]> => {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  const worker = async () => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await mapper(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-};
 
 export const prepareHistoryItems = (
   history: ServiceTitanHistoryEntry[],

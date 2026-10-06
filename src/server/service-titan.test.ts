@@ -33,6 +33,59 @@ test('keeps only jobs assigned to locations resolved for the ZIP code', () => {
   );
 });
 
+test('filters ZIP matches before paginating and reports ZIP-specific counts', async () => {
+  const calls: Array<{ url: string; params?: Record<string, unknown> }> = [];
+  const client = new ServiceTitanClient({
+    clientId: 'client-id', clientSecret: 'client-secret', appKey: 'app-key', tenantId: 'tenant-id',
+    apiBaseUrl: 'https://api.example', authUrl: 'https://auth.example/token',
+  });
+  const api = {
+    defaults: { timeout: 0 },
+    post: async () => ({ data: { access_token: 'token', expires_in: 3600 } }),
+    get: async (url: string, options?: { params?: Record<string, unknown> }) => {
+      calls.push({ url, params: options?.params });
+      if (url.endsWith('/jobs')) {
+        const page = Number(options?.params?.page);
+        return { data: page === 1 ? {
+          page, pageSize: 500, hasMore: true, totalCount: 3,
+          data: [
+            { id: 1, locationId: 100, jobTypeId: 20, jobNumber: 'J-1', jobStatus: 'Completed' },
+            { id: 2, locationId: 200, jobTypeId: 20, jobNumber: 'J-2', jobStatus: 'Completed' },
+          ],
+        } : {
+          page, pageSize: 500, hasMore: false, totalCount: 3,
+          data: [{ id: 3, locationId: 100, jobTypeId: 20, jobNumber: 'J-3', jobStatus: 'Completed' }],
+        } };
+      }
+      if (url.endsWith('/locations')) {
+        if (options?.params?.zip) return { data: { page: 1, pageSize: 500, hasMore: false, data: [{ id: 100 }] } };
+        return { data: { data: [{ id: 100, address: { city: 'Austin', state: 'TX', zip: '78701' } }] } };
+      }
+      if (url.endsWith('/job-types')) return { data: { data: [{ id: 20, name: 'Repair' }] } };
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  };
+  (client as unknown as { api: typeof api }).api = api;
+
+  const query = {
+    startDate: '2026-08-01T00:00:00.000Z', endDateExclusive: '2026-08-08T00:00:00.000Z',
+    page: 1, pageSize: 1, zip: '78701',
+  };
+  const first = await client.getJobs(query);
+  const second = await client.getJobs({ ...query, page: 2 });
+
+  assert.deepEqual(first.data.map((job) => job.id), [1]);
+  assert.equal(first.totalCount, undefined, 'ZIP totals are not fetched by scanning every matching job');
+  assert.equal(first.hasMore, true);
+  assert.deepEqual(second.data.map((job) => job.id), [3]);
+  assert.equal(second.totalCount, undefined);
+  assert.equal(second.hasMore, false);
+  const jobListCalls = calls.filter((call) => call.url.endsWith('/jobs'));
+  assert.equal(jobListCalls.length, 4, 'each page scans only through its next-match lookahead');
+  assert.ok(jobListCalls.every((call) => call.params?.pageSize === 500));
+  assert.equal(calls.filter((call) => call.url.endsWith('/locations') && call.params?.zip).length, 1, 'ZIP location IDs are cached across page requests');
+});
+
 test('lists only jobs with image metadata and securely downloads a verified job image', async () => {
   const requestedUrls: string[] = [];
   const client = new ServiceTitanClient({

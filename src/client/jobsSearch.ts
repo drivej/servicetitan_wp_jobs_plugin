@@ -36,8 +36,7 @@ export const jobsListUrl = (state: JobsSearchState, page = state.page): string =
   return `/?${params.toString()}`;
 };
 
-export const jobDetailsUrl = (jobId: number, state: JobsSearchState): string =>
-  `/jobs/${jobId}${jobsListUrl(state).slice(1)}`;
+export const jobDetailsUrl = (jobId: number): string => `/jobs/${jobId}`;
 
 const positiveInteger = (value: string | null, fallback: number, maximum?: number): number => {
   if (!value || !/^\d+$/.test(value)) return fallback;

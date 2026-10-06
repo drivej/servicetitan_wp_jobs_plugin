@@ -1,27 +1,17 @@
+import { Alert, Button, Pagination, Paper, TextField, Typography } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Chip, IconButton, Paper, TextField, Typography } from '@mui/material';
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
-import LinkIcon from '@mui/icons-material/Link';
 import type { BuildTask } from '../shared/build-queue';
-import { JobThumbnail } from './JobThumbnail';
+import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { apiFetch, wordpressStatusStorage } from './api';
 
+import { ErrorDialog } from './ErrorDialog';
 import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './jobsSearch';
+import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
-import { ErrorDialog } from './ErrorDialog';
-import { showTokenError, useTokensExhausted } from './tokenState';
 
-interface JobItem {
-  id: number;
-  attachments?: Array<{ id: string; fileName: string }>;
-  sourceCopyStatus?: 'missing' | 'limited' | 'available';
-  jobName: string;
-  status: string;
-  location: { city: string; state: string; zip: string };
-}
 interface JobsResponse {
-  data: JobItem[];
+  data: JobTableItem[];
   page: number;
   pageSize: number;
   hasMore: boolean;
@@ -32,17 +22,7 @@ interface ActionError {
   message: string;
 }
 type WordPressWritableStatus = 'draft' | 'publish';
-type StatusChipColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
 const unknownWordPressStatus: WordPressStatus = { state: 'unknown', label: 'Unknown' };
-
-const serviceTitanStatusColor = (status: string): StatusChipColor => {
-  const normalized = status.toLowerCase();
-  if (/completed|complete|success|closed/.test(normalized)) return 'success';
-  if (/cancel|failed|error|void/.test(normalized)) return 'error';
-  if (/progress|dispatched|started|working/.test(normalized)) return 'info';
-  if (/scheduled|hold|pending|on.?hold/.test(normalized)) return 'warning';
-  return 'default';
-};
 
 const toDateInput = (date: Date): string => {
   const year = date.getFullYear();
@@ -244,7 +224,7 @@ export function App() {
 
   const regenerateWordpress = async (jobId: number, currentStatus: WordPressStatus) => {
     if (!wordpressPluginReady || currentStatus.state !== 'exists') return;
-    window.location.assign(jobDetailsUrl(jobId, search));
+    window.location.assign(jobDetailsUrl(jobId));
     return;
   };
 
@@ -312,7 +292,8 @@ export function App() {
     <main>
       <header className='hero'>
         {/* <p className='eyebrow'>ServiceTitan workspace</p> */}
-        <Typography variant="h3" component="h1">ServiceTitan Jobs Search</Typography>
+        <p className='eyebrow'>ServiceTitan Jobs</p>
+        <h1 className='page-title'>Job search</h1>
         {/* <p className='intro'>Choose an inclusive date range to find completed jobs and their service locations.</p> */}
       </header>
 
@@ -361,7 +342,7 @@ export function App() {
       <section className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>
           <div>
-            <p className='page-label'>Results</p>
+            {/* <p className='page-label'>Results</p> */}
             {/* <h2 id='results-heading'>{result?.totalCount === undefined ? 'Service jobs' : `${result.totalCount.toLocaleString()} service ${result.totalCount === 1 ? 'job' : 'jobs'}`}</h2> */}
           </div>
           {result && (
@@ -391,169 +372,31 @@ export function App() {
           <div className='table-wrap'>
             <table className='jobs-table'>
               <colgroup>
+                <col className='readiness-column' />
                 <col className='job-image-column' />
                 <col className='job-name-column' />
                 <col className='location-column' />
-                <col className='st-status-column' />
                 <col className='wp-status-column' />
                 <col className='actions-column' />
               </colgroup>
-              <thead>
-                <tr>
-                  <th scope='colgroup' colSpan={2}>
-                    Job
-                  </th>
-                  <th scope='col'>
-                    Location
-                  </th>
-                  <th scope='col'>ST status</th>
-                  <th scope='col'>
-                    WordPress
-                  </th>
-                  <th scope='col' className='actions-heading'>
-                    <div className='actions-heading-content'>
-                      <span>ACTIONS</span>
-                      <IconButton
-                        size='small'
-                        title='Refresh all WordPress statuses'
-                        aria-label='Refresh all WordPress statuses'
-                        className={bulkRefreshing ? 'is-spinning' : undefined}
-                        disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0}
-                        onClick={() => void refreshPageWordpressStatuses()}
-                      >
-                        <RefreshIcon />
-                      </IconButton>
-                    </div>
-                  </th>
-                </tr>
-              </thead>
+              <JobTableHeader refreshing={bulkRefreshing} disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onRefresh={() => void refreshPageWordpressStatuses()} />
               <tbody>
-                {result.data.map((job) => {
-                  const wordpressStatus = wordpressStatuses[job.id] || unknownWordPressStatus;
-                  const buildTask = buildTasks[job.id];
-                  const buildBusy = queueingJobs.has(job.id) || buildTask?.state === 'queued' || buildTask?.state === 'running';
-                  const wordpressBusy = busyWordpressJobs.has(job.id) || buildBusy;
-                  const wordpressDisplayLabel = wordpressStatus.state === 'not_found' ? 'None' : wordpressStatus.label;
-                  const wordpressStatusLabel = wordpressStatus.state === 'exists'
-                    ? wordpressStatus.postStatus === 'publish' ? 'Published' : wordpressStatus.postStatus === 'draft' ? 'Draft' : wordpressStatus.label
-                    : wordpressDisplayLabel;
-                  const wordpressStatusColor: StatusChipColor = wordpressStatus.state === 'not_found'
-                    ? 'default'
-                    : wordpressStatus.state === 'unknown'
-                      ? wordpressStatus.label.toLowerCase().includes('loading') ? 'info' : 'error'
-                      : wordpressStatus.postStatus === 'publish' ? 'success' : wordpressStatus.postStatus === 'draft' ? 'warning' : 'default';
-                  const detailsHref = jobDetailsUrl(job.id, search);
-                  const openJobDetails = () => window.location.assign(detailsHref);
-                  return (
-                    <tr
-                      key={job.id}
-                      className='job-row'
-                      tabIndex={0}
-                      aria-label={`Open ${job.jobName} details`}
-                      onClick={openJobDetails}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          openJobDetails();
-                        }
-                      }}
-                    >
-                      <td className='job-image-cell' data-label='Image'>
-                        <JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} />
-                      </td>
-                      <td className='job-name-cell' data-label='Job'>
-                        <div className='job-name' title={job.jobName}>
-                          {job.jobName}
-                        </div>
-                        {wordpressStatus.state !== 'exists' && job.sourceCopyStatus && (
-                          <span className={`source-copy-status source-${job.sourceCopyStatus}`} title='Basic summary check: missing, fewer than 20 words, or at least 20 words. Review the source before generating copy.'>
-                            {job.sourceCopyStatus === 'missing' ? 'Missing source copy' : job.sourceCopyStatus === 'limited' ? 'Limited source copy' : 'Source copy available'}
-                          </span>
-                        )}
-                      </td>
-                      <td className='location-cell' data-label='Location'>
-                        <div className='location-cell-city' title={`${job.location.city}, ${job.location.state}`}>
-                          {job.location.city}, {job.location.state}
-                        </div>
-                        <span>{job.location.zip}</span>
-                      </td>
-                      <td className='st-status-cell' data-label='ST status'>
-                        <Chip size='small' color={serviceTitanStatusColor(job.status)} label={job.status} />
-                      </td>
-                      <td className='wp-status-cell' data-label='WordPress'>
-                        <Chip
-                          size='small'
-                          color={wordpressStatusColor}
-                          label={wordpressStatusLabel}
-                          title={wordpressStatus.message}
-                        />
-                      </td>
-                      <td className='actions-cell' data-label='Actions'>
-                        <div className='row-actions'>
-                          {wordpressStatus.state === 'exists' && wordpressStatus.link && (
-                            <Button component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' startIcon={<LinkIcon />} onClick={(event) => event.stopPropagation()}>
-                              View post
-                            </Button>
-                          )}
-                          {wordpressStatus.state === 'not_found' && (
-                            <Button variant='contained' color='primary' className='build-deploy-button' type='button'
-                              disabled={!wordpressPluginReady || wordpressBusy || Boolean(queueError)}
-                              aria-disabled={!wordpressPluginReady || tokensExhausted || wordpressBusy || Boolean(queueError)}
-                              title='Generate copy, select the first available image, and create a WordPress draft. Uses 2 job tokens.'
-                              onClick={(event) => { event.stopPropagation(); if (tokensExhausted) { showTokenError(); return; } if (!wordpressPluginReady || wordpressBusy || queueError) return; void enqueueBuild(job.id); }}>
-                              {buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build draft'}
-                            </Button>
-                          )}
-                          {buildTask?.state === 'failed' && buildTask.error !== 'No job tokens available. Add tokens before trying again.' && <span className='build-deploy-error' role='status'>{buildTask.error}</span>}
-
-                          {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'draft' && (
-                            <Button variant='contained' className='primary' type='button' disabled={!wordpressPluginReady || wordpressBusy} onClick={(event) => { event.stopPropagation(); void updateWordpressStatus(job.id, 'publish'); }}>
-                              {wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Publishing…' : 'Publish post'}
-                            </Button>
-                          )}
-                          {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'publish' && (
-                            <Button
-                              className={`regenerate-button rebuild-${rebuildUpdateLevel(wordpressStatus)}`}
-                              type='button'
-                              disabled={!wordpressPluginReady || wordpressBusy || wordpressStatus.seoState === 'newer'}
-                              title={rebuildButtonDescription(wordpressStatus)}
-                              onClick={(event) => { event.stopPropagation(); void regenerateWordpress(job.id, wordpressStatus); }}
-                            >
-                              {wordpressBusy && wordpressStatus.label === 'Regenerating…' ? 'Regenerating…' : 'Rebuild'}
-                            </Button>
-                          )}
-                          <IconButton size='small' className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`} type='button' aria-label={`Refresh WordPress status for ${job.jobName}`} title='Refresh WordPress post status' disabled={!wordpressPluginReady || wordpressBusy} onClick={(event) => { event.stopPropagation(); void requestWordpress(job.id); }}>
-                            <RefreshIcon />
-                          </IconButton>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {result.data.map((job) => <JobTableRow key={job.id} job={job} wordpressStatus={wordpressStatuses[job.id] || unknownWordPressStatus} wordpressBusy={busyWordpressJobs.has(job.id) || queueingJobs.has(job.id) || buildTasks[job.id]?.state === 'queued' || buildTasks[job.id]?.state === 'running'} buildTask={buildTasks[job.id]} queueError={queueError} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onOpen={() => window.location.assign(jobDetailsUrl(job.id))} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } if (wordpressPluginReady && !queueError) void enqueueBuild(job.id); }} onPublish={() => void updateWordpressStatus(job.id, 'publish')} onRebuild={() => void regenerateWordpress(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)} onRefresh={() => void requestWordpress(job.id)} />)}
               </tbody>
             </table>
           </div>
         )}
 
         {result && !error && (
-          <nav className='pagination' aria-label='Jobs pages'>
-            {search.page > 1 ? (
-              <Button component='a' className='pagination-link' href={jobsListUrl(search, search.page - 1)}>
-                Previous
-              </Button>
-            ) : (
-              <Button className='pagination-link' disabled>Previous</Button>
-            )}
-            <span>Page {search.page}</span>
-            {result.hasMore ? (
-              <Button component='a' className='pagination-link' href={jobsListUrl(search, search.page + 1)}>
-                Next
-              </Button>
-            ) : (
-              <Button className='pagination-link' disabled>Next</Button>
-            )}
-          </nav>
+          <Pagination
+            className='pagination'
+            aria-label='Jobs pages'
+            count={pageCount ?? Math.max(search.page, result.hasMore ? search.page + 1 : search.page)}
+            page={search.page}
+            color='primary'
+            shape='rounded'
+            onChange={(_event, page) => window.location.assign(jobsListUrl(search, page))}
+          />
         )}
       </section>
 
@@ -581,32 +424,6 @@ export function App() {
       />
     </main>
   );
-}
-
-const RefreshIcon = () => <RefreshRoundedIcon fontSize="small" aria-hidden="true" />;
-
-type RebuildUpdateLevel = 'unnecessary' | 'minor' | 'major' | 'required';
-
-function rebuildUpdateLevel(status: WordPressStatus): RebuildUpdateLevel {
-  if (status.seoState === 'current' || status.seoState === 'newer') return 'unnecessary';
-  if (status.seoState === 'legacy' || !status.seoVersion) return 'required';
-  const versionGap = (status.currentSeoVersion || status.seoVersion) - status.seoVersion;
-  if (versionGap <= 0) return 'unnecessary';
-  if (versionGap === 1) return 'minor';
-  if (versionGap === 2) return 'major';
-  return 'required';
-}
-
-function rebuildButtonDescription(status: WordPressStatus): string {
-  if (status.seoState === 'newer') return 'Unavailable: this post was generated by a newer app version.';
-  const level = rebuildUpdateLevel(status);
-  if (level === 'unnecessary') {
-    return status.seoState === 'modified' ? 'Rebuild is unnecessary for the current SEO version. This post was manually edited in WordPress.' : 'Rebuild is unnecessary. This post uses the current SEO version.';
-  }
-  const versionChange = status.seoVersion && status.currentSeoVersion ? ` SEO v${status.seoVersion} → v${status.currentSeoVersion}.` : '';
-  if (level === 'minor') return `Minor update available.${versionChange}`;
-  if (level === 'major') return `Major update available.${versionChange}`;
-  return `Required update.${versionChange || ' This post predates SEO version tracking.'}`;
 }
 
 async function readApiResponse<T>(response: Response, fallbackMessage: string): Promise<T> {

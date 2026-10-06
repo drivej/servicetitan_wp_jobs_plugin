@@ -103,6 +103,10 @@ h1 {
   font-size: clamp(2.7rem, 7vw, 5.4rem);
   letter-spacing: -0.055em;
 }
+.page-title {
+  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  letter-spacing: -0.045em;
+}
 h2 {
   font-size: clamp(1.65rem, 3vw, 2.25rem);
   letter-spacing: -0.025em;
@@ -114,8 +118,8 @@ h2 {
   font-size: 1.08rem;
   line-height: 1.65;
 }
-.panel,
-.results {
+.panel {
+/* .results { */
   background: #fcfcf8;
   border: 1px solid #d9ddd7;
   border-radius: 18px;
@@ -207,7 +211,7 @@ h2 {
   align-items: end;
   justify-content: space-between;
   gap: 24px;
-  padding: 28px 30px 22px;
+  padding: 10px 10px;
 }
 .results-actions {
   display: flex;
@@ -234,8 +238,10 @@ h2 {
 }
 .table-wrap {
   overflow-x: visible;
-  border-top: 1px solid #e0e3df;
-  border-bottom: 1px solid #e0e3df;
+  /* background: #f5f6f2; */
+  border: 1px solid #e0e3df;
+  border-radius: 12px;
+  overflow: hidden;
 }
 table {
   width: 100%;
@@ -273,14 +279,14 @@ td strong {
 .jobs-table .job-image-column {
   width: 1%;
 }
+.jobs-table .readiness-column {
+  width: 1%;
+}
 .jobs-table .job-name-column {
   width: 17%;
 }
 .jobs-table .location-column {
   width: 24%;
-}
-.jobs-table .st-status-column {
-  width: 10%;
 }
 .jobs-table .wp-status-column {
   width: 12%;
@@ -288,6 +294,24 @@ td strong {
 .jobs-table .actions-column {
   width: 27%;
 }
+.jobs-table .readiness-column { width: 1%; }
+.jobs-table .readiness-cell {
+  padding: 4px !important;
+  text-align: center;
+  color: inherit;
+}
+.jobs-table .readiness-cell svg {
+  display: block;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+.jobs-table .readiness-valid svg { color: #fff; background: #2e7d32; }
+.jobs-table .readiness-invalid svg { color: #fff; background: #ed6c02; }
+.jobs-table .readiness-concern svg { color: #3f3512; background: #edc531; }
 .jobs-table th,
 .jobs-table td {
   padding: 8px;
@@ -297,7 +321,7 @@ td strong {
 .actions-heading-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   width: 100%;
 }
 /* .jobs-table td {
@@ -333,9 +357,16 @@ td strong {
 }
 .jobs-table tbody tr.job-row {
   cursor: pointer;
+  background: #fcfcf8;
 }
 .jobs-table tbody tr.job-row:hover {
   background: #f2f6f2;
+}
+.jobs-table tbody tr.job-row-static {
+  cursor: default;
+}
+.jobs-table tbody tr.job-row-static:hover {
+  background: #fcfcf8;
 }
 .jobs-table tbody tr.job-row:focus-visible {
   outline: 2px solid #186d4c;
@@ -373,70 +404,26 @@ td strong {
 }
 .details-hero {
   max-width: 900px;
+  margin-bottom: 24px;
 }
-.back-link { margin-bottom: 28px; }
-.wordpress-action-bar {
+.back-link.MuiButton-root {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  width: fit-content;
+  margin-bottom: 18px;
+}
+.details-sections {
+  display: grid;
   gap: 24px;
-  margin-bottom: 20px;
-  padding: 18px 22px;
-  background: #263b31;
-  border: 1px solid #1d3027;
-  border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(31, 48, 40, 0.14);
 }
-.wordpress-current-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: #dfe9e3;
+.details-sections > .panel {
+  margin-bottom: 0;
 }
-.wordpress-current-status > .wordpress-status-label {
-  color: #b9c9c0;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+.details-sections > .notice {
+  margin: 0;
 }
-.wordpress-current-status > a {
-  color: #d8f2e3;
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-underline-offset: 3px;
+.details-sections > .results-header {
+  padding: 0 30px;
 }
-.wordpress-status-badge {
-  display: inline-flex;
-  padding: 6px 10px;
-  color: #27352d;
-  background: #e8ede9;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-.wordpress-status-badge.state-exists {
-  color: #17492f;
-  background: #cdebd8;
-}
-.wordpress-status-badge.state-not_found {
-  color: #634910;
-  background: #f6dda4;
-}
-.wordpress-push-controls {
-  display: flex;
-  align-items: end;
-  gap: 9px;
-}
-.wordpress-push-controls label > span {
-  margin-bottom: 5px;
-  color: #c2d0c8;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.wordpress-push-button { min-width: 90px; }
 .details-panel {
   padding: 30px;
 }
@@ -534,6 +521,11 @@ td strong {
   align-items: center;
   gap: 9px;
   padding: 11px 12px;
+}
+.image-choice .MuiRadio-root {
+  flex: 0 0 auto;
+  margin-left: 0;
+  padding: 9px;
 }
 .image-choice span {
   overflow: hidden;
@@ -716,12 +708,7 @@ td strong {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 14px;
   padding: 20px 30px;
-}
-.pagination span {
-  color: #657169;
-  font-size: 0.86rem;
 }
 .guide-page {
   width: min(1180px, calc(100% - 32px));
@@ -1027,7 +1014,6 @@ td strong {
 @media (max-width: 920px) {
   .table-wrap {
     padding: 10px;
-    background: #f5f6f2;
   }
   .jobs-table,
   .jobs-table tbody {
@@ -1071,10 +1057,19 @@ td strong {
     text-transform: uppercase;
   }
   .jobs-table .job-image-cell,
-  .jobs-table .job-name-cell,
-  .jobs-table .st-status-cell {
+  .jobs-table .job-name-cell {
     grid-column: 1;
   }
+  .jobs-table .readiness-cell {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+  }
+  .jobs-table .readiness-cell::before { display: none; }
   .jobs-table .location-cell {
     grid-column: 2;
   }
@@ -1131,7 +1126,7 @@ td strong {
     padding-inline: 20px;
   }
   .pagination {
-    justify-content: space-between;
+    justify-content: center;
     padding-inline: 20px;
   }
   .guide-page {
@@ -1169,23 +1164,6 @@ td strong {
   .details-panel {
     padding: 20px;
   }
-  .wordpress-action-bar {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 18px;
-  }
-  .wordpress-current-status {
-    flex-wrap: wrap;
-  }
-  .wordpress-push-controls {
-    align-items: stretch;
-  }
-  .wordpress-push-controls label {
-    flex: 1;
-  }
-  .wordpress-push-controls .MuiNativeSelect-root {
-    width: 100%;
-  }
   .details-section-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1217,7 +1195,6 @@ td strong {
   .jobs-table .job-cell,
   .jobs-table .job-name-cell,
   .jobs-table .location-cell,
-  .jobs-table .st-status-cell,
   .jobs-table .wp-status-cell,
   .jobs-table .actions-cell {
     grid-column: 1;
@@ -1576,5 +1553,41 @@ td strong {
 .token-reference { overflow-wrap: anywhere; }
 
 
-.build-deploy-button { white-space: nowrap; }
+.jobs-table .build-deploy-button.MuiButton-root {
+  white-space: nowrap;
+  border: 1px solid #87918b;
+  background: transparent;
+  color: #46524b;
+  box-shadow: none;
+}
+.jobs-table .build-deploy-button.MuiButton-root:hover {
+  border-color: #59665f;
+  background: #f0f2ef;
+  box-shadow: none;
+}
+.jobs-table .job-action-publish.MuiButton-root {
+  background: #21834b;
+  color: #fff;
+  box-shadow: none;
+}
+.jobs-table .job-action-publish.MuiButton-root:hover {
+  background: #176c3c;
+  box-shadow: none;
+}
+.jobs-table .job-action-rebuild.MuiButton-root {
+  border-color: #3977b8;
+  background: #3977b8;
+  color: #fff;
+  box-shadow: none;
+}
+.jobs-table .job-action-rebuild.MuiButton-root:hover {
+  border-color: #2e649e;
+  background: #2e649e;
+  box-shadow: none;
+}
+.jobs-table .build-deploy-button.Mui-disabled,
+.jobs-table .job-action-publish.Mui-disabled,
+.jobs-table .job-action-rebuild.Mui-disabled {
+  opacity: .55;
+}
 .build-deploy-error { max-width: 260px; color: #a32626; font-size: 0.8rem; line-height: 1.4; }

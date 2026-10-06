@@ -83,6 +83,13 @@ export const createApp = ({
       response.json(await serviceTitan.getJobDetails(parseJobId(request.params.jobId)));
     } catch (error) { next(error); }
   });
+  app.get(`${apiPrefix}/jobs/:jobId/image-candidates`, async (request, response, next) => {
+    try {
+      if (!serviceTitan.getJobImageCandidates) throw new HttpError('Image candidate lookup is unavailable.', 501);
+      response.set('Cache-Control', 'private, no-store');
+      response.json({ attachments: await serviceTitan.getJobImageCandidates(parseJobId(request.params.jobId)) });
+    } catch (error) { next(error); }
+  });
   app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {
     try {
       if (!buildQueue) throw new HttpError('Build queue is unavailable.', 503);
