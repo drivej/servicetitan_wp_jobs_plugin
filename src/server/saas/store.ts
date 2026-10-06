@@ -207,7 +207,7 @@ export class AccountStore {
       if (!credentials.clientId || !credentials.clientSecret || !credentials.appKey) throw new HttpError('ServiceTitan credentials are required.');
       const encrypted = this.vault.encrypt(credentials, `connection:${workspaceId}:${id}`);
       const result = update
-        ? await sql.query('UPDATE servicetitan_connections SET name=$3,credentials=$4,environment=$5,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.environment])
+        ? await sql.query('UPDATE servicetitan_connections SET name=$3,credentials=$4,environment=$5,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.environment])
         : await sql.query('INSERT INTO servicetitan_connections(id,workspace_id,name,environment,tenant_id,credentials) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, workspaceId, input.name, input.environment, input.tenantId, encrypted]);
       await audit(sql, userId, update ? 'connection.updated' : 'connection.created', id);
       return connectionFrom(result.rows[0]!);
@@ -222,14 +222,16 @@ export class AccountStore {
       if (update) {
         previous = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2 FOR UPDATE', [workspaceId, id])).rows[0];
         if (!previous) throw new HttpError('Website not found.', 404);
-        if (previous.connection_id !== input.connectionId || previous.url !== input.url) throw new HttpError('Create a new website to change its URL or ServiceTitan connection.');
+      if (input.connectionId && previous.connection_id !== input.connectionId || previous.url !== input.url) throw new HttpError('Create a new website to change its URL or ServiceTitan connection.');
       }
-      const connection = (await sql.query('SELECT id FROM servicetitan_connections WHERE workspace_id=$1 AND id=$2', [workspaceId, input.connectionId])).rows[0];
-      if (!connection) throw new HttpError('Connection not found.', 404);
+      if (input.connectionId) {
+        const connection = (await sql.query('SELECT id FROM servicetitan_connections WHERE workspace_id=$1 AND id=$2', [workspaceId, input.connectionId])).rows[0];
+        if (!connection) throw new HttpError('Connection not found.', 404);
+      }
       const encrypted = input.wordpress ? this.vault.encrypt(input.wordpress, `website:${workspaceId}:${id}`) : previous?.wordpress_credentials || null;
       const row = (update
-        ? await sql.query('UPDATE websites SET name=$3,wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField])
-        : await sql.query('INSERT INTO websites(id,workspace_id,connection_id,name,url,wordpress_credentials,rest_base,zip_acf_field) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, workspaceId, input.connectionId, input.name, input.url, encrypted, input.restBase, input.zipAcfField])).rows[0]!;
+        ? await sql.query('UPDATE websites SET name=$3,wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField])
+        : await sql.query('INSERT INTO websites(id,workspace_id,connection_id,name,url,wordpress_credentials,rest_base,zip_acf_field) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, workspaceId, input.connectionId || null, input.name, input.url, encrypted, input.restBase, input.zipAcfField])).rows[0]!;
       await audit(sql, userId, update ? 'website.updated' : 'website.created', id);
       return websiteFrom(row);
     });
@@ -246,6 +248,33 @@ export class AccountStore {
         connection: { ...connectionFrom(connection), ...this.vault.decrypt<Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>>(String(connection.credentials), `connection:${workspaceId}:${connection.id}`) },
         ...(site.wordpress_credentials ? { wordpress: this.vault.decrypt<NonNullable<WebsiteInput['wordpress']>>(String(site.wordpress_credentials), `website:${workspaceId}:${id}`) } : {}),
       };
+    });
+  }
+  async connectionContext(userId: string, id: string, workspaceId = userId): Promise<Connection & Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>> {
+    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const row = (await sql.query('SELECT * FROM servicetitan_connections WHERE workspace_id=$1 AND id=$2', [workspaceId, id])).rows[0];
+      if (!row) throw new HttpError('Connection not found.', 404);
+      return { ...connectionFrom(row), ...this.vault.decrypt<Pick<ConnectionInput, 'clientId' | 'clientSecret' | 'appKey'>>(String(row.credentials), `connection:${workspaceId}:${id}`) };
+    });
+  }
+  async onboardingFlags(userId: string, workspaceId = userId): Promise<{ websiteReady: boolean; serviceTitanReady: boolean }> {
+    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const row = (await sql.query(`SELECT
+        EXISTS(SELECT 1 FROM websites WHERE workspace_id=$1 AND wordpress_credentials IS NOT NULL AND validated_at IS NOT NULL) AS website_ready,
+        EXISTS(SELECT 1 FROM servicetitan_connections c WHERE c.workspace_id=$1 AND c.validated_at IS NOT NULL AND EXISTS(SELECT 1 FROM websites w WHERE w.workspace_id=$1 AND w.connection_id=c.id AND w.validated_at IS NOT NULL)) AS st_ready`, [workspaceId])).rows[0]!;
+      return { websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true };
+    });
+  }
+  async markWebsiteValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
+    await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const result = await sql.query('UPDATE websites SET validated_at=now() WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL RETURNING id', [workspaceId, id]);
+      if (result.rows.length !== 1) throw new HttpError('Website credentials are missing.', 400);
+    });
+  }
+  async markConnectionValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
+    await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const result = await sql.query('UPDATE servicetitan_connections SET validated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id', [workspaceId, id]);
+      if (result.rows.length !== 1) throw new HttpError('Connection not found.', 404);
     });
   }
   async addTestJobToken(userId: string, amount = 1, workspaceId = userId): Promise<number> {

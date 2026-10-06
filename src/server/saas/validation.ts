@@ -48,7 +48,7 @@ export function connectionInput(input: unknown, update = false): ConnectionInput
   return { name: textField(value.name, 'Connection name'), environment: value.environment, tenantId,
     clientId: credential('clientId', 'Client ID', 500), clientSecret: credential('clientSecret', 'Client secret', 2000), appKey: credential('appKey', 'App key', 2000) };
 }
-export interface WebsiteInput { name: string; connectionId: string; url: string; restBase: string; zipAcfField: string; wordpress?: { username: string; applicationPassword: string }; }
+export interface WebsiteInput { name: string; connectionId?: string; url: string; restBase: string; zipAcfField: string; wordpress?: { username: string; applicationPassword: string }; }
 export function websiteInput(input: unknown): WebsiteInput {
   const value = record(input, ['name', 'connectionId', 'url', 'restBase', 'zipAcfField', 'wordpress']);
   const restBase = textField(value.restBase || 'st-jobs', 'REST base', 100);
@@ -61,5 +61,5 @@ export function websiteInput(input: unknown): WebsiteInput {
     if (username.includes(':')) throw new HttpError('WordPress username cannot contain a colon.');
     wordpress = { username, applicationPassword: textField(credentials.applicationPassword, 'Application password', 500) };
   }
-  return { name: textField(value.name, 'Website name'), connectionId: uuid(value.connectionId), url: websiteUrl(value.url), restBase, zipAcfField, ...(wordpress ? { wordpress } : {}) };
+  return { name: textField(value.name, 'Website name'), ...(value.connectionId ? { connectionId: uuid(value.connectionId) } : {}), url: websiteUrl(value.url), restBase, zipAcfField, ...(wordpress ? { wordpress } : {}) };
 }

@@ -1616,6 +1616,12 @@ td strong {
 .token-table small { display: block; color: #526159; margin-top: 4px; }
 .token-reference { overflow-wrap: anywhere; }
 
+.onboarding-steps { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; }
+.onboarding-steps button { border: 1px solid #cbd6cf; border-radius: 999px; background: #fff; color: #34473d; padding: 9px 15px; font: inherit; font-weight: 650; cursor: pointer; }
+.onboarding-steps button[aria-current="step"] { background: #186d4c; border-color: #186d4c; color: #fff; }
+.onboarding-steps button:disabled { opacity: .5; cursor: not-allowed; }
+.onboarding-step { grid-column: 1 / -1; max-width: 760px; }
+
 
 .jobs-table .build-deploy-button.MuiButton-root {
   white-space: nowrap;
