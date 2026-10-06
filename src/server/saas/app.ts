@@ -24,6 +24,22 @@ const cookieValue = (header: string | undefined, name: string): string => {
 const equalToken = (left: string, right: string): boolean => Buffer.byteLength(left) === Buffer.byteLength(right) && timingSafeEqual(Buffer.from(left), Buffer.from(right));
 interface Options { config: SaaSConfig; store: AccountStore; google: GoogleLogin; websiteApp: WebsiteAppFactory; staticDirectory?: string; billing?: BillingService; }
 
+function websiteSchemaIssue(error: unknown): { code: string; table?: string; column?: string; constraint?: string; message: string } | undefined {
+  const issue = error as { code?: string; table?: string; column?: string; constraint?: string };
+  if (!['23502', '42703', '42P01'].includes(String(issue?.code))) return undefined;
+  let message = 'Website setup could not be saved because the onboarding database schema is out of date. Apply the latest database migrations and retry.';
+  if (issue.code === '23502' && issue.column === 'connection_id') {
+    message = 'Website setup could not be saved because this database still requires a ServiceTitan connection during the website step. Apply migration 008_staged_onboarding.sql to the database used by this app, then retry.';
+  } else if (issue.code === '23502' && issue.column) {
+    message = `Website setup could not be saved because the database still requires a value for ${issue.column}. Apply the latest database migrations to the database used by this app, then retry.`;
+  } else if (issue.code === '42703' && issue.column) {
+    message = `Website setup could not be saved because the database is missing the ${issue.column} column. Apply the latest database migrations to the database used by this app, then retry.`;
+  } else if (issue.code === '42P01' && issue.table) {
+    message = `Website setup could not be saved because the database is missing the ${issue.table} table. Apply the latest database migrations to the database used by this app, then retry.`;
+  }
+  return { code: issue.code!, ...(issue.table ? { table: issue.table } : {}), ...(issue.column ? { column: issue.column } : {}), ...(issue.constraint ? { constraint: issue.constraint } : {}), message };
+}
+
 export function createSaaSApp({ config, store, google, websiteApp, staticDirectory, billing = config.billing ? new BillingService(store.db, config.billing, config.origin) : undefined }: Options) {
   const app = express();
   const tokenAccounts = new TokenAccounts(store.db);
@@ -320,9 +336,10 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.post('/api/websites', async (req, res, next) => {
     try { res.status(201).json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
     catch (error) {
-      const code = (error as { code?: string })?.code;
-      if (['23502', '42703', '42P01'].includes(String(code))) {
-        res.status(503).json({ error: 'Website setup could not be saved because the onboarding database schema is out of date. Apply the latest database migrations and retry.', helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
+      const issue = websiteSchemaIssue(error);
+      if (issue) {
+        console.error('Website save schema mismatch', { requestId: res.locals.requestId, ...issue });
+        res.status(503).json({ error: issue.message, helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
         return;
       }
       next(error);
@@ -331,9 +348,10 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.put('/api/websites/:id', async (req, res, next) => {
     try { res.json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), uuid(req.params.id), true, (res.locals.user as User).workspaceId)); }
     catch (error) {
-      const code = (error as { code?: string })?.code;
-      if (['23502', '42703', '42P01'].includes(String(code))) {
-        res.status(503).json({ error: 'Website setup could not be saved because the onboarding database schema is out of date. Apply the latest database migrations and retry.', helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
+      const issue = websiteSchemaIssue(error);
+      if (issue) {
+        console.error('Website save schema mismatch', { requestId: res.locals.requestId, ...issue });
+        res.status(503).json({ error: issue.message, helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
         return;
       }
       next(error);
