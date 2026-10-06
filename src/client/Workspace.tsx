@@ -549,8 +549,9 @@ export function Workspace({ children }: { children: ReactNode }) {
     const data = new FormData(form);
     const value = (name: string) => String(data.get(name) || '').trim();
     const existing = editingWebsite || websites[0];
+    let saved: Website;
     try {
-      const saved = await accountFetch(`/api/websites${existing ? `/${existing.id}` : ''}`, {
+      saved = await accountFetch(`/api/websites${existing ? `/${existing.id}` : ''}`, {
         method: existing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -560,6 +561,15 @@ export function Workspace({ children }: { children: ReactNode }) {
           zipAcfField: editingWebsite?.zipAcfField || 'my_zip_codes',
         }),
       }).then(json<Website>);
+    } catch (reason) {
+      setValidationError({
+        message: reason instanceof Error ? reason.message : 'Website setup could not be saved.',
+        helpUrl: '/help/onboarding-save-failed',
+      });
+      setBusy(false);
+      return;
+    }
+    try {
       await refresh(user, session!.csrfToken!);
       const response = await accountFetch('/api/onboarding/validate-plugin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -568,7 +578,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       const body = await response.json() as { error?: string; helpUrl?: string; version?: string; requestId?: string };
       if (!response.ok) {
         const details = `${body.error || 'The plugin test failed.'}${body.requestId ? ` (Request ID: ${body.requestId})` : ''}`;
-        setValidationError({ message: details, helpUrl: body.helpUrl || '/help/wordpress-plugin' });
+        setValidationError({ message: details, helpUrl: body.helpUrl || '/help/plugin-test-failed' });
         return;
       }
       await refresh(user, session!.csrfToken!);
@@ -576,10 +586,9 @@ export function Workspace({ children }: { children: ReactNode }) {
       setValidationSuccess(`Plugin installed and validated (version ${body.version}).`);
       setMessage('Plugin check passed. Continue to connect WordPress access.');
     } catch (reason) {
-      setError('');
       setValidationError({
         message: reason instanceof Error ? reason.message : 'Unable to save and test the WordPress plugin.',
-        helpUrl: '/help/wordpress-plugin',
+        helpUrl: '/help/plugin-test-failed',
       });
     } finally {
       setBusy(false);

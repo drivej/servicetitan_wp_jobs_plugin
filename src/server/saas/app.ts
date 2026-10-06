@@ -155,7 +155,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       try {
         await store.markPluginValidated(user.id, websiteId, user.workspaceId);
       } catch {
-        throw new HttpError('The plugin was detected, but the onboarding check could not be saved. Retry, and ask an administrator to verify that the latest database migrations are applied if this continues.', 503);
+        res.status(503).json({
+          error: 'The plugin was detected, but the onboarding check could not be saved. Verify the latest database migrations, then retry.',
+          helpUrl: '/help/plugin-test-failed', requestId: res.locals.requestId,
+        });
+        return;
       }
       res.json({ valid: true, version: body.version });
     } catch (error) { next(error); }
@@ -315,11 +319,25 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.post('/api/websites', async (req, res, next) => {
     try { res.status(201).json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
-    catch (error) { next(error); }
+    catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (['23502', '42703', '42P01'].includes(String(code))) {
+        res.status(503).json({ error: 'Website setup could not be saved because the onboarding database schema is out of date. Apply the latest database migrations and retry.', helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
+        return;
+      }
+      next(error);
+    }
   });
   app.put('/api/websites/:id', async (req, res, next) => {
     try { res.json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), uuid(req.params.id), true, (res.locals.user as User).workspaceId)); }
-    catch (error) { next(error); }
+    catch (error) {
+      const code = (error as { code?: string })?.code;
+      if (['23502', '42703', '42P01'].includes(String(code))) {
+        res.status(503).json({ error: 'Website setup could not be saved because the onboarding database schema is out of date. Apply the latest database migrations and retry.', helpUrl: '/help/onboarding-save-failed', requestId: res.locals.requestId });
+        return;
+      }
+      next(error);
+    }
   });
   app.use('/api/websites/:id', async (req, res, next) => {
     try {

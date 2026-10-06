@@ -14,7 +14,7 @@ import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWo
 
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);
-const helpTopicMatch = path.match(/^\/help\/(wordpress|servicetitan)-([a-z-]+)$/);
+const helpTopicMatch = path.match(/^\/help\/(wordpress|servicetitan|onboarding|plugin)-([a-z-]+)$/);
 const page = helpTopicMatch
   ? <WordPressIntegrationGuide topic={`${helpTopicMatch[1]}-${helpTopicMatch[2]}`} />
   : path === '/help'
