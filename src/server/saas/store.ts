@@ -209,6 +209,7 @@ export class AccountStore {
       const result = update
         ? await sql.query('UPDATE servicetitan_connections SET name=$3,credentials=$4,environment=$5,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.environment])
         : await sql.query('INSERT INTO servicetitan_connections(id,workspace_id,name,environment,tenant_id,credentials) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, workspaceId, input.name, input.environment, input.tenantId, encrypted]);
+      if (update) await sql.query('UPDATE workspaces SET onboarding_step=LEAST(onboarding_step,2) WHERE id=$1', [workspaceId]);
       await audit(sql, userId, update ? 'connection.updated' : 'connection.created', id);
       return connectionFrom(result.rows[0]!);
     });
@@ -240,6 +241,7 @@ export class AccountStore {
       const row = (update
         ? await sql.query('UPDATE websites SET name=$3,connection_id=coalesce($7,connection_id),wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField, input.connectionId || null])
         : await sql.query('INSERT INTO websites(id,workspace_id,connection_id,name,url,wordpress_credentials,rest_base,zip_acf_field) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, workspaceId, input.connectionId || null, input.name, input.url, encrypted, input.restBase, input.zipAcfField])).rows[0]!;
+      if (update) await sql.query('UPDATE workspaces SET onboarding_step=1 WHERE id=$1', [workspaceId]);
       await audit(sql, userId, update ? 'website.updated' : 'website.created', id);
       return websiteFrom(row);
     });
@@ -275,19 +277,21 @@ export class AccountStore {
       };
     });
   }
-  async onboardingFlags(userId: string, workspaceId = userId): Promise<{ pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean }> {
+  async onboardingFlags(userId: string, workspaceId = userId): Promise<{ pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean; onboardingStep: number }> {
     return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const row = (await sql.query(`SELECT
+        (SELECT onboarding_step FROM workspaces WHERE id=$1) AS onboarding_step,
         EXISTS(SELECT 1 FROM websites WHERE workspace_id=$1 AND plugin_validated_at IS NOT NULL) AS plugin_ready,
         EXISTS(SELECT 1 FROM websites WHERE workspace_id=$1 AND wordpress_credentials IS NOT NULL AND validated_at IS NOT NULL) AS website_ready,
         EXISTS(SELECT 1 FROM servicetitan_connections c WHERE c.workspace_id=$1 AND c.validated_at IS NOT NULL AND EXISTS(SELECT 1 FROM websites w WHERE w.workspace_id=$1 AND w.connection_id=c.id AND w.validated_at IS NOT NULL)) AS st_ready`, [workspaceId])).rows[0]!;
-      return { pluginReady: row.plugin_ready === true, websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true };
+      return { pluginReady: row.plugin_ready === true, websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true, onboardingStep: Number(row.onboarding_step) || 1 };
     });
   }
   async markWebsiteValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const result = await sql.query('UPDATE websites SET validated_at=now() WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL RETURNING id', [workspaceId, id]);
       if (result.rows.length !== 1) throw new HttpError('Website credentials are missing.', 400);
+      await sql.query('UPDATE workspaces SET onboarding_step=GREATEST(onboarding_step,2) WHERE id=$1', [workspaceId]);
     });
   }
   async markPluginValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
@@ -306,6 +310,7 @@ export class AccountStore {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       const result = await sql.query('UPDATE servicetitan_connections SET validated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id', [workspaceId, id]);
       if (result.rows.length !== 1) throw new HttpError('Connection not found.', 404);
+      await sql.query('UPDATE workspaces SET onboarding_step=GREATEST(onboarding_step,3) WHERE id=$1', [workspaceId]);
     });
   }
   async addTestJobToken(userId: string, amount = 1, workspaceId = userId): Promise<number> {

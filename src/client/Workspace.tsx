@@ -43,7 +43,7 @@ interface Session {
   user?: User;
   csrfToken?: string;
 }
-interface OnboardingStatus { activeProduct: boolean; pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean; settingsReady: boolean; }
+interface OnboardingStatus { activeProduct: boolean; pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean; settingsReady: boolean; onboardingStep: number; }
 
 const DemoWebsites: Website[] = [
   {
@@ -255,7 +255,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     if (!userSelectedOnboardingStage.current) {
       const savedStage: 1 | 2 | 3 = onboarding.settingsReady
         ? 3
-        : onboarding.websiteReady || websiteTestPassed ? 2 : 1;
+        : onboarding.websiteReady || onboarding.onboardingStep >= 2 || websiteTestPassed ? 2 : 1;
       if (onboardingStage !== savedStage) {
         setOnboardingStage(savedStage);
         window.sessionStorage.setItem('onboarding-stage', String(savedStage));
@@ -287,7 +287,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     setWebsites(siteResult.websites);
     if (user && session?.mode === 'saas') {
       try { setOnboarding(await accountFetch('/api/onboarding/status').then(json<OnboardingStatus>)); }
-      catch { setOnboarding({ activeProduct: false, pluginReady: false, websiteReady: false, serviceTitanReady: false, settingsReady: false }); }
+      catch { setOnboarding({ activeProduct: false, pluginReady: false, websiteReady: false, serviceTitanReady: false, settingsReady: false, onboardingStep: 1 }); }
     }
     const site = siteResult.websites[0];
     configureApi(user.id, site?.id || '', token, user.workspaceId);
