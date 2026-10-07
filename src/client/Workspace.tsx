@@ -10,6 +10,8 @@ import { accountFetch, clearAccountCache, configureApi } from './api';
 import { clearTokenError, setAvailableTokens, useTokenError, useTokensExhausted } from './tokenState';
 import { PageHeader } from './PageHeader';
 import { MarketingPage } from './MarketingPage';
+import { LoadingModal, LoadingPage } from './LoadingModal';
+import { navigateTo, useNavigationLoading } from './navigation';
 
 interface User {
   isPlatformAdmin?: boolean;
@@ -249,6 +251,7 @@ const ConnectionCheckMessage = ({ check }: { check: ConnectionCheck }) => (
 );
 
 export function Workspace({ children }: { children: ReactNode }) {
+  const navigating = useNavigationLoading();
   const [invitationToken] = useState(() => {
     const incoming = window.location.pathname === '/invite' ? new URLSearchParams(window.location.hash.slice(1)).get('token') : null;
     try {
@@ -382,7 +385,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         const updated = await accountFetch('/api/session').then(json<Session>);
         if (active && current === revision) {
           if (updated.user?.workspaceId !== session.user?.workspaceId || updated.user?.role !== session.user?.role) {
-            window.location.assign('/settings');
+            navigateTo('/settings');
             return;
           }
           setSession(updated);
@@ -425,18 +428,19 @@ export function Workspace({ children }: { children: ReactNode }) {
   }, [onboardingPage, onboardingStage]);
 
   if (signedOut)
-    return <><MarketingPage />{invitationToken && <p className='marketing-invite-notice'>Sign in with the Google email address that received your team invitation. <a href='/auth/google'>Continue with Google</a></p>}{new URLSearchParams(window.location.search).get('login') === 'failed' && <p className='marketing-login-error' role='alert'>Sign-in could not be completed. Please try again.</p>}</>;
+    return <><LoadingModal open={navigating} /><MarketingPage />{invitationToken && <p className='marketing-invite-notice'>Sign in with the Google email address that received your team invitation. <a href='/auth/google'>Continue with Google</a></p>}{new URLSearchParams(window.location.search).get('login') === 'failed' && <p className='marketing-login-error' role='alert'>Sign-in could not be completed. Please try again.</p>}</>;
+  if (!loaded && !error) return <LoadingPage />;
   if (!loaded)
     return (
       <main className='account-page'>
         <h1>ServiceTitan Jobs</h1>
-        <p role={error ? 'alert' : 'status'}>{error || 'Loading your workspace…'}</p>
+        <p role='alert'>{error}</p>
         {error && <Button onClick={() => window.location.reload()}>Try again</Button>}
       </main>
     );
 
   if (redirectTarget)
-    return <main className='account-page'><p role='status'>Opening your workspace…</p></main>;
+    return <LoadingPage />;
 
   const user = session!.user!;
   const isLocal = session!.mode === 'local';
@@ -454,7 +458,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       if (!response.ok) await json(response);
       window.sessionStorage.removeItem('pending-team-invite');
       clearAccountCache(user.id);
-      window.location.assign('/');
+      navigateTo('/');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to accept invitation.');
       setBusy(false);
@@ -488,7 +492,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       if (!response.ok) await json(response);
       clearAccountCache(user.id);
       configureApi('signed-out', '', '');
-      window.location.assign('/');
+      navigateTo('/');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Sign out failed.');
       setBusy(false);
@@ -719,6 +723,7 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   return (
     <>
+      <LoadingModal open={navigating} />
       <header className='workspace-bar'>
         <BrandBanner />
         <div className='d-flex gap-2 p-2 align-end'>
@@ -794,7 +799,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             disabled={busy}
             onClick={() => {
               window.sessionStorage.removeItem('pending-team-invite');
-              window.location.assign('/');
+              navigateTo('/');
             }}
           >
             Cancel
@@ -906,7 +911,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             <div className='account-grid'>
             {onboardingStage === 1 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 1 of 3</p><h2>Install the plugin and connect WordPress</h2><p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p><p><a href='/downloads/servicetitan-job-integration-1.18.1.zip' download>Download WordPress plugin 1.18.1</a> · <a href='/wordpress-plugin'>Installation instructions</a></p>{websites[0] && <p>{websites[0].name} · {websites[0].wordpressConfigured ? 'Credentials saved' : 'Credentials needed'} <Button onClick={() => setEditingWebsite(websites[0])}>Edit</Button></p>}<form key={editingWebsite?.id || 'stage-site'} onSubmit={(event) => void saveAndTestPlugin(event)} onChange={() => { setWebsiteTestPassed(false); setValidationError(undefined); setValidationSuccess(''); }} className='account-form'><label>Website name<TextField size='small' fullWidth name='name' required defaultValue={editingWebsite?.name || websites[0]?.name} placeholder='My company website' /></label><label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || websites[0]?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || websites[0]) } }} placeholder='https://example.com' /></label><label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} defaultValue={editingWebsite ? editingWebsite.wordpressUsername ?? '' : websites[0]?.wordpressUsername ?? ''} autoComplete='username' /></label><label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} placeholder={(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured) ? '********' : undefined} autoComplete='current-password' /></label><p className='field-help'>Use a generated Application Password, not your normal WordPress password. The saved password stays on the server; leave the field blank to keep it or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a></p><ConnectionTestButton type='submit' disabled={busy} busy={busy} busyLabel='Testing WordPress…' /></form>{(validationSuccess || validationError) && <div className='connection-feedback'>{validationSuccess && <p className='notice' role='status'>{validationSuccess}</p>}{validationError && <p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}</div>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!websiteTestPassed} onClick={()=>{selectOnboardingStage(2);setValidationError(undefined);setValidationSuccess('');}}>Save &amp; Continue</Button></div></section>}
               {onboardingStage === 2 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 2 of 3</p><h2>Connect ServiceTitan</h2><p>Enter API credentials and verify Jobs read permission. <a href='/help/servicetitan-permissions'>ServiceTitan setup help</a></p>{connections.map(connection=><p key={connection.id}>{connection.name} · Production · Tenant {connection.tenantId}</p>)}{onboardingNeedsProductionCredentials&&<p className='notice error' role='status'>This saved connection was configured for Integration. Enter all three Production credentials and save to switch it.</p>}<form key={onboardingConnection?.id || 'stage-connection'} onSubmit={(event)=>void testAndSaveServiceTitan(event)} onChange={(event)=>{updateServiceTitanFormDirty(event.currentTarget, editingConnection?.name || onboardingConnection?.name);setSettingsCheck(undefined);setServiceTitanTestPassed(false);setValidationError(undefined);setValidationSuccess('');}} className='account-form'><label>Connection name<TextField size='small' fullWidth name='name' required defaultValue={editingConnection?.name || onboardingConnection?.name} placeholder='My ServiceTitan account'/></label><label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || onboardingConnection?.tenantId} slotProps={{htmlInput:{pattern:'[0-9]{1,20}',readOnly:Boolean(editingConnection||onboardingConnection)}}}/></label><label>Client ID<TextField size='small' fullWidth name='clientId' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>Client secret<TextField size='small' fullWidth name='clientSecret' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>App key<TextField size='small' fullWidth name='appKey' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><p className='field-help'>The app always connects to ServiceTitan Production. Credentials are encrypted on the server. Asterisks indicate saved values; leave fields blank to keep them, or enter replacements.</p><ConnectionTestButton type='submit' disabled={busy||!canManage||!websites[0]?.id} busy={busy} busyLabel='Testing ServiceTitan…' /></form>{(settingsCheck?.kind==='servicetitan'||validationSuccess||validationError)&&<div className='connection-feedback'>{settingsCheck?.kind==='servicetitan'&&<ConnectionCheckMessage check={settingsCheck} />}{validationSuccess&&<p className='notice' role='status'>{validationSuccess}</p>}{validationError&&<p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}</div>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!serviceTitanTestPassed || serviceTitanFormDirty} onClick={()=>{selectOnboardingStage(3);setValidationError(undefined);setValidationSuccess('');}}>Save &amp; Continue</Button></div></section>}
-              {onboardingStage === 3 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 3 of 3 · Optional</p><h2>Invite people to your account</h2><p>You can invite teammates now or skip this step and start using Jobs.</p><TeamSettings role={user.role} workspaceId={user.workspaceId} /><Button variant='contained' className='primary' onClick={()=>window.location.assign('/jobs')}>Start using Jobs</Button><Button onClick={()=>window.location.assign('/jobs')}>Skip for now</Button></section>}
+              {onboardingStage === 3 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 3 of 3 · Optional</p><h2>Invite people to your account</h2><p>You can invite teammates now or skip this step and start using Jobs.</p><TeamSettings role={user.role} workspaceId={user.workspaceId} /><Button variant='contained' className='primary' onClick={()=>navigateTo('/jobs')}>Start using Jobs</Button><Button onClick={()=>navigateTo('/jobs')}>Skip for now</Button></section>}
             </div>
             </>
           )}

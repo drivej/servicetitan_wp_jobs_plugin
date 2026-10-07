@@ -1649,10 +1649,17 @@ td strong {
 }
 
 .billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-top: 20px; }
-.billing-loading-dialog .MuiDialog-paper { width: min(100%, 360px); padding: 28px; }
-.billing-loading-content { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
-.billing-loading-content h2 { font-size: 1.8rem; }
-.billing-loading-content p { margin: 0; color: #536159; }
+.loading-modal .MuiBackdrop-root { background: rgba(241, 240, 234, .38); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+.loading-modal .MuiDialog-paper { margin: 24px; border: 1px solid #ffffffb3; border-radius: 22px; background: #fcfcf8ed; box-shadow: 0 12px 48px #17201c1a; }
+.loading-modal-spinner { display: grid; place-items: center; width: 96px; height: 96px; }
+.loading-modal-spinner .MuiCircularProgress-root { color: #186d4c; }
+.loading-placeholder-nav { width: min(40vw, 420px); height: 28px; margin: 16px; border-radius: 8px; background: #dfe5dd; }
+.loading-placeholder-title { width: min(65%, 420px); height: 42px; margin-bottom: 18px; border-radius: 8px; background: #d7dfd5; }
+.loading-placeholder-description { width: min(80%, 560px); height: 18px; margin-bottom: 32px; border-radius: 5px; background: #e0e6dc; }
+.loading-placeholder-panel { display: grid; gap: 20px; min-height: 240px; }
+.loading-placeholder-panel > div { height: 40px; border-radius: 8px; background: #e6eae1; }
+.loading-placeholder-panel > div:last-child { width: 65%; }
+@media (prefers-reduced-motion: reduce) { .loading-modal-spinner .MuiCircularProgress-root, .loading-modal-spinner .MuiCircularProgress-circle { animation: none; } }
 .billing-plan-price { font-size: 1.8rem; font-weight: 750; }
 .billing-plan-price small { font-size: .85rem; font-weight: 400; }
 

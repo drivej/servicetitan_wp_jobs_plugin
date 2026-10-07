@@ -1,6 +1,7 @@
-import { Button, CircularProgress, Dialog } from '@mui/material';
+import { Button } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { accountFetch } from './api';
+import { LoadingModal } from './LoadingModal';
 interface Plan { id: string; name: string; amount: number; currency: string; tokens: number; maxTokens: number; interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number; }
 interface Billing { plans: Plan[]; testPlan: Plan | null; canManage: boolean; hasCustomer: boolean; subscription: { status: string; cancelAtPeriodEnd: boolean; priceId: string } | null; }
 const billingPeriod = (plan: Plan) => plan.intervalCount === 1 ? plan.interval : `${plan.intervalCount} ${plan.interval}s`;
@@ -16,6 +17,15 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
   const opening = useRef(false);
   const busy = pendingAction !== null;
   const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const restore = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      opening.current = false;
+      setPendingAction(null);
+    };
+    window.addEventListener('pageshow', restore);
+    return () => window.removeEventListener('pageshow', restore);
+  }, []);
   useEffect(() => {
     let active = true;
     setError('');
@@ -34,17 +44,10 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
   const checkout = new URLSearchParams(window.location.search).get('checkout');
   const availablePlans = billing ? [...billing.plans, ...(billing.testPlan ? [billing.testPlan] : [])] : [];
   return <section className='billing-plans' aria-label='Subscription plans' aria-busy={busy}>
-    <Dialog open={busy} className='billing-loading-dialog' aria-labelledby='billing-loading-title' aria-describedby='billing-loading-description'>
-      <div className='billing-loading-content'>
-        <CircularProgress aria-hidden='true' />
-        <h2 id='billing-loading-title'>{pendingAction === 'portal' ? 'Opening billing…' : 'Opening Checkout…'}</h2>
-        <p id='billing-loading-description'>Please wait while we connect you to Stripe.</p>
-      </div>
-    </Dialog>
+    <LoadingModal open={busy || (!billing && !error)} label={busy ? pendingAction === 'portal' ? 'Opening billing' : 'Opening Checkout' : 'Loading subscription plans'} />
     {checkout === 'success' && <p className='notice' role='status'>Checkout finished. Your balance updates after payment is confirmed. <Button onClick={() => { setRevision((v) => v + 1); window.dispatchEvent(new Event('job-tokens-changed')); }}>Refresh balance</Button></p>}
     {checkout === 'canceled' && <p className='notice'>Checkout canceled. Choose a plan below to start again.</p>}
     {error && <p className='notice error' role='alert'>{error} <Button disabled={busy} onClick={() => setRevision((v) => v + 1)}>Retry</Button></p>}
-    {!billing && !error && <p role='status'>Loading subscription plans…</p>}
     {billing && <>
       {!billing.canManage && <p>The workspace owner manages subscriptions and billing.</p>}
       {billing.subscription && <p>Subscription: <strong>{billing.subscription.status.replaceAll('_', ' ')}</strong>{billing.subscription.cancelAtPeriodEnd ? ' · Cancels at the end of the billing period.' : ''}</p>}

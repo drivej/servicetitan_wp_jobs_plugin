@@ -10,6 +10,8 @@ import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
 import { PageHeader } from './PageHeader';
+import { LoadingModal } from './LoadingModal';
+import { navigateTo } from './navigation';
 
 interface JobsResponse {
   data: JobTableItem[];
@@ -225,7 +227,7 @@ export function App() {
 
   const regenerateWordpress = async (jobId: number, currentStatus: WordPressStatus) => {
     if (!wordpressPluginReady || currentStatus.state !== 'exists') return;
-    window.location.assign(jobDetailsUrl(jobId));
+    navigateTo(jobDetailsUrl(jobId));
     return;
   };
 
@@ -291,6 +293,7 @@ export function App() {
 
   return (
     <main>
+      <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
       <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
 
       {wordpressPluginLoading ? (
@@ -330,7 +333,7 @@ export function App() {
           </label>
           <input name='pageSize' type='hidden' value={search.pageSize} />
           <Button variant='contained' className='primary' type='submit' disabled={loading}>
-            {loading ? 'Loading…' : 'Find jobs'}
+            Find jobs
           </Button>
         </form>
       </Paper>
@@ -357,11 +360,6 @@ export function App() {
           )}
         </div>
 
-        {loading && (
-          <Alert severity="info" role='status'>
-            Loading ServiceTitan jobs…
-          </Alert>
-        )}
         {!loading && !error && result?.data.length === 0 && <div className='notice'>No jobs were found in this appointment date range.</div>}
 
         {!error && result && result.data.length > 0 && (
@@ -377,7 +375,7 @@ export function App() {
               </colgroup>
               <JobTableHeader refreshing={bulkRefreshing} disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onRefresh={() => void refreshPageWordpressStatuses()} />
               <tbody>
-                {result.data.map((job) => <JobTableRow key={job.id} job={job} wordpressStatus={wordpressStatuses[job.id] || unknownWordPressStatus} wordpressBusy={busyWordpressJobs.has(job.id) || queueingJobs.has(job.id) || buildTasks[job.id]?.state === 'queued' || buildTasks[job.id]?.state === 'running'} buildTask={buildTasks[job.id]} queueError={queueError} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onOpen={() => window.location.assign(jobDetailsUrl(job.id))} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } if (wordpressPluginReady && !queueError) void enqueueBuild(job.id); }} onPublish={() => void updateWordpressStatus(job.id, 'publish')} onRebuild={() => void regenerateWordpress(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)} onRefresh={() => void requestWordpress(job.id)} />)}
+                {result.data.map((job) => <JobTableRow key={job.id} job={job} wordpressStatus={wordpressStatuses[job.id] || unknownWordPressStatus} wordpressBusy={busyWordpressJobs.has(job.id) || queueingJobs.has(job.id) || buildTasks[job.id]?.state === 'queued' || buildTasks[job.id]?.state === 'running'} buildTask={buildTasks[job.id]} queueError={queueError} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onOpen={() => navigateTo(jobDetailsUrl(job.id))} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } if (wordpressPluginReady && !queueError) void enqueueBuild(job.id); }} onPublish={() => void updateWordpressStatus(job.id, 'publish')} onRebuild={() => void regenerateWordpress(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)} onRefresh={() => void requestWordpress(job.id)} />)}
               </tbody>
             </table>
           </div>
@@ -391,7 +389,7 @@ export function App() {
             page={search.page}
             color='primary'
             shape='rounded'
-            onChange={(_event, page) => window.location.assign(jobsListUrl(search, page))}
+            onChange={(_event, page) => navigateTo(jobsListUrl(search, page))}
           />
         )}
       </section>

@@ -11,6 +11,7 @@ import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
 import { PageHeader } from './PageHeader';
+import { LoadingModal } from './LoadingModal';
 
 interface JobAttachment {
   id: string;
@@ -325,6 +326,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
   return (
     <main>
+      <LoadingModal open={loading} label='Loading job details' />
       {tokenSpendDialog}
       <PageHeader
         className='details-hero'
@@ -345,11 +347,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
         </table>
       </div>}
 
-      {loading && (
-        <div className='notice' role='status'>
-          Loading job details and images…
-        </div>
-      )}
 
       {details && (
         <>
