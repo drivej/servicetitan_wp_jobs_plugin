@@ -1650,7 +1650,7 @@ td strong {
 
 .billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-top: 20px; }
 .loading-modal .MuiBackdrop-root { background: rgba(241, 240, 234, .38); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
-.loading-modal .MuiDialog-paper { margin: 24px; border: 1px solid #ffffffb3; border-radius: 22px; background: #fcfcf8ed; box-shadow: 0 12px 48px #17201c1a; }
+.loading-modal .MuiDialog-paper { margin: 24px; border: 0; background: transparent; box-shadow: none; }
 .loading-modal-spinner { display: grid; place-items: center; width: 96px; height: 96px; }
 .loading-modal-spinner .MuiCircularProgress-root { color: #186d4c; }
 .loading-placeholder-nav { width: min(40vw, 420px); height: 28px; margin: 16px; border-radius: 8px; background: #dfe5dd; }
