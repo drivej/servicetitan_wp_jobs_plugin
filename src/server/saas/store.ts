@@ -9,7 +9,7 @@ export type Role = 'owner' | 'admin' | 'member';
 const allRoles: Role[] = ['owner','admin','member'];
 export interface User { workspaceId: string; workspaceName: string; role: Role; id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; isPlatformAdmin?: boolean; }
 export interface Connection { id: string; name: string; environment: 'integration' | 'production'; tenantId: string; version: number; }
-export interface Website { id: string; name: string; url: string; connectionId: string | null; restBase: string; zipAcfField: string; wordpressConfigured: boolean; version: number; }
+export interface Website { id: string; name: string; url: string; connectionId: string | null; restBase: string; zipAcfField: string; wordpressConfigured: boolean; wordpressUsername?: string | null; version: number; }
 export interface WebsiteContext {
   workspaceId: string;
   website: Website;
@@ -214,7 +214,12 @@ export class AccountStore {
     });
   }
   async listWebsites(userId: string, workspaceId = userId): Promise<Website[]> {
-    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 ORDER BY created_at,id', [workspaceId])).rows.map(websiteFrom));
+    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 ORDER BY created_at,id', [workspaceId])).rows.map((row) => {
+      const credentials = row.wordpress_credentials
+        ? this.vault.decrypt<NonNullable<WebsiteContext['wordpress']>>(String(row.wordpress_credentials), `website:${workspaceId}:${row.id}`)
+        : undefined;
+      return { ...websiteFrom(row), wordpressUsername: credentials?.username ?? null };
+    }));
   }
   async saveWebsite(userId: string, input: WebsiteInput, id: string = randomUUID(), update = false, workspaceId = userId): Promise<Website> {
     return this.workspaceTransaction(userId, workspaceId, ['owner','admin'], async (sql) => {
