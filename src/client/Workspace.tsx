@@ -436,7 +436,10 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   const user = session!.user!;
   const isLocal = session!.mode === 'local';
-  if (!isLocal && onboarding && !onboarding.activeProduct && path !== '/pricing' && !invitationToken) window.location.replace('/pricing');
+  // Keep users on the onboarding route while checks are in progress. Stripe's
+  // product status can still be pending when the page refreshes after a test;
+  // redirecting here would discard their progress and send them back to pricing.
+  if (!isLocal && onboarding && !onboarding.activeProduct && !['/pricing', '/onboarding'].includes(path) && !invitationToken) window.location.replace('/pricing');
   if (!isLocal && onboarding?.activeProduct && !onboarding.settingsReady && !['/onboarding', '/settings', '/help', '/wordpress-plugin', '/invite'].includes(path) && !invitationToken) window.location.replace('/onboarding');
   if (!isLocal && onboarding?.settingsReady && path === '/pricing') window.location.replace('/');
   const canManage = user.role !== 'member';
