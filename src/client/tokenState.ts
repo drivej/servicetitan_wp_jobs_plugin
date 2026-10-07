@@ -4,6 +4,7 @@ const exhaustedMessage = 'No job tokens available. Add tokens before trying agai
 let availableTokens: number | undefined;
 let exhausted = false;
 let currentError = '';
+let spendVersion = 0;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -11,10 +12,24 @@ function notify() {
 }
 
 export function setAvailableTokens(count: number) {
+  if (availableTokens !== undefined && count < availableTokens) spendVersion += 1;
   availableTokens = count;
   exhausted = count < 1;
   if (count > 0) currentError = '';
   notify();
+}
+
+export function useAvailableTokens() {
+  return useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, () => `${availableTokens ?? ''}:${spendVersion}`, () => ':0');
+}
+
+export function useTokenBalance() {
+  const snapshot = useAvailableTokens();
+  const [countText, versionText] = snapshot.split(':');
+  return { count: countText === '' ? undefined : Number(countText), spendVersion: Number(versionText) };
 }
 
 export function markTokensExhausted(message = exhaustedMessage) {

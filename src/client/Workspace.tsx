@@ -7,7 +7,7 @@ import { TokenAdmin } from './TokenAdmin';
 import { TokenHistory } from './TokenHistory';
 import { TokenBalanceCard } from './TokenBalanceCard';
 import { accountFetch, clearAccountCache, configureApi } from './api';
-import { clearTokenError, setAvailableTokens, useTokenError, useTokensExhausted } from './tokenState';
+import { clearTokenError, setAvailableTokens, useTokenBalance, useTokenError, useTokensExhausted } from './tokenState';
 import { PageHeader } from './PageHeader';
 import { MarketingPage } from './MarketingPage';
 import { LoadingModal, LoadingPage } from './LoadingModal';
@@ -87,23 +87,24 @@ const BrandBanner = () => {
 };
 
 const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
-  const href = '/add-tokens';
+  const { count: liveCount, spendVersion } = useTokenBalance();
+  const [shining, setShining] = useState(false);
+  const previousVersion = useRef(spendVersion);
+  useEffect(() => {
+    if (spendVersion === previousVersion.current) return;
+    previousVersion.current = spendVersion;
+    setShining(true);
+    const timer = window.setTimeout(() => setShining(false), 700);
+    return () => window.clearTimeout(timer);
+  }, [spendVersion]);
+  const balance = liveCount ?? count;
   return (
-    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
-      Tokens
-    </Button>
+    <a className={`workspace-token-pill${shining ? ' is-spending' : ''}${path === '/add-tokens' ? ' is-current' : ''}`} href='/add-tokens' aria-current={path === '/add-tokens' ? 'page' : undefined} aria-label={`${balance.toLocaleString()} job tokens available`} title='Job tokens available'>
+      <span className='workspace-token-dot' aria-hidden='true'>✦</span>
+      <strong>{balance.toLocaleString()}</strong>
+      <span className='workspace-token-label'>tokens</span>
+    </a>
   );
-
-  // return (
-  //   <div className='workspace-token-control' role='group' aria-label='Job tokens'>
-  //     <span className='workspace-token-balance' role='status' title='Each successful push, rebuild, or AI description costs 1 job token.'>
-  //       <strong>{count.toLocaleString()}</strong> tokens
-  //     </span>
-  //     <a className='workspace-token-add' href='/add-tokens' aria-label='Add tokens' aria-current={path === '/add-tokens' ? 'page' : undefined}>
-  //       <span aria-hidden='true'>+</span> Add
-  //     </a>
-  //   </div>
-  // );
 };
 
 const SettingsButton = ({ path }: { path: string }) => {
