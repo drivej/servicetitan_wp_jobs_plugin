@@ -5,6 +5,7 @@ import { BillingPlans } from './BillingPlans';
 import { TeamSettings, type TeamRole } from './TeamSettings';
 import { TokenAdmin } from './TokenAdmin';
 import { TokenHistory } from './TokenHistory';
+import { TokenBalanceCard } from './TokenBalanceCard';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 import { clearTokenError, setAvailableTokens, useTokenError, useTokensExhausted } from './tokenState';
 import { PageHeader } from './PageHeader';
@@ -820,9 +821,9 @@ export function Workspace({ children }: { children: ReactNode }) {
       ) : tokensPage ? (
         <main className='account-page'>
           <PageHeader className='account-page-hero' eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to publish posts, rebuild posts, and generate AI descriptions.' />
+          <TokenBalanceCard tokens={user.jobTokens} />
           <section className='panel account-panel'>
-            <h2>{user.jobTokens.toLocaleString()} job tokens available</h2>
-            <p>Each successful action costs 1 token. Failed requests do not spend tokens.</p>
+            <h2>Keep your tokens topped up</h2>
             <BillingPlans key={user.workspaceId} workspaceId={user.workspaceId} />
             {canManage && <TokenHistory key={`history:${user.workspaceId}`} workspaceId={user.workspaceId} />}
             {session?.testTokensEnabled && user.role === 'owner' && (
