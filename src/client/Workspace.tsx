@@ -638,7 +638,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           </section>
         </div>
       )}
-      {tokensExhausted && (isLocal || onboarding?.settingsReady) && (
+      {!onboardingPage && tokensExhausted && (isLocal || onboarding?.settingsReady) && (
         <div className='token-violator' role='status'>
           <span>You’re out of job tokens. Add tokens to keep publishing and rebuilding posts.</span>
           <Button component='a' href='/add-tokens' className='token-violator-link'>
