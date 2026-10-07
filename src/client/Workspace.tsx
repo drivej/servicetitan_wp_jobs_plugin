@@ -310,16 +310,16 @@ export function Workspace({ children }: { children: ReactNode }) {
   };
 
   async function refresh(user: User, token: string) {
-    const [connectionResult, siteResult] = await Promise.all([
+    // The first refresh runs before setSession has updated React state.
+    // This helper is called only for SaaS sessions, so load status directly.
+    const [connectionResult, siteResult, onboardingStatus] = await Promise.all([
       accountFetch('/api/connections').then(json<{ connections: Connection[] }>),
-      accountFetch('/api/websites').then(json<{ websites: Website[] }>)
+      accountFetch('/api/websites').then(json<{ websites: Website[] }>),
+      accountFetch('/api/onboarding/status').then(json<OnboardingStatus>),
     ]);
     setConnections(connectionResult.connections);
     setWebsites(siteResult.websites);
-    if (user && session?.mode === 'saas') {
-      try { setOnboarding(await accountFetch('/api/onboarding/status').then(json<OnboardingStatus>)); }
-      catch { setOnboarding({ activeProduct: false, pluginReady: false, websiteReady: false, serviceTitanReady: false, settingsReady: false, onboardingStep: 1 }); }
-    }
+    setOnboarding(onboardingStatus);
     const site = siteResult.websites[0];
     configureApi(user.id, site?.id || '', token, user.workspaceId);
     setSelected(site?.id || '');
