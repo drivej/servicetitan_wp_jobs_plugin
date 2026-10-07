@@ -244,6 +244,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [editingWebsite, setEditingWebsite] = useState<Website>();
   const [onboarding, setOnboarding] = useState<OnboardingStatus>();
   const [websiteTestPassed, setWebsiteTestPassed] = useState(false);
+  const [serviceTitanTestPassed, setServiceTitanTestPassed] = useState(false);
   const [validationError, setValidationError] = useState<{ message: string; helpUrl: string }>();
   const [settingsCheck, setSettingsCheck] = useState<{ kind: 'wordpress' | 'servicetitan' | 'plugin'; success: boolean; message: string; helpUrl?: string }>();
   const [onboardingStage, setOnboardingStage] = useState<1 | 2 | 3>(() => { try { const value = Number(window.sessionStorage.getItem('onboarding-stage')); return value === 2 ? 2 : value === 3 || value === 4 ? 3 : 1; } catch { return 1; } });
@@ -278,6 +279,10 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   const selectOnboardingStage = (stage: 1 | 2 | 3) => {
     userSelectedOnboardingStage.current = true;
+    if (stage === 2) {
+      setServiceTitanTestPassed(false);
+      setSettingsCheck(undefined);
+    }
     setOnboardingStage(stage);
     window.sessionStorage.setItem('onboarding-stage', String(stage));
   };
@@ -535,6 +540,7 @@ export function Workspace({ children }: { children: ReactNode }) {
 
   const saveAndTestPlugin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    userSelectedOnboardingStage.current = true;
     setBusy(true);
     setError('');
     setMessage('');
@@ -601,11 +607,66 @@ export function Workspace({ children }: { children: ReactNode }) {
       setEditingWebsite(undefined);
       setWebsiteTestPassed(true);
       setValidationSuccess(`WordPress plugin ${body.version} and authenticated API access validated.`);
-      setMessage('Step 1 complete. Continue to connect ServiceTitan.');
     } catch (reason) {
       setValidationError({
         message: reason instanceof Error ? reason.message : 'Unable to validate WordPress access.',
         helpUrl: '/help/wordpress-reachability',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const testAndSaveServiceTitan = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    userSelectedOnboardingStage.current = true;
+    const website = websites[0];
+    if (!website) {
+      setSettingsCheck({ kind: 'servicetitan', success: false, message: 'Connect and test your WordPress website first.', helpUrl: '/help/wordpress-credentials' });
+      return;
+    }
+    setBusy(true);
+    setSettingsCheck(undefined);
+    setServiceTitanTestPassed(false);
+    setValidationError(undefined);
+    setValidationSuccess('');
+    const data = new FormData(event.currentTarget);
+    const value = (name: string) => String(data.get(name) || '').trim();
+    const existing = onboardingConnection;
+    try {
+      const saved = await accountFetch(`/api/connections${existing ? `/${existing.id}` : ''}`, {
+        method: existing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: value('name'), environment: 'production', tenantId: value('tenantId'),
+          clientId: value('clientId'), clientSecret: value('clientSecret'), appKey: value('appKey'),
+        }),
+      }).then(json<Connection>);
+      setServiceTitanFormDirty(false);
+      if (existing && existing.environment !== 'production') clearAccountCache(user.id);
+      await refresh(user, session!.csrfToken!);
+
+      const response = await accountFetch('/api/onboarding/validate-servicetitan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId: saved.id, websiteId: website.id }),
+      });
+      const result = await response.json() as { error?: string; helpUrl?: string; requestId?: string };
+      if (!response.ok) {
+        setSettingsCheck({
+          kind: 'servicetitan', success: false,
+          message: `${result.error || 'ServiceTitan connection check failed.'}${result.requestId ? ` (Request ID: ${result.requestId})` : ''}`,
+          helpUrl: result.helpUrl || '/help/servicetitan-permissions',
+        });
+        return;
+      }
+      await refresh(user, session!.csrfToken!);
+      setServiceTitanTestPassed(true);
+      setSettingsCheck({ kind: 'servicetitan', success: true, message: 'ServiceTitan Jobs access validated.' });
+    } catch (reason) {
+      setSettingsCheck({
+        kind: 'servicetitan', success: false,
+        message: reason instanceof Error ? reason.message : 'ServiceTitan connection check failed.',
+        helpUrl: '/help/servicetitan-credentials',
       });
     } finally {
       setBusy(false);
@@ -799,8 +860,8 @@ export function Workspace({ children }: { children: ReactNode }) {
             <>
             <nav className='onboarding-steps' aria-label='Setup steps'><button type='button' aria-current={onboardingStage===1?'step':undefined} onClick={()=>selectOnboardingStage(1)}>1. WordPress {(websiteStepComplete||websiteTestPassed)&&<span className='onboarding-step-check' aria-label='complete'>✓</span>}</button><button type='button' disabled={!websiteStepComplete && !websiteTestPassed} aria-current={onboardingStage===2?'step':undefined} onClick={()=>selectOnboardingStage(2)}>2. ServiceTitan {serviceTitanStepComplete&&<span className='onboarding-step-check' aria-label='complete'>✓</span>}</button><button type='button' disabled={!onboardingComplete} aria-current={onboardingStage===3?'step':undefined} onClick={()=>selectOnboardingStage(3)}>3. Invite people (optional)</button></nav>
             <div className='account-grid'>
-            {onboardingStage === 1 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 1 of 3</p><h2>Install the plugin and connect WordPress</h2><p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p><p><a href='/downloads/servicetitan-job-integration-1.18.1.zip' download>Download WordPress plugin 1.18.1</a> · <a href='/wordpress-plugin'>Installation instructions</a></p>{websites[0] && <p>{websites[0].name} · {websites[0].wordpressConfigured ? 'Credentials saved' : 'Credentials needed'} <Button onClick={() => setEditingWebsite(websites[0])}>Edit</Button></p>}<form key={editingWebsite?.id || 'stage-site'} onSubmit={(event) => void saveAndTestPlugin(event)} className='account-form'><label>Website name<TextField size='small' fullWidth name='name' required defaultValue={editingWebsite?.name || websites[0]?.name} placeholder='My company website' /></label><label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || websites[0]?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || websites[0]) } }} placeholder='https://example.com' /></label><label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} defaultValue={editingWebsite ? editingWebsite.wordpressUsername ?? '' : websites[0]?.wordpressUsername ?? ''} autoComplete='username' /></label><label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} placeholder={(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured) ? '********' : undefined} autoComplete='current-password' /></label><p className='field-help'>Use a generated Application Password, not your normal WordPress password. The saved password stays on the server; leave the field blank to keep it or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a></p><Button type='submit' variant='outlined' className='onboarding-test-button' disabled={busy}>{busy ? 'Testing WordPress…' : 'Test Connection'}</Button></form>{(validationSuccess || validationError) && <div className='onboarding-feedback'>{validationSuccess && <p className='notice' role='status'>{validationSuccess}</p>}{validationError && <p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}</div>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!onboarding?.websiteReady && !websiteTestPassed} onClick={()=>{selectOnboardingStage(2);setValidationError(undefined);setValidationSuccess('');}}>Continue to the next step</Button></div></section>}
-              {onboardingStage === 2 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 2 of 3</p><h2>Connect ServiceTitan</h2><p>Enter API credentials and verify Jobs read permission. <a href='/help/servicetitan-permissions'>ServiceTitan setup help</a></p>{connections.map(connection=><p key={connection.id}>{connection.name} · Production · Tenant {connection.tenantId}</p>)}{onboardingNeedsProductionCredentials&&<p className='notice error' role='status'>This saved connection was configured for Integration. Enter all three Production credentials and save to switch it.</p>}<form key={onboardingConnection?.id || 'stage-connection'} onSubmit={(event)=>void submit(event,'connections')} onChange={(event)=>updateServiceTitanFormDirty(event.currentTarget, editingConnection?.name || onboardingConnection?.name)} className='account-form'><label>Connection name<TextField size='small' fullWidth name='name' required defaultValue={editingConnection?.name || onboardingConnection?.name} placeholder='My ServiceTitan account'/></label><label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || onboardingConnection?.tenantId} slotProps={{htmlInput:{pattern:'[0-9]{1,20}',readOnly:Boolean(editingConnection||onboardingConnection)}}}/></label><label>Client ID<TextField size='small' fullWidth name='clientId' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>Client secret<TextField size='small' fullWidth name='clientSecret' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>App key<TextField size='small' fullWidth name='appKey' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><p className='field-help'>The app always connects to ServiceTitan Production. Credentials are encrypted on the server. Asterisks indicate saved values; leave fields blank to keep them, or enter replacements.</p><Button type='submit' variant='contained' className='primary' disabled={busy || !serviceTitanFormDirty}>{busy?'Saving…':'Save ServiceTitan credentials'}</Button></form><Button disabled={busy||!canManage||!onboardingConnection||!websites[0]?.id} onClick={()=>void testSettingsSection('servicetitan')}>{busy&&settingsCheck?.kind==='servicetitan'?'Testing ServiceTitan…':'Test Connection'}</Button>{settingsCheck?.kind==='servicetitan'&&<p className={settingsCheck.success?'notice':'notice error'} role={settingsCheck.success?'status':'alert'}>{settingsCheck.message}{settingsCheck.helpUrl&&<> <a href={settingsCheck.helpUrl}>Open help</a></>}</p>}{validationSuccess&&<p className='notice' role='status'>{validationSuccess}</p>}{validationError&&<p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!onboardingComplete} onClick={()=>{selectOnboardingStage(3);setValidationError(undefined);setValidationSuccess('');}}>Continue to the next step</Button></div></section>}
+            {onboardingStage === 1 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 1 of 3</p><h2>Install the plugin and connect WordPress</h2><p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p><p><a href='/downloads/servicetitan-job-integration-1.18.1.zip' download>Download WordPress plugin 1.18.1</a> · <a href='/wordpress-plugin'>Installation instructions</a></p>{websites[0] && <p>{websites[0].name} · {websites[0].wordpressConfigured ? 'Credentials saved' : 'Credentials needed'} <Button onClick={() => setEditingWebsite(websites[0])}>Edit</Button></p>}<form key={editingWebsite?.id || 'stage-site'} onSubmit={(event) => void saveAndTestPlugin(event)} onChange={() => { setWebsiteTestPassed(false); setValidationError(undefined); setValidationSuccess(''); }} className='account-form'><label>Website name<TextField size='small' fullWidth name='name' required defaultValue={editingWebsite?.name || websites[0]?.name} placeholder='My company website' /></label><label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || websites[0]?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || websites[0]) } }} placeholder='https://example.com' /></label><label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} defaultValue={editingWebsite ? editingWebsite.wordpressUsername ?? '' : websites[0]?.wordpressUsername ?? ''} autoComplete='username' /></label><label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured)} placeholder={(editingWebsite?.wordpressConfigured ?? websites[0]?.wordpressConfigured) ? '********' : undefined} autoComplete='current-password' /></label><p className='field-help'>Use a generated Application Password, not your normal WordPress password. The saved password stays on the server; leave the field blank to keep it or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a></p><Button type='submit' variant='outlined' className='onboarding-test-button' disabled={busy}>{busy ? 'Testing WordPress…' : 'Test Connection'}</Button></form>{(validationSuccess || validationError) && <div className='onboarding-feedback'>{validationSuccess && <p className='notice' role='status'>{validationSuccess}</p>}{validationError && <p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}</div>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!websiteTestPassed} onClick={()=>{selectOnboardingStage(2);setValidationError(undefined);setValidationSuccess('');}}>Save &amp; Continue</Button></div></section>}
+              {onboardingStage === 2 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 2 of 3</p><h2>Connect ServiceTitan</h2><p>Enter API credentials and verify Jobs read permission. <a href='/help/servicetitan-permissions'>ServiceTitan setup help</a></p>{connections.map(connection=><p key={connection.id}>{connection.name} · Production · Tenant {connection.tenantId}</p>)}{onboardingNeedsProductionCredentials&&<p className='notice error' role='status'>This saved connection was configured for Integration. Enter all three Production credentials and save to switch it.</p>}<form key={onboardingConnection?.id || 'stage-connection'} onSubmit={(event)=>void testAndSaveServiceTitan(event)} onChange={(event)=>{updateServiceTitanFormDirty(event.currentTarget, editingConnection?.name || onboardingConnection?.name);setSettingsCheck(undefined);setServiceTitanTestPassed(false);setValidationError(undefined);setValidationSuccess('');}} className='account-form'><label>Connection name<TextField size='small' fullWidth name='name' required defaultValue={editingConnection?.name || onboardingConnection?.name} placeholder='My ServiceTitan account'/></label><label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || onboardingConnection?.tenantId} slotProps={{htmlInput:{pattern:'[0-9]{1,20}',readOnly:Boolean(editingConnection||onboardingConnection)}}}/></label><label>Client ID<TextField size='small' fullWidth name='clientId' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>Client secret<TextField size='small' fullWidth name='clientSecret' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><label>App key<TextField size='small' fullWidth name='appKey' type='text' required={!onboardingConnection||onboardingNeedsProductionCredentials} placeholder={onboardingConnection?onboardingNeedsProductionCredentials?'Enter Production credential':'********':''}/></label><p className='field-help'>The app always connects to ServiceTitan Production. Credentials are encrypted on the server. Asterisks indicate saved values; leave fields blank to keep them, or enter replacements.</p><Button type='submit' variant='outlined' className='onboarding-test-button' disabled={busy||!canManage||!websites[0]?.id}>{busy?'Testing ServiceTitan…':'Test Connection'}</Button></form>{settingsCheck?.kind==='servicetitan'&&<p className={settingsCheck.success?'notice':'notice error'} role={settingsCheck.success?'status':'alert'}>{settingsCheck.message}{settingsCheck.helpUrl&&<> <a href={settingsCheck.helpUrl}>Open help</a></>}</p>}{validationSuccess&&<p className='notice' role='status'>{validationSuccess}</p>}{validationError&&<p className='notice error' role='alert'>{validationError.message} <a href={validationError.helpUrl}>Open help for this issue</a></p>}<div className='onboarding-step-actions'><Button variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>} disabled={!serviceTitanTestPassed || serviceTitanFormDirty} onClick={()=>{selectOnboardingStage(3);setValidationError(undefined);setValidationSuccess('');}}>Save &amp; Continue</Button></div></section>}
               {onboardingStage === 3 && <section className='panel account-panel onboarding-step'><p className='eyebrow'>Step 3 of 3 · Optional</p><h2>Invite people to your account</h2><p>You can invite teammates now or skip this step and start using Jobs.</p><TeamSettings role={user.role} workspaceId={user.workspaceId} /><Button variant='contained' className='primary' onClick={()=>window.location.assign('/')}>Start using Jobs</Button><Button onClick={()=>window.location.assign('/')}>Skip for now</Button></section>}
             </div>
             </>
