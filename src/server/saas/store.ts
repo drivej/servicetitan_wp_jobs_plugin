@@ -1,5 +1,5 @@
 import { postTokenTransaction } from './token-ledger.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Database, Sql } from './database.js';
 import { hashToken, randomToken, type SecretVault } from './crypto.js';
 import { HttpError, type ConnectionInput, type WebsiteInput } from './validation.js';
@@ -321,19 +321,86 @@ export class AccountStore {
       return entry.balanceAfter;
     });
   }
-  async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>, workspaceId = userId, jobId?: number): Promise<T> {
-    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
-      const site = (await sql.query('SELECT id FROM websites WHERE workspace_id=$1 AND id=$2', [workspaceId,websiteId])).rows[0];
-      if (!site) throw new HttpError('Website not found.',404);
-      // Serialize across websites, tabs, and server instances. Never trust a client balance.
+  async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>, workspaceId = userId, jobId: number | undefined = undefined, operationId: string = randomUUID(), fingerprint = ''): Promise<T> {
+    if (!/^[a-zA-Z0-9:_-]{1,128}$/.test(operationId)) throw new HttpError('A valid Idempotency-Key is required.');
+    const requestFingerprint = createHash('sha256').update(fingerprint).digest('hex');
+    const reservation = await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      // A process may die during side-effect-free generation before settlement.
+      // Those old holds are safe to refund and replay; WordPress writes are not.
+      const abandonedCopies = (await sql.query(`SELECT operation_id,attempt,website_id,actor_user_id,job_id,action
+        FROM token_spend_operations WHERE workspace_id=$1 AND action='ai_generation' AND state='reserved'
+        AND updated_at < now()-interval '5 minutes' FOR UPDATE`, [workspaceId])).rows;
+      for (const old of abandonedCopies) {
+        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: 1,
+          actorUserId: String(old.actor_user_id), websiteId: String(old.website_id), ...(old.job_id == null ? {} : { jobId: Number(old.job_id) }),
+          reference: `spend-refund:${String(old.operation_id)}:${Number(old.attempt)}`, reason: 'Abandoned AI generation reservation refund' });
+        await sql.query("UPDATE token_spend_operations SET state='failed',updated_at=now() WHERE workspace_id=$1 AND operation_id=$2 AND state='reserved'", [workspaceId, old.operation_id]);
+      }
+      const site = (await sql.query('SELECT id FROM websites WHERE workspace_id=$1 AND id=$2', [workspaceId, websiteId])).rows[0];
+      if (!site) throw new HttpError('Website not found.', 404);
+      const existing = (await sql.query('SELECT * FROM token_spend_operations WHERE workspace_id=$1 AND operation_id=$2 FOR UPDATE', [workspaceId, operationId])).rows[0];
+      if (existing && (existing.website_id !== websiteId || existing.actor_user_id !== userId || (existing.job_id == null ? undefined : Number(existing.job_id)) !== jobId
+        || existing.action !== action || existing.fingerprint !== requestFingerprint)) {
+        throw new HttpError('This Idempotency-Key was already used for different operation details.', 409);
+      }
+      if (existing?.state === 'settled') {
+        if (existing.result == null) throw new HttpError(`This operation was reconciled as complete. Refresh its provider status. Operation ID: ${operationId}`, 409);
+        return { replay: true as const, result: existing.result as T };
+      }
+      if (existing?.state === 'reserved' || existing?.state === 'uncertain') {
+        if (existing.state === 'reserved' && new Date(String(existing.updated_at)).valueOf() < Date.now() - 30 * 60_000) {
+          await sql.query("UPDATE token_spend_operations SET state='uncertain' WHERE workspace_id=$1 AND operation_id=$2", [workspaceId, operationId]);
+        }
+        throw new HttpError(`This operation has an unresolved provider outcome. Check the provider before retrying. Operation ID: ${operationId}`, 409);
+      }
+      const blocking = (await sql.query(`SELECT operation_id FROM token_spend_operations
+        WHERE workspace_id=$1 AND website_id=$2 AND action=$3 AND job_id IS NOT DISTINCT FROM $4
+          AND state IN ('reserved','uncertain') LIMIT 1`, [workspaceId, websiteId, action, jobId ?? null])).rows[0];
+      if (blocking) throw new HttpError(`A previous operation for this job is unresolved. Reconcile operation ${String(blocking.operation_id)} before starting another.`, 409);
+      const attempt = existing ? Number(existing.attempt) + 1 : 1;
       const row = (await sql.query('SELECT job_tokens FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
       if (!row || Number(row.job_tokens) < 1) throw new HttpError('No job tokens available. Add tokens before trying again.', 402);
-      const result = await operation();
       await postTokenTransaction(sql, { workspaceId, kind: 'spend', requestedAmount: -1, actorUserId: userId, websiteId,
-        ...(jobId === undefined ? {} : { jobId }), reference: `spend:${randomUUID()}`, reason: action });
-      await audit(sql, userId, `job_token.spent.${action}`, websiteId, jobId);
-      // The transaction commits before the caller sends the success response.
-      return result;
+        ...(jobId === undefined ? {} : { jobId }), reference: `spend:${operationId}:${attempt}`, reason: action });
+      if (existing) {
+        await sql.query("UPDATE token_spend_operations SET state='reserved',attempt=$3,result=NULL,error=NULL,updated_at=now() WHERE workspace_id=$1 AND operation_id=$2", [workspaceId, operationId, attempt]);
+      } else {
+        await sql.query(`INSERT INTO token_spend_operations(workspace_id,operation_id,website_id,actor_user_id,job_id,action,fingerprint,state,attempt)
+          VALUES($1,$2,$3,$4,$5,$6,$7,'reserved',$8)`, [workspaceId, operationId, websiteId, userId, jobId ?? null, action, requestFingerprint, attempt]);
+      }
+      await audit(sql, userId, `job_token.spend_reserved.${action}`, websiteId, jobId);
+      return { replay: false as const, attempt };
+    });
+    if (reservation.replay) return reservation.result;
+
+    let result: T;
+    try { result = await operation(); }
+    catch (error) {
+      // Copy generation has no WordPress side effect and can be safely refunded
+      // and retried with the same key. A WordPress error can follow a successful
+      // partial write, so keep its reservation charged and require reconciliation.
+      if (action === 'ai_generation') await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'failed', undefined, true);
+      else await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'uncertain');
+      if (action !== 'ai_generation') throw new HttpError(`The provider outcome could not be confirmed. Check WordPress before retrying. Operation ID: ${operationId}`, 409);
+      throw error;
+    }
+    await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'settled', result);
+    return result;
+  }
+  private async finishSpendOperation(userId: string, workspaceId: string, operationId: string, attempt: number, state: 'settled' | 'uncertain' | 'failed', result?: unknown, refund = false): Promise<void> {
+    await this.db.transaction(userId, async (sql) => {
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [workspaceId]);
+      await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      const changed = await sql.query(`UPDATE token_spend_operations SET state=$4,result=$5::jsonb,error=NULL,updated_at=now()
+        WHERE workspace_id=$1 AND operation_id=$2 AND attempt=$3 AND state='reserved' RETURNING website_id,actor_user_id,job_id,action`,
+      [workspaceId, operationId, attempt, state, result === undefined ? null : JSON.stringify(result)]);
+      if (!changed.rows.length) return;
+      const row = changed.rows[0]!;
+      if (refund) {
+        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: 1,
+          actorUserId: String(row.actor_user_id), websiteId: String(row.website_id), ...(row.job_id == null ? {} : { jobId: Number(row.job_id) }),
+          reference: `spend-refund:${operationId}:${attempt}`, reason: `Failed ${String(row.action)} operation refund` });
+      }
     });
   }
   async recordAction(userId: string, action: string, target: string, workspaceId = userId, jobId?: number): Promise<void> {

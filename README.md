@@ -315,10 +315,11 @@ On the job list, **Build & deploy** queues a job that has no WordPress post. The
 
 The action uses the existing token rules: one token for successful copy generation and one for a successful WordPress push. If the push fails after generation, the generation token remains spent; retrying generates new copy. Missing images fail before generation. The button submits immediately without a confirmation dialog.
 
-SaaS deployments must run migration `006_build_deploy_queue.sql` before starting this version. For a separate runtime role, also grant `SELECT, INSERT, UPDATE` on `build_deploy_tasks` (substitute your actual role):
+SaaS deployments must run migrations through `011_token_spend_reservations.sql` before starting this version. For a separate runtime role, also grant `SELECT, INSERT, UPDATE` on `build_deploy_tasks` and `token_spend_operations` (substitute your actual role):
 
 ```sql
 GRANT SELECT, INSERT, UPDATE ON build_deploy_tasks TO st_jobs_app;
+GRANT SELECT, INSERT, UPDATE ON token_spend_operations TO st_jobs_app;
 ```
 
 The queue is an internal server control table; its HTTP routes authorize the website/workspace before enqueueing or reading status. Workers recheck the requesting user's current workspace access and use current integration credentials. PostgreSQL coordinates claims and active-job deduplication across app instances. Each instance processes one task at a time. Local mode uses `.data/build-deploy.json`; override with `BUILD_QUEUE_FILE` and run only one local process per file.

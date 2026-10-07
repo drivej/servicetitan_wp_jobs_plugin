@@ -14,10 +14,46 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
   if (!['GET', 'HEAD'].includes(init.method || 'GET') && csrf) headers.set('X-CSRF-Token', csrf);
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };
+const paidOperationPath = (path: string, method: string): boolean => method.toUpperCase() === 'POST'
+  && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/regenerate)?)$/.test(new URL(path, window.location.origin).pathname);
+const paidOperationKey = async (path: string, init: RequestInit): Promise<{ key: string; storageKey: string }> => {
+  const body = typeof init.body === 'string' ? init.body : '';
+  const material = `${userId}:${websiteId}:${path}:${body}`;
+  const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
+  const suffix = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const storageKey = `st-spend-op:${suffix}`;
+  let key = '';
+  try { key = window.sessionStorage.getItem(storageKey) || ''; } catch { /* Use a one-shot key when storage is unavailable. */ }
+  if (!key) {
+    key = window.crypto.randomUUID();
+    try { window.sessionStorage.setItem(storageKey, key); } catch { /* The request still works, but cannot resume after navigation. */ }
+  }
+  return { key, storageKey };
+};
 export const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
+  const request = init || {};
+  const headers = new Headers(request.headers);
+  const operation = paidOperationPath(path, request.method || 'GET') ? await paidOperationKey(path, request) : undefined;
+  if (operation) headers.set('Idempotency-Key', operation.key);
   try {
-    const response = await accountFetch(apiUrl(path), init);
+    const response = await accountFetch(apiUrl(path), { ...request, headers });
     if (isSaaSWorkspace() && response.status === 402) markTokensExhausted();
+    if (operation && response.ok) {
+      const readJson = response.json.bind(response);
+      response.json = async () => {
+        const body = await readJson();
+        try { window.sessionStorage.removeItem(operation.storageKey); } catch { /* Ignore unavailable storage. */ }
+        return body;
+      };
+    }
+    if (operation && response.status === 409) {
+      const problem = await response.clone().json().catch(() => undefined) as { error?: string } | undefined;
+      if (problem?.error?.startsWith('This operation was reconciled as complete.')) {
+        try { window.sessionStorage.removeItem(operation.storageKey); } catch { /* Ignore unavailable storage. */ }
+      } else {
+        try { window.sessionStorage.setItem(operation.storageKey, operation.key); } catch { /* Keep the current request key for retries when possible. */ }
+      }
+    }
     return response;
   }
   finally {

@@ -262,6 +262,12 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.post('/api/admin/token-accounts/:workspaceId/transactions', async (req, res, next) => {
     try { res.json(await tokenAccounts.adjust((res.locals.user as User).id, uuid(req.params.workspaceId), req.body)); } catch (error) { next(error); }
   });
+  app.get('/api/admin/token-accounts/:workspaceId/spend-operations', async (req, res, next) => {
+    try { res.json({ operations: await tokenAccounts.pendingSpends((res.locals.user as User).id, uuid(req.params.workspaceId)) }); } catch (error) { next(error); }
+  });
+  app.post('/api/admin/token-accounts/:workspaceId/spend-operations/:operationId/resolve', async (req, res, next) => {
+    try { res.json(await tokenAccounts.resolveSpend((res.locals.user as User).id, uuid(req.params.workspaceId), req.params.operationId, req.body?.decision)); } catch (error) { next(error); }
+  });
   app.get('/api/admin/members', async (req, res, next) => {
     try { res.json(await platformMembers.list((res.locals.user as User).id, req.query.search, req.query.after)); } catch (error) { next(error); }
   });

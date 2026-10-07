@@ -8,6 +8,7 @@ import { publicFetch } from './public-fetch.js';
 import type { BuildQueueStore, BuildScope } from '../build-queue.js';
 import type { BuildProviders } from '../build-deploy.js';
 import type { AccountStore, WebsiteContext } from './store.js';
+import { HttpError } from './validation.js';
 
 export type WebsiteAppFactory = (userId: string, context: WebsiteContext) => Express;
 export function minimizeJobDetails(details: JobDetails): JobDetails {
@@ -46,7 +47,10 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
     getJobDetails,
     getJobImage: (id, attachment) => serviceTitan.getJobImage(id, attachment),
   }, copyGenerator,
-    spendJobToken: (action, operation, jobId) => store.spendJobToken(userId, website.id, action, operation, workspaceId, jobId),
+    spendJobToken: (action, operation, jobId, operationId, fingerprint) => {
+      if (!operationId) throw new HttpError('A valid Idempotency-Key is required.');
+      return store.spendJobToken(userId, website.id, action, operation, workspaceId, jobId, operationId, fingerprint);
+    },
     wordpress: wordpress ? new WordPressClient({ ...wordpress,
       collectionUrl: `${website.url}/wp-json/wp/v2/${website.restBase}`,
       postStatus: 'draft', zipAcfFieldName: website.zipAcfField,

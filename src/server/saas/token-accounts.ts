@@ -57,4 +57,42 @@ export class TokenAccounts {
       return { transaction, balance: Number(balance) };
     });
   }
+  async pendingSpends(userId: string, workspaceId: string) {
+    return this.db.transaction(userId, async (sql) => {
+      await this.requirePlatformAdmin(sql, userId);
+      await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      await sql.query(`UPDATE token_spend_operations SET state='uncertain'
+        WHERE workspace_id=$1 AND state='reserved' AND updated_at<now()-interval '30 minutes'`, [workspaceId]);
+      return (await sql.query(`SELECT operation_id AS "operationId",website_id AS "websiteId",actor_user_id AS "actorUserId",
+        job_id AS "jobId",action,state,attempt,created_at AS "createdAt",updated_at AS "updatedAt"
+        FROM token_spend_operations WHERE workspace_id=$1 AND state IN ('reserved','uncertain')
+        ORDER BY created_at LIMIT 100`, [workspaceId])).rows;
+    });
+  }
+  async resolveSpend(userId: string, workspaceId: string, operationId: string, decision: unknown) {
+    if (decision !== 'confirm' && decision !== 'refund') throw new HttpError('Choose confirm or refund.');
+    return this.db.transaction(userId, async (sql) => {
+      await this.requirePlatformAdmin(sql, userId);
+      await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      const row = (await sql.query(`SELECT * FROM token_spend_operations WHERE workspace_id=$1 AND operation_id=$2 FOR UPDATE`, [workspaceId, operationId])).rows[0];
+      if (!row) throw new HttpError('Spend operation not found.', 404);
+      if (row.state === 'settled' || row.state === 'refunded') return { state: row.state };
+      if (row.state === 'reserved' && new Date(String(row.updated_at)).valueOf() <= Date.now() - 30 * 60_000) {
+        await sql.query("UPDATE token_spend_operations SET state='uncertain' WHERE workspace_id=$1 AND operation_id=$2", [workspaceId, operationId]);
+        row.state = 'uncertain';
+      }
+      if (row.state !== 'uncertain' || new Date(String(row.updated_at)).valueOf() > Date.now() - 30 * 60_000) {
+        throw new HttpError('Only unresolved operations older than 30 minutes can be reconciled.', 409);
+      }
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [workspaceId]);
+      if (decision === 'refund') {
+        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: 1,
+          actorUserId: userId, websiteId: String(row.website_id), ...(row.job_id == null ? {} : { jobId: Number(row.job_id) }),
+          reference: `spend-refund:${operationId}:${Number(row.attempt)}`, reason: `Reconciled failed ${String(row.action)} operation refund` });
+      }
+      const state = decision === 'confirm' ? 'settled' : 'refunded';
+      await sql.query('UPDATE token_spend_operations SET state=$3,resolved_by=$4,updated_at=now() WHERE workspace_id=$1 AND operation_id=$2', [workspaceId, operationId, state, userId]);
+      return { state };
+    });
+  }
 }

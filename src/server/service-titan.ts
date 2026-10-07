@@ -58,6 +58,7 @@ export interface JobsProvider {
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jfif', 'jpeg', 'jpg', 'png', 'tif', 'tiff', 'webp']);
 const IMAGE_MEDIA_TYPES = new Set(['image/avif', 'image/bmp', 'image/gif', 'image/heic', 'image/heif', 'image/jpeg', 'image/pjpeg', 'image/png', 'image/tiff', 'image/webp']);
 const ATTACHMENT_CACHE_MS = 5 * 60_000;
+const ATTACHMENT_CACHE_MAX_ENTRIES = 500;
 const ZIP_LOCATIONS_CACHE_MS = 24 * 60 * 60_000;
 const ZIP_LOCATIONS_CACHE_MAX_ENTRIES = 50;
 const ZIP_LOCATIONS_CACHE_MAX_IDS = 500;
@@ -375,6 +376,12 @@ export class ServiceTitanClient implements JobsProvider {
   private getAttachments(jobId: number, headers: Record<string, string>, tenantPath: string): Promise<ServiceTitanAttachment[]> {
     const cached = this.attachmentCache.get(jobId);
     if (cached && cached.expiresAt > Date.now()) return cached.request;
+    for (const [id, entry] of this.attachmentCache) {
+      if (entry.expiresAt <= Date.now()) this.attachmentCache.delete(id);
+    }
+    if (this.attachmentCache.size >= ATTACHMENT_CACHE_MAX_ENTRIES) {
+      this.attachmentCache.delete(this.attachmentCache.keys().next().value!);
+    }
     const request = this.api.get<PaginatedResponse<ServiceTitanAttachment> | ServiceTitanAttachment[] | { attachments?: ServiceTitanAttachment[] }>(
       `${this.config.apiBaseUrl}/forms/v2/${tenantPath}/jobs/${jobId}/attachments`,
       { headers },

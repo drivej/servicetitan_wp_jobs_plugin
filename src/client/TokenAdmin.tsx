@@ -6,6 +6,7 @@ import { TokenHistory } from './TokenHistory';
 interface Account { id: string; name: string; ownerEmail: string; ownerName: string; balance: number; }
 interface Accounts { accounts: Account[]; nextCursor: string | null; }
 interface Adjustment { requestId: string; amount: number; reason: string; }
+interface SpendOperation { operationId: string; actorUserId: string; jobId: number | null; action: string; state: string; createdAt: string; updatedAt: string; }
 function AdjustmentForm({ account, onPosted }: { account: Account; onPosted: () => void }) {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Adjustment>();
@@ -48,6 +49,49 @@ function AdjustmentForm({ account, onPosted }: { account: Account; onPosted: () 
     </form>
   </section>;
 }
+function SpendReconciliation({ account, revision, onResolved }: { account: Account; revision: number; onResolved: () => void }) {
+  const [operations, setOperations] = useState<SpendOperation[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  useEffect(() => {
+    let active = true;
+    void accountFetch(`/api/admin/token-accounts/${account.id}/spend-operations`).then(async (response) => {
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to load unresolved token operations.');
+      if (active) setOperations(body.operations as SpendOperation[]);
+    }).catch((reason: Error) => { if (active) setError(reason.message); });
+    return () => { active = false; };
+  }, [account.id, revision]);
+  const resolve = async (operation: SpendOperation, decision: 'confirm' | 'refund') => {
+    const prompt = decision === 'confirm'
+      ? 'Confirm the provider completed this operation. The reserved token will remain spent.'
+      : 'Confirm the provider did not complete this operation. The token will be refunded.';
+    if (!window.confirm(prompt)) return;
+    setBusy(operation.operationId); setError('');
+    try {
+      const response = await accountFetch(`/api/admin/token-accounts/${account.id}/spend-operations/${encodeURIComponent(operation.operationId)}/resolve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to reconcile this operation.');
+      setOperations((items) => items.filter((item) => item.operationId !== operation.operationId));
+      onResolved();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to reconcile this operation.'); }
+    finally { setBusy(''); }
+  };
+  return <section className='panel account-panel'>
+    <h2>Unresolved token operations</h2>
+    <p className='field-help'>Check WordPress before resolving. Confirm keeps the debit; refund returns the token. Only operations older than 30 minutes can be resolved.</p>
+    {error && <p className='notice error' role='alert'>{error}</p>}
+    {operations.length === 0 ? <p>No unresolved operations.</p> : <ul className='account-resource-list'>{operations.map((operation) => <li key={operation.operationId}>
+      <div><strong>{operation.action}{operation.jobId ? ` · Job ${operation.jobId}` : ''}</strong><small>{operation.state} · {new Date(operation.createdAt).toLocaleString()} · {operation.operationId}</small></div>
+      <div className='account-actions'>
+        <Button disabled={Boolean(busy)} onClick={() => void resolve(operation, 'confirm')}>Confirm completed</Button>
+        <Button disabled={Boolean(busy)} onClick={() => void resolve(operation, 'refund')}>Refund token</Button>
+      </div>
+    </li>)}</ul>}
+  </section>;
+}
 export function TokenAdmin() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -85,6 +129,7 @@ export function TokenAdmin() {
     </>}
     {selected && <>
       <AdjustmentForm key={selected.id} account={selected} onPosted={() => setRevision((v) => v + 1)} />
+      <SpendReconciliation key={`spends:${selected.id}`} account={selected} revision={revision} onResolved={() => setRevision((v) => v + 1)} />
       <TokenHistory key={selected.id} workspaceId={selected.id} platform revision={revision} />
     </>}
   </main>;

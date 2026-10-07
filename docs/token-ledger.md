@@ -7,8 +7,8 @@ platform administrators are separate from customer workspace owners/admins.
 
 Run the normal migrations (`npm run db:migrate`) with the migration-owner
 connection. A single-login database may use that same non-superuser owner as the
-web runtime login if it owns both ledger and platform-administrator tables. The
-ledger triggers still reject ordinary updates, deletes, truncation, invalid
+web runtime login if it owns both ledger and platform-administrator tables and
+has `SELECT, INSERT, UPDATE` on `token_spend_operations`. The ledger triggers still reject ordinary updates, deletes, truncation, invalid
 balance chains, and unlogged balance changes. A database owner can disable those
 triggers or change administrator rows, so use a separate restricted login when
 your provider supports one. For a separate login, apply these grants using the
@@ -18,6 +18,7 @@ database owner (substitute your actual runtime role):
 GRANT SELECT, INSERT ON token_transactions TO st_jobs_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON token_transactions FROM st_jobs_app;
 GRANT SELECT ON platform_administrators TO st_jobs_app;
+GRANT SELECT, INSERT, UPDATE ON token_spend_operations TO st_jobs_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform_administrators FROM st_jobs_app;
 ```
 
@@ -73,8 +74,12 @@ changes. Account operations serialize on the workspace row.
   credits. The ledger records the actual credit after `MAX_TOKENS`, including
   zero credits at the cap. If the cap is lowered below an existing balance, the
   next grant records the resulting net reduction and discarded amount explicitly.
-- Spending: successful pushes, rebuilds and AI generation record a debit of one
-  token, with actor and job/website references. Failed provider calls do not debit.
+- Spending: durable reservations debit one token before provider work begins.
+  Settled operations retain their result so a retry with the same idempotency key
+  returns it without repeating provider work. Failed AI generation is safe to
+  refund and retry. WordPress errors remain unresolved because they can follow a
+  partial write; a platform administrator confirms completion or refunds after
+  checking WordPress.
 - Test credits: the existing test button also posts ledger entries.
 - Admin adjustments: a signed nonzero integer and mandatory reason produce an
   `admin_adjustment`. Positive adjustments intentionally bypass the subscription
@@ -96,6 +101,8 @@ entries do not duplicate older pages.
 - `GET /api/admin/token-accounts?search=TEXT&after=WORKSPACE_UUID`: platform-admin account search, 50 per page.
 - `GET /api/admin/token-accounts/:workspaceId/transactions?before=SEQUENCE`: 50 ledger entries per page.
 - `POST /api/admin/token-accounts/:workspaceId/transactions`: `{ "amount": 10, "reason": "Support credit", "requestId": "UUID" }`.
+- `GET /api/admin/token-accounts/:workspaceId/spend-operations`: list unresolved reservations for reconciliation.
+- `POST /api/admin/token-accounts/:workspaceId/spend-operations/:operationId/resolve`: `{ "decision": "confirm" | "refund" }`; only unresolved operations older than 30 minutes can be resolved.
 - `GET /api/admin/members?search=TEXT&after=USER_UUID`: platform-admin member search, 50 per page.
 - `POST /api/admin/members/:memberId/disable`: disable a non-platform-admin account and revoke its sessions.
 
@@ -105,12 +112,11 @@ operator's active workspace, not the target customer's workspace.
 
 ## Boundaries
 
-Ledger and database balance changes are atomic. External WordPress/OpenAI work
-cannot participate in that PostgreSQL transaction: if the provider succeeds but
-the connection or commit fails, an external side effect may exist without a debit.
-Spending currently uses an operation reference per invocation, not an end-to-end
-client retry key. Do not claim exactly-once execution for external operations;
-provider idempotency/reservation recovery is a separate follow-up.
+Reservations, debits and settlements are durable and use a client idempotency
+key. Provider work runs outside database locks. A completed operation can be
+replayed from its stored result; an interrupted WordPress operation is blocked
+from automatic retry and requires operator reconciliation. This avoids repeating
+an uncertain write, but it cannot determine WordPress state automatically.
 
 Stripe refund/dispute events do not automatically reverse tokens. A platform
 admin can post a reasoned correction now; automated refund policy remains to be

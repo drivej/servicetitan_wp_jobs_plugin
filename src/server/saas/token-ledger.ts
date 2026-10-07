@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Sql } from './database.js';
 import { HttpError } from './validation.js';
-export type TokenTransactionKind = 'stripe_credit' | 'spend' | 'test_credit' | 'admin_adjustment';
+export type TokenTransactionKind = 'stripe_credit' | 'spend' | 'spend_refund' | 'test_credit' | 'admin_adjustment';
 interface Entry {
   workspaceId: string;
   kind: TokenTransactionKind;

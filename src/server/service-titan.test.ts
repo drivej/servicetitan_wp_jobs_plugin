@@ -86,7 +86,7 @@ test('filters ZIP matches before paginating and reports ZIP-specific counts', as
   assert.equal(calls.filter((call) => call.url.endsWith('/locations') && call.params?.zip).length, 1, 'ZIP location IDs are cached across page requests');
 });
 
-test('lists only jobs with image metadata and securely downloads a verified job image', async () => {
+test('lists jobs without downloading images and securely downloads verified job images from details', async () => {
   const requestedUrls: string[] = [];
   const client = new ServiceTitanClient({
     clientId: 'client-id',
@@ -149,12 +149,13 @@ test('lists only jobs with image metadata and securely downloads a verified job 
     page: 1,
     pageSize: 25,
   });
-  assert.deepEqual(jobs.data.map((job) => job.id), [2]);
-  assert.equal(jobs.totalCount, 1);
-  assert.deepEqual(jobs.data[0]?.attachments, [{ id: 'image-2', fileName: 'completed.jpg', contentType: 'image/jpeg' }]);
-  assert.equal(jobs.data[0]?.sourceCopyStatus, 'limited');
-  assert.equal(jobs.data[0]?.summaryText, undefined, 'source assessment must not expose the raw summary');
-  assert.equal(jobs.data[0]?.location.address, undefined, 'street addresses must not be exposed in the list response');
+  assert.deepEqual(jobs.data.map((job) => job.id), [1, 2]);
+  assert.equal(jobs.totalCount, undefined);
+  assert.deepEqual(jobs.data.map((job) => job.attachments), [[], []]);
+  assert.equal(jobs.data[0]?.sourceCopyStatus, 'missing');
+  assert.equal(jobs.data[1]?.sourceCopyStatus, 'limited');
+  assert.equal(jobs.data[1]?.summaryText, undefined, 'source assessment must not expose the raw summary');
+  assert.equal(jobs.data[1]?.location.address, undefined, 'street addresses must not be exposed in the list response');
   assert.equal(requestedUrls.some((url) => url.includes('/jobs/attachment/')), false, 'list filtering must use metadata only');
 
   const details = await client.getJobDetails(2);

@@ -122,7 +122,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 6);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 11);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -279,15 +279,18 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', operation), /No job tokens/);
     assert.equal(calls, 0);
     await f.db.transaction(alice.user.id, (sql) => postTokenTransaction(sql, { workspaceId: alice.user.id, kind: 'test_credit', requestedAmount: 3, reference: 'test:seed', reason: 'Test setup' }));
-    await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'push', async () => { throw new Error('Provider failed'); }), /Provider failed/);
+    await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, 'ai_generation', async () => { throw new Error('Provider failed'); }), /Provider failed/);
     assert.equal((await f.store.session(alice.token))?.jobTokens, 3);
     for (const action of ['push', 'rebuild', 'ai_generation']) {
-      assert.equal(await f.store.spendJobToken(alice.user.id, site.id, action, operation), 'done');
+      const key = `stable-${action}`;
+      assert.equal(await f.store.spendJobToken(alice.user.id, site.id, action, operation, alice.user.workspaceId, 7, key, action), 'done');
+      assert.equal(await f.store.spendJobToken(alice.user.id, site.id, action, async () => { throw new Error('must replay settled result'); }, alice.user.workspaceId, 7, key, action), 'done');
+      await assert.rejects(f.store.spendJobToken(alice.user.id, site.id, action, operation, alice.user.workspaceId, 7, key, 'different fingerprint'), /different operation details/);
     }
     assert.equal((await f.store.session(alice.token))?.jobTokens, 0);
     assert.equal((await f.store.session(bob.token))?.jobTokens, 0);
-    const audit = await f.sql.query("SELECT action FROM audit_logs WHERE action LIKE 'job_token.spent.%'");
-    assert.equal(audit.rows.length, 3);
+    const settled = await f.sql.query("SELECT operation_id FROM token_spend_operations WHERE workspace_id=$1 AND state='settled'", [alice.user.workspaceId]);
+    assert.equal(settled.rows.length, 3);
     await f.db.transaction(alice.user.id, (sql) => postTokenTransaction(sql, { workspaceId: alice.user.id, kind: 'test_credit', requestedAmount: 1, reference: 'test:refill', reason: 'Test setup' }));
     const before = calls;
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => f.store.spendJobToken(alice.user.id, site.id, 'push', operation)));
@@ -295,6 +298,32 @@ test('job tokens charge only successful work, prevent overspending, and belong t
     assert.equal(calls - before, 1);
     assert.equal((await f.store.session(alice.token))?.jobTokens, 0);
     await assert.rejects(f.sql.query('UPDATE workspaces SET job_tokens=-1 WHERE id=$1', [alice.user.id]));
+  } finally { await f.close(); }
+});
+
+test('uncertain provider spends are reserved, replay-blocked and admin-reconcilable', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'reconcile-owner', email: 'owner@example.com', name: 'Owner' });
+    const connection = await f.store.saveConnection(owner.user.id, source);
+    const site = await f.store.saveWebsite(owner.user.id, siteInput(connection.id));
+    await f.db.transaction(owner.user.id, (sql) => postTokenTransaction(sql, { workspaceId: owner.user.workspaceId, kind: 'test_credit', requestedAmount: 1, reference: 'test:reconcile', reason: 'Test setup' }));
+    let calls = 0;
+    const operationId = 'partial-provider-operation';
+    const args = [owner.user.workspaceId, 77, operationId, 'same-request'] as const;
+    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'push', async () => { calls++; throw new Error('response lost after WordPress write'); }, ...args), /outcome could not be confirmed/);
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 0);
+    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'push', async () => { calls++; return 'duplicate'; }, ...args), /unresolved provider outcome/);
+    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'push', async () => { calls++; return 'duplicate'; }, owner.user.workspaceId, 77, 'different-key', 'changed request'), /previous operation for this job is unresolved/);
+    assert.equal(calls, 1, 'a retry must not repeat a potentially completed side effect');
+
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)', [owner.user.id]);
+    await f.sql.query("UPDATE token_spend_operations SET updated_at=now()-interval '31 minutes' WHERE workspace_id=$1 AND operation_id=$2", [owner.user.workspaceId, operationId]);
+    const accounts = new TokenAccounts(f.db);
+    assert.equal((await accounts.pendingSpends(owner.user.id, owner.user.workspaceId)).length, 1);
+    assert.deepEqual(await accounts.resolveSpend(owner.user.id, owner.user.workspaceId, operationId, 'refund'), { state: 'refunded' });
+    assert.equal((await f.store.session(owner.token))?.jobTokens, 1);
+    assert.deepEqual(await accounts.resolveSpend(owner.user.id, owner.user.workspaceId, operationId, 'refund'), { state: 'refunded' });
   } finally { await f.close(); }
 });
 
@@ -330,7 +359,7 @@ test('workspace invitations, roles, shared spending and revocation enforce team 
     }), []);
     await assert.rejects(f.store.saveConnection(member.user.id,source,connection.id,true,workspaceId), /permission/);
     await assert.rejects(f.store.saveWebsite(member.user.id,siteInput(connection.id),site.id,true,workspaceId), /permission/);
-    await assert.rejects(f.store.addTestJobToken(member.user.id,workspaceId), /permission/);
+    await assert.rejects(f.store.addTestJobToken(member.user.id,1,workspaceId), /permission/);
     await assert.rejects(f.store.invite(member.user.id,workspaceId,'new@example.com','member'), /permission/);
 
     const adminInvite = await f.store.invite(owner.user.id,workspaceId,admin.user.email,'admin');
@@ -340,16 +369,16 @@ test('workspace invitations, roles, shared spending and revocation enforce team 
     await assert.rejects(f.store.changeMember(admin.user.id,workspaceId,member.user.id,'admin'), /Only the owner/);
     await assert.rejects(f.store.changeMember(owner.user.id,workspaceId,owner.user.id), /owner cannot/);
     await assert.rejects(f.store.changeMember(owner.user.id,workspaceId,owner.user.id,'member'), /owner cannot/);
-    await assert.rejects(f.store.addTestJobToken(admin.user.id,workspaceId), /permission/);
+    await assert.rejects(f.store.addTestJobToken(admin.user.id,1,workspaceId), /permission/);
 
-    await f.store.addTestJobToken(owner.user.id,workspaceId);
+    await f.store.addTestJobToken(owner.user.id,1,workspaceId);
     let performed = 0;
     const attempts = await Promise.allSettled([member.user.id,admin.user.id].map((actor) => f.store.spendJobToken(actor,site.id,'push',async () => { performed++; },workspaceId,42052409)));
     assert.equal(attempts.filter((value) => value.status === 'fulfilled').length,1);
     assert.equal(performed,1);
     assert.equal((await f.store.session(owner.token))!.jobTokens,0);
     assert.equal((await f.store.session(member.token))!.jobTokens,0);
-    const audit = (await f.sql.query("SELECT * FROM audit_logs WHERE action='job_token.spent.push'")).rows[0]!;
+    const audit = (await f.sql.query("SELECT * FROM audit_logs WHERE action='job_token.spend_reserved.push'")).rows[0]!;
     assert.equal(audit.user_id,member.user.id);
     assert.equal(audit.workspace_id,workspaceId);
     assert.equal(Number(audit.job_id),42052409);
@@ -572,17 +601,18 @@ test('ledger records actual credits, cap loss, spending and immutable reconciled
     const plan = { id: 'price_ledger', name: 'Plan', amount: 1000, currency: 'usd', tokens: 10, maxTokens: 5, interval: 'week' as const, intervalCount: 1 };
     await Promise.all([1, 2].map(() => billing.creditInvoice('cus_ledger', 'in_ledger', 'sub_ledger', 1, plan)));
     await f.store.spendJobToken(owner.user.id, site.id, 'push', async () => 'ok', owner.user.id, 123);
-    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'push', async () => { throw new Error('failed'); }));
+    await assert.rejects(f.store.spendJobToken(owner.user.id, site.id, 'ai_generation', async () => { throw new Error('failed'); }));
     const history = await accounts.history(owner.user.id, owner.user.id);
     assert.equal(history.balance, 4);
     assert.equal(history.ledgerBalance, 4);
     assert.equal(history.reconciled, true);
-    assert.equal(history.transactions.length, 3);
-    assert.equal(history.transactions[0]!.kind, 'spend');
-    assert.equal(history.transactions[0]!.amount, -1);
-    assert.equal(history.transactions[0]!.jobId, 123);
-    assert.equal(history.transactions[0]!.actorUserId, owner.user.id);
-    const credit = history.transactions[1]!;
+    assert.equal(history.transactions.length, 5);
+    assert.equal(history.transactions[0]!.kind, 'spend_refund');
+    assert.equal(history.transactions[0]!.amount, 1);
+    assert.equal(history.transactions[1]!.kind, 'spend');
+    assert.equal(history.transactions[2]!.jobId, 123);
+    assert.equal(history.transactions[2]!.actorUserId, owner.user.id);
+    const credit = history.transactions[3]!;
     assert.equal(credit.requestedAmount, 10);
     assert.equal(credit.amount, 4);
     assert.equal(credit.discardedAmount, 6);
@@ -598,7 +628,7 @@ test('ledger records actual credits, cap loss, spending and immutable reconciled
       await postTokenTransaction(sql, { workspaceId: owner.user.id, kind: 'test_credit', requestedAmount: 3, reference: 'rollback:test', reason: 'Rollback test' });
       throw new Error('Abort');
     }));
-    assert.equal((await accounts.history(owner.user.id, owner.user.id)).transactions.length, 3);
+    assert.equal((await accounts.history(owner.user.id, owner.user.id)).transactions.length, 5);
     // A cap reduction has an explicit negative net change, not an unexplained loss.
     billing.config.maxTokens = 2;
     await billing.creditInvoice('cus_ledger', 'in_lower_cap', 'sub_ledger', 2, plan);

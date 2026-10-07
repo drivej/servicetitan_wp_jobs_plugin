@@ -41,7 +41,7 @@ const worker = new BuildQueueWorker(queue, async (task) => {
   const providers = store
     ? websiteBuildProviders(store, copyGenerator, task.userId, await store.websiteContext(task.userId, task.websiteId, task.workspaceId))
     : localProviders!;
-  return buildAndDeploy(task.jobId, providers);
+  return buildAndDeploy(task.jobId, providers, task.id);
 });
 const app = saasConfig && store
   ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue), ...staticOptions })

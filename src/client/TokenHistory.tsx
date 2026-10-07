@@ -7,7 +7,7 @@ interface Transaction {
   reason: string; reference: string; stripeInvoiceId: string | null; jobId: number | null; createdAt: string;
 }
 interface History { workspaceName: string; balance: number; ledgerBalance: number; reconciled: boolean; transactions: Transaction[]; nextCursor: string | null; }
-const kinds: Record<string, string> = { opening: 'Opening balance', stripe_credit: 'Subscription credit', spend: 'Usage', test_credit: 'Test credit', admin_adjustment: 'Admin adjustment' };
+const kinds: Record<string, string> = { opening: 'Opening balance', stripe_credit: 'Subscription credit', spend: 'Usage', spend_refund: 'Usage refund', test_credit: 'Test credit', admin_adjustment: 'Admin adjustment' };
 const signed = (amount: number) => `${amount > 0 ? '+' : ''}${amount.toLocaleString()}`;
 export function TokenHistory({ workspaceId, platform = false, revision = 0 }: { workspaceId: string; platform?: boolean; revision?: number }) {
   const [history, setHistory] = useState<History>();

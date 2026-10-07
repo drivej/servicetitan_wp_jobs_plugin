@@ -37,7 +37,7 @@ npm run db:migrate
 
 The runner uses `MIGRATION_DATABASE_URL`, falling back to `DATABASE_URL` for single-login setups. It serializes migrations with a transaction-scoped advisory lock, applies the batch transactionally, and refuses modified historical migration files. It does not automatically migrate when the web process starts.
 
-After migrations, a database administrator can grant a separate runtime login the following privileges (substitute the real role if different). These grants are unnecessary when `DATABASE_URL` uses the owner of both protected tables:
+After migrations, a database administrator can grant a separate runtime login the following privileges (substitute the real role if different). The spend-operation table also needs explicit `SELECT, INSERT, UPDATE` for the runtime login when migrations are owned by another role:
 
 ```sql
 GRANT CONNECT ON DATABASE st_jobs TO st_jobs_app;
@@ -50,6 +50,7 @@ TO st_jobs_app;
 GRANT SELECT, INSERT ON token_transactions TO st_jobs_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON token_transactions FROM st_jobs_app;
 GRANT SELECT ON platform_administrators TO st_jobs_app;
+GRANT SELECT, INSERT, UPDATE ON token_spend_operations TO st_jobs_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON platform_administrators FROM st_jobs_app;
 ```
 

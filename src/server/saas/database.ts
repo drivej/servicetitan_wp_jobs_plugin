@@ -48,6 +48,11 @@ export class PostgresDatabase implements Database {
     if (!ledgerPermissions.rows[0]?.ready) throw new Error(
       'DATABASE_URL needs either a non-owner role with append-only token ledger and read-only platform administrator grants, or the owner of both tables. Check PostgreSQL permissions and run migrations first.'
     );
+    const spendPermissions = await this.pool.query(`SELECT
+      has_table_privilege(current_user,'token_spend_operations','SELECT') AND
+      has_table_privilege(current_user,'token_spend_operations','INSERT') AND
+      has_table_privilege(current_user,'token_spend_operations','UPDATE') AS ready`);
+    if (!spendPermissions.rows[0]?.ready) throw new Error('Token spend operation permissions are missing. Grant SELECT, INSERT, UPDATE on token_spend_operations.');
     const ledgerTriggers = await this.pool.query(`SELECT count(*)::integer AS count FROM pg_trigger WHERE
       (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
        tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);

@@ -1,4 +1,5 @@
 import type { JobCopyGenerator } from './openai.js';
+import { randomUUID } from 'node:crypto';
 import type { JobsProvider, JobImage } from './service-titan.js';
 import type { WordPressProvider } from './wordpress.js';
 import { formatJobCopy } from '../shared/job-copy.js';
@@ -8,10 +9,10 @@ export interface BuildProviders {
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
   copyGenerator: JobCopyGenerator;
-  spendJobToken?: <T>(action: string, operation: () => Promise<T>, jobId?: number) => Promise<T>;
+  spendJobToken?: <T>(action: string, operation: () => Promise<T>, jobId?: number, operationId?: string, fingerprint?: string) => Promise<T>;
 }
 
-export async function buildAndDeploy(jobId: number, providers: BuildProviders) {
+export async function buildAndDeploy(jobId: number, providers: BuildProviders, operationScopeId: string = randomUUID()) {
   const { serviceTitan, wordpress, copyGenerator, spendJobToken = async (_action, operation) => operation() } = providers;
   if ((await wordpress.getPluginStatus()).state !== 'current') throw new Error('Verify the WordPress plugin before building a draft.');
   const existing = await wordpress.getStatus(jobId);
@@ -30,6 +31,8 @@ export async function buildAndDeploy(jobId: number, providers: BuildProviders) {
   }
   if (!image) throw new Error('This job has no available image. Add a working image and try again.');
   const copy = await spendJobToken('ai_generation', async () =>
-    parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(details.summary)), true)!, jobId);
-  return spendJobToken('push', () => wordpress.pushJob(details.summary, [image!], 'draft', copy), jobId);
+    parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(details.summary)), true)!, jobId,
+    `${operationScopeId}-ai`, JSON.stringify({ operationScopeId, stage: 'ai_generation', jobId }));
+  return spendJobToken('push', () => wordpress.pushJob(details.summary, [image!], 'draft', copy), jobId,
+    `${operationScopeId}-push`, JSON.stringify({ operationScopeId, stage: 'push', jobId, attachmentId: image.id, copy }));
 }
