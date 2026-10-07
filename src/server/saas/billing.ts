@@ -86,10 +86,15 @@ export class BillingService {
     // Reserve a durable attempt before calling Stripe. Retries reuse the same
     // idempotency key, even after an API timeout or database rollback.
     const attempt = await this.owned(user, true, async (sql, row) => {
-      if (row.checkout_key && Number(new Date(String(row.checkout_expires_at))) > Date.now()) {
-        if (row.checkout_price !== plan.id) throw new HttpError('A checkout for another plan is pending. Finish it or wait 35 minutes before switching plans.', 409);
-        return { key: String(row.checkout_key), expires: Math.floor(Number(new Date(String(row.checkout_expires_at))) / 1000) };
-      }
+      const reservationExpires = Number(new Date(String(row.checkout_expires_at)));
+      const reuseReservation = Boolean(row.checkout_key && reservationExpires > Date.now() && row.checkout_price === plan.id);
+      if (row.checkout_id) {
+        const previous = await this.stripe.checkout.sessions.retrieve(String(row.checkout_id));
+        if (previous.status === 'complete') throw new HttpError('The previous checkout has completed. Refresh your billing page before choosing another plan.', 409);
+        if (reuseReservation && previous.status === 'open') return { key: String(row.checkout_key), expires: Math.floor(reservationExpires / 1000) };
+        if (previous.status === 'open') await this.stripe.checkout.sessions.expire(String(row.checkout_id));
+        else if (previous.status !== 'expired') throw new HttpError('The previous checkout status could not be confirmed. Try again.', 409);
+      } else if (reuseReservation) return { key: String(row.checkout_key), expires: Math.floor(reservationExpires / 1000) };
       const key = randomUUID(), expires = Math.floor(Date.now() / 1000) + 35 * 60;
       await sql.query('UPDATE workspace_billing SET checkout_key=$2,checkout_price=$3,checkout_expires_at=to_timestamp($4),checkout_id=NULL WHERE workspace_id=$1', [user.workspaceId, key, plan.id, expires]);
       return { key, expires };

@@ -31,7 +31,7 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
   const availablePlans = billing ? [...billing.plans, ...(billing.testPlan ? [billing.testPlan] : [])] : [];
   return <section className='billing-plans' aria-label='Subscription plans'>
     {checkout === 'success' && <p className='notice' role='status'>Checkout finished. Your balance updates after payment is confirmed. <Button onClick={() => { setRevision((v) => v + 1); window.dispatchEvent(new Event('job-tokens-changed')); }}>Refresh balance</Button></p>}
-    {checkout === 'canceled' && <p className='notice'>Checkout canceled. You can return to the same plan’s checkout below.</p>}
+    {checkout === 'canceled' && <p className='notice'>Checkout canceled. Choose a plan below to start again.</p>}
     {error && <p className='notice error' role='alert'>{error} <Button disabled={busy} onClick={() => setRevision((v) => v + 1)}>Retry</Button></p>}
     {!billing && !error && <p role='status'>Loading subscription plans…</p>}
     {billing && <>

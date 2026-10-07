@@ -63,10 +63,11 @@ an immediate token adjustment: prorated update invoices do not grant tokens.
 Refund/dispute-driven token revocation is not implemented in this initial build.
 Do not launch live billing until those operational rules have been decided.
 
-A pending Checkout is reused to prevent duplicate subscriptions. Switching to a
-different plan while Checkout is pending is blocked until that session expires
-(35 minutes). Subscription status is fetched from Stripe whenever the billing
-page is loaded, rather than trusting webhook delivery order.
+A pending Checkout is reused when its plan is selected again. Choosing another
+plan expires an open Checkout Session before creating a new one. A completed
+Checkout cannot be replaced; refresh billing to see the resulting subscription.
+Subscription status is fetched from Stripe whenever the billing page is loaded,
+rather than trusting webhook delivery order.
 
 ## Deployment
 
