@@ -228,6 +228,9 @@ export class AccountStore {
         previous = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2 FOR UPDATE', [workspaceId, id])).rows[0];
         if (!previous) throw new HttpError('Website not found.', 404);
         if (previous.url !== input.url) throw new HttpError('Create a new website to change its URL.');
+      } else {
+        const existing = (await sql.query('SELECT id FROM websites WHERE workspace_id=$1 LIMIT 1', [workspaceId])).rows[0];
+        if (existing) throw new HttpError('This workspace already has a website. Update the existing website in Settings.');
       }
       if (input.connectionId) {
         const connection = (await sql.query('SELECT id FROM servicetitan_connections WHERE workspace_id=$1 AND id=$2', [workspaceId, input.connectionId])).rows[0];
