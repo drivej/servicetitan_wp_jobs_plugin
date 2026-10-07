@@ -158,7 +158,21 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const context = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
       const endpoint = `${websiteUrl(context.website.url)}/wp-json/servicetitan-job-integration/v1/status`;
       let response: Response;
-      try { response = await publicFetch(endpoint, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) }); }
+      try {
+        response = await publicFetch(endpoint, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+        // Some hosts or security plugins require authentication even for this
+        // deliberately public status route. Retry with the saved WordPress
+        // Application Password so users do not need to change host settings.
+        if (response.status === 401 && context.wordpress) {
+          response = await publicFetch(endpoint, {
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Basic ${Buffer.from(`${context.wordpress.username}:${context.wordpress.applicationPassword}`).toString('base64')}`,
+            },
+            signal: AbortSignal.timeout(15_000),
+          });
+        }
+      }
       catch (error) { res.status(422).json({ service: 'wordpress-plugin', error: error instanceof Error ? error.message : 'Could not reach the WordPress plugin status endpoint.', helpUrl: '/help/wordpress-reachability' }); return; }
       if (!response.ok) {
         const code = response.status === 404 ? 'wordpress-plugin' : 'wordpress-reachability';
