@@ -1620,6 +1620,7 @@ td strong {
 .onboarding-steps button { border: 1px solid #cbd6cf; border-radius: 999px; background: #fff; color: #34473d; padding: 9px 15px; font: inherit; font-weight: 650; cursor: pointer; }
 .onboarding-steps button[aria-current="step"] { background: #186d4c; border-color: #186d4c; color: #fff; }
 .onboarding-steps button:disabled { opacity: .5; cursor: not-allowed; }
+.onboarding-step-check { display: inline-block; margin-left: 5px; font-weight: 800; }
 .onboarding-step { grid-column: 1 / -1; max-width: 760px; }
 .onboarding-test-button.MuiButton-root { border-color: #66869a; color: #426477; }
 .onboarding-test-button.MuiButton-root:hover { border-color: #426477; background: #edf3f6; }
