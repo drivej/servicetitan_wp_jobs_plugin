@@ -9,6 +9,7 @@ import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
 import { MarketingPage } from './MarketingPage';
 import { BillingPlans } from './BillingPlans';
+import { PageHeader } from './PageHeader';
 import './styles.css';
 import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 
@@ -27,7 +28,9 @@ const page = helpTopicMatch
     ? <WordPressPluginSetup />
     : jobDetailsMatch
       ? <JobDetails jobId={Number(jobDetailsMatch[1])} />
-      : <App />;
+      : path === '/jobs'
+        ? <App />
+        : <WelcomePage />;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -67,6 +70,19 @@ function AppShell({ children }: { children: ReactNode }) {
 
 function PageHeaderFallback() {
   return <header className='account-page-hero'><p className='eyebrow'>Choose a plan</p><h1>Pricing</h1><p>Select a subscription to continue to setup.</p></header>;
+}
+
+function WelcomePage() {
+  return (
+    <main className='account-page'>
+      <PageHeader
+        eyebrow='Your workspace'
+        title='Welcome to ServiceTitan Jobs'
+        description='Browse the latest ServiceTitan jobs and choose one to work on.'
+        actions={<Button component='a' href='/jobs' variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>}>View latest jobs</Button>}
+      />
+    </main>
+  );
 }
 
 const theme = createTheme({

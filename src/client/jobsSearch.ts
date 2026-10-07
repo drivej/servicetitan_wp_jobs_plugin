@@ -33,7 +33,7 @@ export const jobsListUrl = (state: JobsSearchState, page = state.page): string =
     pageSize: String(state.pageSize),
   });
   if (state.filters.zip) params.set('zip', state.filters.zip);
-  return `/?${params.toString()}`;
+  return `/jobs?${params.toString()}`;
 };
 
 export const jobDetailsUrl = (jobId: number): string => `/jobs/${jobId}`;

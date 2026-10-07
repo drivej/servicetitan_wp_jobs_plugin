@@ -167,7 +167,7 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
             <p className="guide-step">Step 4</p>
             <h2>Verify and push a job</h2>
             <ol>
-              <li>Open the <a href="/">Jobs workspace</a> and select a date range.</li>
+              <li>Open the <a href="/jobs">Jobs workspace</a> and select a date range.</li>
               <li>On a job row, select the refresh icon beside <strong>WP post status</strong>.</li>
               <li>Confirm the status changes from <strong>Unknown</strong> to <strong>None</strong>.</li>
               <li>To check every job on the current page at once, select <strong>Refresh page statuses</strong> above the table.</li>

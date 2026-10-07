@@ -20,7 +20,7 @@ test('preserves the complete job search in list links and keeps detail links cle
   const search = parseJobsSearch('?start=2026-08-01&end=2026-08-31&zip=90712&page=3&pageSize=10', defaults);
   assert.equal(
     jobsListUrl(search, 2),
-    '/?start=2026-08-01&end=2026-08-31&page=2&pageSize=10&zip=90712',
+    '/jobs?start=2026-08-01&end=2026-08-31&page=2&pageSize=10&zip=90712',
   );
   assert.equal(
     jobDetailsUrl(42058808),

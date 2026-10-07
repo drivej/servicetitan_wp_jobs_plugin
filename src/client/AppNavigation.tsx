@@ -1,6 +1,6 @@
 // import { Button, Stack } from '@mui/material';
 
-// export function AppNavigation({ current, jobsHref = '/' }: { current: 'jobs' | 'plugin' | 'guide' | undefined; jobsHref?: string }) {
+// export function AppNavigation({ current, jobsHref = '/jobs' }: { current: 'jobs' | 'plugin' | 'guide' | undefined; jobsHref?: string }) {
 //   return (
 //     <Stack component="nav" direction="row" spacing={0} aria-label="Application" className="app-nav">
 //       <Button component="a" href={jobsHref} color={current === 'jobs' ? 'primary' : 'inherit'} variant={current === 'jobs' ? 'contained' : 'text'} aria-current={current === 'jobs' ? 'page' : undefined}>Jobs</Button>

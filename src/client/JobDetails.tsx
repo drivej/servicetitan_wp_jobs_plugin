@@ -87,7 +87,7 @@ function JobImageOption({ attachment, disabled, jobId, onToggle, onImageState, s
 export function JobDetails({ jobId }: { jobId: number }) {
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
   const tokensExhausted = useTokensExhausted();
-  const jobsHref = `/${window.location.search}`;
+  const jobsHref = `/jobs${window.location.search}`;
   const [details, setDetails] = useState<JobDetailsResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [imageStates, setImageStates] = useState<Record<string, 'loaded' | 'error'>>({});

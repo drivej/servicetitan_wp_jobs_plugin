@@ -315,7 +315,7 @@ export function App() {
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
-        <form className='job-search-form' action='/' method='get'>
+        <form className='job-search-form' action='/jobs' method='get'>
           <label>
             <span>Start date</span>
             <TextField name='start' type='date' required size="small" value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
