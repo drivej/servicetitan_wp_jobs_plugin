@@ -5,6 +5,7 @@ import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import HourglassTopRoundedIcon from '@mui/icons-material/HourglassTopRounded';
 import type { BuildTask } from '../shared/build-queue';
 import { JobThumbnail } from './JobThumbnail';
 import type { WordPressStatus } from './wordpressStatusCache';
@@ -63,7 +64,9 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     : wordpressStatus.state === 'unknown' ? wordpressStatus.label.toLowerCase().includes('loading') ? 'info' : 'error'
     : wordpressStatus.postStatus === 'publish' ? 'success' : wordpressStatus.postStatus === 'draft' ? 'warning' : 'default';
   const readiness = imageValidationState || job.imageValidationState || 'loading';
-  const readinessState = readiness === 'invalid' || readiness === 'error' || job.sourceCopyStatus === 'missing'
+  const readinessState = readiness === 'loading'
+    ? 'loading'
+    : readiness === 'invalid' || readiness === 'error' || job.sourceCopyStatus === 'missing'
     ? 'invalid'
     : readiness === 'valid' && job.sourceCopyStatus !== 'limited'
       ? 'valid'
@@ -73,7 +76,8 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     : job.sourceCopyStatus === 'limited' ? 'Limited source copy'
       : readiness === 'invalid' || readiness === 'error' ? 'No valid image'
         : 'Checking image';
-  const readinessLabel = readinessState === 'valid' ? 'Ready to publish'
+  const readinessLabel = readinessState === 'loading' ? 'Checking image'
+    : readinessState === 'valid' ? 'Ready to publish'
     : readinessState === 'invalid' ? `Not ready to publish: ${readinessReason}`
       : `Review before publishing: ${readinessReason}`;
   const sourceCopyMessage = job.sourceCopyStatus === 'missing' ? 'Missing source copy'
@@ -86,7 +90,7 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(); }
   }}>
     <td className={`readiness-cell readiness-${readinessState}`} data-label='Publish readiness' title={readinessLabel} aria-label={readinessLabel}>
-      {readinessState === 'valid' ? <CheckRoundedIcon aria-hidden='true' /> : readinessState === 'invalid' ? <CloseRoundedIcon aria-hidden='true' /> : <WarningAmberRoundedIcon aria-hidden='true' />}
+      {readinessState === 'loading' ? <HourglassTopRoundedIcon aria-hidden='true' /> : readinessState === 'valid' ? <CheckRoundedIcon aria-hidden='true' /> : readinessState === 'invalid' ? <CloseRoundedIcon aria-hidden='true' /> : <WarningAmberRoundedIcon aria-hidden='true' />}
     </td>
     <td className='job-image-cell' data-label='Image'><JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} /></td>
     <td className='job-name-cell' data-label='Job'>
