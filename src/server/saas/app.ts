@@ -221,10 +221,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const connection = connections.find((item) => item.id === connectionId);
       if (!connection) throw new HttpError('Select a saved ServiceTitan connection.');
       const connectionContext = await store.connectionContext(user.id, connectionId, user.workspaceId);
-      const production = connectionContext.environment === 'production';
       const client = new ServiceTitanClient({ ...connectionContext,
-        apiBaseUrl: production ? 'https://api.servicetitan.io' : 'https://api-integration.servicetitan.io',
-        authUrl: production ? 'https://auth.servicetitan.io/connect/token' : 'https://auth-integration.servicetitan.io/connect/token' });
+        apiBaseUrl: 'https://api.servicetitan.io',
+        authUrl: 'https://auth.servicetitan.io/connect/token' });
       try { await client.validateAccess(); }
       catch (error) {
         const message = error instanceof Error ? error.message : 'ServiceTitan rejected the connection.';
@@ -336,11 +335,17 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     catch (error) { next(error); }
   });
   app.post('/api/connections', async (req, res, next) => {
-    try { res.status(201).json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
+    try {
+      const input = connectionInput(req.body);
+      res.status(201).json(await store.saveConnection((res.locals.user as User).id, { ...input, environment: 'production' }, undefined, false, (res.locals.user as User).workspaceId));
+    }
     catch (error) { next(error); }
   });
   app.put('/api/connections/:id', async (req, res, next) => {
-    try { res.json(await store.saveConnection((res.locals.user as User).id, connectionInput(req.body, true), uuid(req.params.id), true, (res.locals.user as User).workspaceId)); }
+    try {
+      const input = connectionInput(req.body, true);
+      res.json(await store.saveConnection((res.locals.user as User).id, { ...input, environment: 'production' }, uuid(req.params.id), true, (res.locals.user as User).workspaceId));
+    }
     catch (error) { next(error); }
   });
   app.get('/api/websites', async (_req, res, next) => {

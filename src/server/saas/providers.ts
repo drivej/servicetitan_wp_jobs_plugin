@@ -34,10 +34,9 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
 }
 
 export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCopyGenerator, userId: string, { website, connection, wordpress, workspaceId }: WebsiteContext): BuildProviders {
-  const production = connection.environment === 'production';
   const serviceTitan = new ServiceTitanClient({ ...connection,
-    apiBaseUrl: production ? 'https://api.servicetitan.io' : 'https://api-integration.servicetitan.io',
-    authUrl: production ? 'https://auth.servicetitan.io/connect/token' : 'https://auth-integration.servicetitan.io/connect/token',
+    apiBaseUrl: 'https://api.servicetitan.io',
+    authUrl: 'https://auth.servicetitan.io/connect/token',
   });
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
   return { serviceTitan: {
