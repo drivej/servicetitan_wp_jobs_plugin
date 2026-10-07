@@ -230,7 +230,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
         const code = error instanceof ServiceTitanRequestError && error.status === 401 ? 'credentials' : error instanceof ServiceTitanRequestError && error.status === 403 ? 'permissions' : 'tenant';
         res.status(422).json({ service: 'servicetitan', code, error: message, helpUrl: `/help/servicetitan-${code}` }); return;
       }
-      const site = await store.websiteContext(user.id, websiteId, user.workspaceId);
+      const site = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
       if (!site.website.wordpressConfigured) throw new HttpError('Validate the WordPress website first.', 409);
       await store.attachConnection(user.id, websiteId, connectionId, user.workspaceId);
       await store.markConnectionValidated(user.id, connectionId, user.workspaceId);
