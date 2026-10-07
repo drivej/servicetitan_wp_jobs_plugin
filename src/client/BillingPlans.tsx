@@ -37,6 +37,7 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
     {billing && <>
       {!billing.canManage && <p>The workspace owner manages subscriptions and billing.</p>}
       {billing.subscription && <p>Subscription: <strong>{billing.subscription.status.replaceAll('_', ' ')}</strong>{billing.subscription.cancelAtPeriodEnd ? ' · Cancels at the end of the billing period.' : ''}</p>}
+      {!billing.subscription && <p className='notice' role='status'>This workspace has no active subscription. Complete Checkout to open Jobs.</p>}
       {billing.canManage && billing.hasCustomer && <Button disabled={busy} onClick={() => void redirect('portal')}>Manage billing</Button>}
       <div className='billing-plan-grid'>{availablePlans.map((plan) => <article className='panel account-panel' key={plan.id}>
         {plan.id === billing.testPlan?.id && <p className='eyebrow'>Testing</p>}

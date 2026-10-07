@@ -49,9 +49,8 @@ interface ConnectionCheck { kind: ConnectionCheckKind; success: boolean; message
 
 function workspaceRedirect(path: string, status: OnboardingStatus | undefined, isLocal: boolean, hasInvitation: boolean): string | undefined {
   if (isLocal || !status || hasInvitation) return undefined;
-  // Keep onboarding accessible while Stripe is still confirming a subscription.
-  // Subscription status takes precedence over setup progress to avoid a pricing loop.
-  if (!status.activeProduct) return ['/pricing', '/onboarding'].includes(path) ? undefined : '/pricing';
+  // Jobs require a subscription; setup, billing, settings, and help remain accessible.
+  if (!status.activeProduct) return path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
   const setupComplete = status.settingsReady || status.onboardingStep >= 3;
   if (!setupComplete && !['/onboarding', '/settings', '/help', '/wordpress-plugin', '/invite'].includes(path)) return '/onboarding';
   if (setupComplete && path === '/pricing') return '/';
@@ -912,7 +911,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           )}
         </main>
       ) : (
-        <div key={`${user.id}:${selected}`}>{!isLocal && !onboardingComplete && path !== '/pricing' ? <main className='account-page'><h1>Complete setup</h1><p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/onboarding' onClick={()=>window.sessionStorage.setItem('onboarding-stage', websiteStepComplete ? '2' : '1')}>{websiteStepComplete ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
+        <div key={`${user.id}:${selected}`}>{!isLocal && !onboardingComplete && (path === '/jobs' || path.startsWith('/jobs/')) ? <main className='account-page'><h1>Complete setup</h1><p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/onboarding' onClick={()=>window.sessionStorage.setItem('onboarding-stage', websiteStepComplete ? '2' : '1')}>{websiteStepComplete ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
       )}
     </>
   );
