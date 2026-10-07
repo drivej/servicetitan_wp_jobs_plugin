@@ -2,7 +2,10 @@ import { CircularProgress, Dialog } from '@mui/material';
 
 export function LoadingModal({ open, label = 'Loading page' }: { open: boolean; label?: string }) {
   return (
-    <Dialog open={open} className='loading-modal' aria-label={label} slotProps={{ transition: { timeout: 0 } }}>
+    <Dialog open={open} className='loading-modal' aria-label={label} slotProps={{
+      transition: { timeout: 0 },
+      backdrop: { sx: { backgroundColor: 'rgba(241, 240, 234, .45)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } },
+    }}>
       <div className='loading-modal-spinner' role='status'>
         <CircularProgress size={36} thickness={3.5} disableShrink enableTrackSlot aria-hidden='true' />
         <span className='visually-hidden'>{label}</span>
