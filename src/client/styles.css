@@ -1623,6 +1623,8 @@ td strong {
 .onboarding-step { grid-column: 1 / -1; max-width: 760px; }
 .onboarding-test-button.MuiButton-root { border-color: #66869a; color: #426477; }
 .onboarding-test-button.MuiButton-root:hover { border-color: #426477; background: #edf3f6; }
+.onboarding-feedback { width: 100%; margin-top: 14px; }
+.onboarding-feedback .notice { box-sizing: border-box; width: 100%; margin: 0; padding-block: 10px; }
 .onboarding-step-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
 
 
