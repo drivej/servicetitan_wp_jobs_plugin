@@ -85,17 +85,17 @@ The integration does not automatically enable tax collection or promotion codes.
 Set `STRIPE_PRICE_FREE=subscription_free` (or its price ID) and
 `ENABLE_TEST_TOKENS=true`, then restart the server. This price must be a zero-cost
 recurring price with positive `token_count` metadata, in the same Stripe
-sandbox as the configured key. On Add Tokens, workspace owners see **Purchase
-free test subscription**. This uses normal Checkout and grants tokens only after
+sandbox as the configured key. On Pricing and Add Tokens, workspace owners see a
+**Free test subscription** alongside the paid plans. This uses normal Checkout and grants tokens only after
 Stripe sends the zero-total `invoice.paid` event; the normal `MAX_TOKENS` cap and
 invoice deduplication apply. No card charge is made by a zero-cost subscription.
 
 Use a workspace without an existing subscription. The existing one-subscription
-and pending-Checkout protections also apply to this test button. The direct
+and pending-Checkout protections also apply to this plan. The direct
 **Add 1 test token** button remains a separate shortcut that does not test Stripe.
 
 When `ENABLE_TEST_TOKENS=false`, the server rejects new purchases of this test
-price and hides the button. Existing subscriptions are not canceled: their paid
+price and hides the plan. Existing subscriptions are not canceled: their paid
 invoices still grant tokens while `STRIPE_PRICE_FREE` remains configured. Cancel
 the test subscription through Manage billing when finished. Development still
 requires sandbox credentials, including for free subscriptions.
