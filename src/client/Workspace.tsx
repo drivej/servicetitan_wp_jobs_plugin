@@ -306,6 +306,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [onboarding, setOnboarding] = useState<OnboardingStatus>();
   const [websiteTestPassed, setWebsiteTestPassed] = useState(false);
   const [validationError, setValidationError] = useState<{ message: string; helpUrl: string }>();
+  const [settingsCheck, setSettingsCheck] = useState<{ kind: 'wordpress' | 'servicetitan' | 'plugin'; success: boolean; message: string; helpUrl?: string }>();
   const [onboardingStage, setOnboardingStage] = useState<1 | 2 | 3>(() => { try { const value = Number(window.sessionStorage.getItem('onboarding-stage')); return value === 2 ? 2 : value === 3 || value === 4 ? 3 : 1; } catch { return 1; } });
   const [validationSuccess, setValidationSuccess] = useState('');
 
@@ -417,6 +418,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   }, [session?.mode, session?.user?.workspaceId, session?.user?.role]);
 
   const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const onboardingPage = path === '/onboarding';
+  const settingsPage = path === '/settings';
   const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/help' ? 'guide' : path === '/' || path.startsWith('/jobs/') ? 'jobs' : undefined;
   const jobsHref = currentPage === 'jobs' ? `/${window.location.search}` : '/';
 
@@ -434,14 +437,13 @@ export function Workspace({ children }: { children: ReactNode }) {
   const user = session!.user!;
   const isLocal = session!.mode === 'local';
   if (!isLocal && onboarding && !onboarding.activeProduct && path !== '/pricing' && !invitationToken) window.location.replace('/pricing');
-  if (!isLocal && onboarding?.activeProduct && !onboarding.settingsReady && path !== '/settings' && path !== '/' && !invitationToken) window.location.replace('/settings');
-  if (!isLocal && onboarding?.settingsReady && (path === '/pricing' || path === '/settings')) window.location.replace('/');
+  if (!isLocal && onboarding?.activeProduct && !onboarding.settingsReady && !['/onboarding', '/settings', '/help', '/wordpress-plugin', '/invite'].includes(path) && !invitationToken) window.location.replace('/onboarding');
+  if (!isLocal && onboarding?.settingsReady && path === '/pricing') window.location.replace('/');
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
   const adminPage = path === '/admin/tokens';
   const membersAdminPage = path === '/admin/members';
-  const accountPage = !invitePage && !tokensPage && !adminPage && (path === '/settings' || websites.length === 0 || path === '/' && onboarding?.activeProduct === true && !onboarding.settingsReady);
 
   const selectWorkspace = async (workspaceId: string) => {
     if (isLocal) {
@@ -531,11 +533,20 @@ export function Workspace({ children }: { children: ReactNode }) {
     const form = event.currentTarget;
     const data = new FormData(form);
     const field = (name: string) => String(data.get(name) || '').trim();
-    const editing = kind === 'connections' ? editingConnection : editingWebsite || (onboardingStage === 1 ? websites[0] : undefined);
+    const activeWebsite = websites.find((site) => site.id === selected) || websites[0];
+    const websiteEditing = editingWebsite || activeWebsite;
+    const editing = kind === 'connections' ? editingConnection || connections.find((item) => item.id === activeWebsite?.connectionId) || connections[0] : websiteEditing;
+    const wordpressUsername = field('wp-username');
+    const applicationPassword = field('wp-application-password');
+    if (kind === 'websites' && websiteEditing?.wordpressConfigured && wordpressUsername !== (websiteEditing.wordpressUsername || '') && !applicationPassword) {
+      setError('Enter a new Application Password when changing the WordPress username.');
+      setBusy(false);
+      return;
+    }
     const body =
       kind === 'connections'
         ? { name: field('name'), environment: field('environment'), tenantId: field('tenantId'), clientId: field('clientId'), clientSecret: field('clientSecret'), appKey: field('appKey') }
-        : { name: field('name'), ...(field('connectionId') ? { connectionId: field('connectionId') } : {}), url: field('url'), restBase: field('restBase'), zipAcfField: field('zipAcfField'), ...(field('username') || field('applicationPassword') ? { wordpress: { username: field('username'), applicationPassword: field('applicationPassword') } } : {}) };
+        : { name: field('name'), ...(field('connectionId') ? { connectionId: field('connectionId') } : {}), url: field('url'), restBase: field('restBase') || websiteEditing?.restBase || 'st-jobs', zipAcfField: field('zipAcfField') || websiteEditing?.zipAcfField || 'my_zip_codes', ...(applicationPassword ? { wordpress: { username: wordpressUsername, applicationPassword } } : {}) };
     try {
       const saved = await accountFetch(`/api/${kind}${editing ? `/${editing.id}` : ''}`, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(json<{ id?: string }>);
       if (kind === 'connections' && saved.id) setEditingConnection({ id: saved.id, name: field('name'), environment: field('environment'), tenantId: field('tenantId') });
@@ -551,6 +562,41 @@ export function Workspace({ children }: { children: ReactNode }) {
       setBusy(false);
     }
   };
+
+  const testSettingsSection = async (kind: 'wordpress' | 'servicetitan' | 'plugin') => {
+    const website = websites.find((site) => site.id === selected) || websites[0];
+    if (!website) {
+      setSettingsCheck({ kind, success: false, message: 'Save a website before running this check.', helpUrl: '/help/onboarding-save-failed' });
+      return;
+    }
+    const connection = connections.find((item) => item.id === website.connectionId) || editingConnection || connections[0];
+    if (kind === 'servicetitan' && !connection) {
+      setSettingsCheck({ kind, success: false, message: 'Save a ServiceTitan connection before testing it.', helpUrl: '/help/servicetitan-credentials' });
+      return;
+    }
+    setBusy(true);
+    setSettingsCheck(undefined);
+    try {
+      const endpoint = kind === 'wordpress' ? '/api/onboarding/validate-website' : kind === 'plugin' ? '/api/onboarding/validate-plugin' : '/api/onboarding/validate-servicetitan';
+      const payload = kind === 'servicetitan' ? { connectionId: connection!.id, websiteId: website.id } : { websiteId: website.id };
+      const response = await accountFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json() as { error?: string; helpUrl?: string; version?: string; requestId?: string };
+      if (!response.ok) {
+        setSettingsCheck({ kind, success: false, message: `${result.error || 'Connection check failed.'}${result.requestId ? ` (Request ID: ${result.requestId})` : ''}`, helpUrl: result.helpUrl || (kind === 'wordpress' ? '/help/wordpress-reachability' : kind === 'plugin' ? '/help/plugin-test-failed' : '/help/servicetitan-permissions') });
+        return;
+      }
+      await refresh(user, session!.csrfToken!);
+      const message = kind === 'plugin' ? `Plugin version ${result.version} is detected and compatible.` : kind === 'wordpress' ? 'WordPress REST API access validated.' : 'ServiceTitan Jobs access validated.';
+      setSettingsCheck({ kind, success: true, message });
+    } catch (reason) {
+      setSettingsCheck({ kind, success: false, message: reason instanceof Error ? reason.message : 'Connection check failed.', helpUrl: kind === 'wordpress' ? '/help/wordpress-reachability' : kind === 'plugin' ? '/help/plugin-test-failed' : '/help/servicetitan-permissions' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const settingsWebsite = websites.find((site) => site.id === selected) || websites[0];
+  const settingsConnection = connections.find((connection) => connection.id === settingsWebsite?.connectionId) || connections[0];
 
   const saveAndTestPlugin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -761,7 +807,51 @@ export function Workspace({ children }: { children: ReactNode }) {
             )}
           </section>
         </main>
-      ) : accountPage ? (
+      ) : settingsPage ? (
+        <main className='account-page'>
+          <PageHeader className='account-page-hero' eyebrow='Configuration' title='Settings' description='Review your saved integrations and test each connection from this page.' />
+          {message && <p className='notice' role='status'>{message}</p>}
+          {!canManage && <p className='notice'>An owner or admin manages these configuration values.</p>}
+          <div className='account-grid'>
+            <section className='panel account-panel'>
+              <h2>WordPress website</h2>
+              {settingsWebsite && <p>{settingsWebsite.name} · {settingsWebsite.url}</p>}
+              <form key={editingWebsite?.id || settingsWebsite?.id || 'website-settings'} onSubmit={(event) => void submit(event, 'websites')} className='account-form'>
+                <label>Website name<TextField size='small' fullWidth name='name' required defaultValue={editingWebsite?.name || settingsWebsite?.name} placeholder='My company website' /></label>
+                <label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || settingsWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || settingsWebsite) } }} placeholder='https://example.com' /></label>
+                <label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(settingsWebsite?.wordpressConfigured ?? false)} defaultValue={settingsWebsite?.wordpressUsername || ''} autoComplete='username' /></label>
+                <label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(settingsWebsite?.wordpressConfigured ?? false)} placeholder={settingsWebsite?.wordpressConfigured ? 'Saved securely — leave blank to keep current' : undefined} autoComplete='current-password' /></label>
+                <p className='field-help'>The saved password stays on the server. Leave it blank to keep the current value or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a></p>
+                <label>Post type REST base<TextField size='small' fullWidth name='restBase' required defaultValue={settingsWebsite?.restBase || 'st-jobs'} /></label>
+                <label>ZIP ACF field<TextField size='small' fullWidth name='zipAcfField' required defaultValue={settingsWebsite?.zipAcfField || 'my_zip_codes'} /></label>
+                <Button type='submit' variant='contained' className='primary' disabled={busy || !canManage}>{busy ? 'Saving…' : 'Save WordPress settings'}</Button>
+              </form>
+              <Button disabled={busy || !canManage || !settingsWebsite?.wordpressConfigured} onClick={() => void testSettingsSection('wordpress')}>{busy && settingsCheck?.kind === 'wordpress' ? 'Testing WordPress…' : 'Test WordPress API'}</Button>
+              {settingsCheck?.kind === 'wordpress' && <p className={settingsCheck.success ? 'notice' : 'notice error'} role={settingsCheck.success ? 'status' : 'alert'}>{settingsCheck.message}{settingsCheck.helpUrl && <> <a href={settingsCheck.helpUrl}>Open help</a></>}</p>}
+            </section>
+            <section className='panel account-panel'>
+              <h2>ServiceTitan connection</h2>
+              {settingsConnection && <p>{settingsConnection.name} · {settingsConnection.environment} · Tenant {settingsConnection.tenantId}</p>}
+              <form key={editingConnection?.id || settingsConnection?.id || 'servicetitan-settings'} onSubmit={(event) => void submit(event, 'connections')} className='account-form'>
+                <label>Connection name<TextField size='small' fullWidth name='name' required defaultValue={editingConnection?.name || settingsConnection?.name} placeholder='My ServiceTitan account' /></label>
+                <div className='account-field-pair'><label>Environment<Select size='small' sx={{ width: '100%' }} name='environment' defaultValue={editingConnection?.environment || settingsConnection?.environment || 'integration'}><MenuItem value='integration'>Integration</MenuItem><MenuItem value='production'>Production</MenuItem></Select></label><label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || settingsConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection || settingsConnection) } }} /></label></div>
+                <label>Client ID<TextField size='small' fullWidth name='clientId' required={!settingsConnection} placeholder={settingsConnection ? 'Saved — leave blank to keep' : ''} /></label>
+                <label>Client secret<TextField size='small' fullWidth name='clientSecret' type='password' required={!settingsConnection} placeholder={settingsConnection ? 'Saved — leave blank to keep' : ''} /></label>
+                <label>App key<TextField size='small' fullWidth name='appKey' type='password' required={!settingsConnection} placeholder={settingsConnection ? 'Saved — leave blank to keep' : ''} /></label>
+                <Button type='submit' variant='contained' className='primary' disabled={busy || !canManage}>{busy ? 'Saving…' : 'Save ServiceTitan settings'}</Button>
+              </form>
+              <Button disabled={busy || !canManage || !settingsConnection || !settingsWebsite?.id} onClick={() => void testSettingsSection('servicetitan')}>{busy && settingsCheck?.kind === 'servicetitan' ? 'Testing ServiceTitan…' : 'Test ServiceTitan API'}</Button>
+              {settingsCheck?.kind === 'servicetitan' && <p className={settingsCheck.success ? 'notice' : 'notice error'} role={settingsCheck.success ? 'status' : 'alert'}>{settingsCheck.message}{settingsCheck.helpUrl && <> <a href={settingsCheck.helpUrl}>Open help</a></>}</p>}
+            </section>
+            <section className='panel account-panel'>
+              <h2>WordPress plugin version</h2>
+              <p>Confirm the companion plugin is reachable and meets the required version.</p>
+              <Button disabled={busy || !canManage || !settingsWebsite} onClick={() => void testSettingsSection('plugin')}>{busy && settingsCheck?.kind === 'plugin' ? 'Checking plugin…' : 'Test plugin version'}</Button>
+              {settingsCheck?.kind === 'plugin' && <p className={settingsCheck.success ? 'notice' : 'notice error'} role={settingsCheck.success ? 'status' : 'alert'}>{settingsCheck.message}{settingsCheck.helpUrl && <> <a href={settingsCheck.helpUrl}>Open help</a></>}</p>}
+            </section>
+          </div>
+        </main>
+      ) : onboardingPage ? (
         <main className='account-page'>
           <PageHeader className='account-page-hero' eyebrow='Onboarding' title={onboardingStage === 1 ? 'Connect your WordPress website' : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'} description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test Jobs access.' : 'Invite teammates to share this workspace, or skip this step and start working.'} />
           {message && (
@@ -782,7 +872,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           )}
         </main>
       ) : (
-        <div key={`${user.id}:${selected}`}>{!isLocal && !onboarding?.settingsReady ? <main className='account-page'><h1>Complete setup</h1><p>{onboarding?.websiteReady ? 'WordPress is connected. Finish the ServiceTitan check in Settings to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/settings' onClick={()=>window.sessionStorage.setItem('onboarding-stage', onboarding?.websiteReady ? '2' : '1')}>{onboarding?.websiteReady ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
+        <div key={`${user.id}:${selected}`}>{!isLocal && !onboarding?.settingsReady ? <main className='account-page'><h1>Complete setup</h1><p>{onboarding?.websiteReady ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/onboarding' onClick={()=>window.sessionStorage.setItem('onboarding-stage', onboarding?.websiteReady ? '2' : '1')}>{onboarding?.websiteReady ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
       )}
     </>
   );
