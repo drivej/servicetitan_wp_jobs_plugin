@@ -1329,6 +1329,8 @@ td strong {
   box-shadow: 0 1px 3px #80601d22;
   transition: box-shadow 180ms ease, transform 180ms ease;
 }
+.workspace-menu-row { align-items: center; }
+.workspace-menu-spacer { flex: 1 1 auto; }
 .workspace-token-pill:hover,
 .workspace-token-pill.is-current { box-shadow: 0 0 0 2px #d4a94355, 0 2px 8px #9b741d33; }
 .workspace-token-pill strong { font-weight: 800; }

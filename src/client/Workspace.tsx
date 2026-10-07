@@ -727,10 +727,10 @@ export function Workspace({ children }: { children: ReactNode }) {
       <LoadingModal open={navigating} />
       <header className='workspace-bar'>
         <BrandBanner />
-        <div className='d-flex gap-2 p-2 align-end'>
-          <div style={{ flexGrow: 1 }} />
-          <JobsButton href={jobsHref} path={path} />
+        <div className='workspace-menu-row d-flex gap-2 p-2 align-end'>
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
+          <div className='workspace-menu-spacer' />
+          <JobsButton href={jobsHref} path={path} />
           <PluginButton path={path} />
           <WordpressButton path={path} />
           <SettingsButton path={path} />
