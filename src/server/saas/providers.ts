@@ -41,6 +41,7 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
   return { serviceTitan: {
     getJobs: (query) => serviceTitan.getJobs(query),
+    getJobImageCandidates: (id) => serviceTitan.getJobImageCandidates(id),
     getJob: async (id) => (await getJobDetails(id)).summary,
     getJobDetails,
     getJobImage: (id, attachment) => serviceTitan.getJobImage(id, attachment),
