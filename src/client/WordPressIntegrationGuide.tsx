@@ -17,6 +17,53 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
     'servicetitan-tenant': { title: 'ServiceTitan tenant or environment does not match', service: 'ServiceTitan', body: 'The tenant ID must belong to the account associated with these API credentials. Select Integration for sandbox credentials and Production for live credentials. Check the tenant ID in ServiceTitan and make sure the application is enabled in that environment.' },
   };
   const selectedTopic = topic ? topics[topic] : undefined;
+  if (topic === 'wordpress-reachability') return (
+    <main className="guide-page">
+      <PageHeader className="guide-hero" eyebrow="WordPress connection help" title="The WordPress site could not be reached" description="The app server must reach your public WordPress REST API over HTTPS. Use these checks to find whether the issue is the site URL, WordPress, or a hosting security rule." actions={<Button component="a" variant="contained" href="/settings">Return to Settings</Button>} />
+      <article className="guide-content">
+        <section>
+          <h2>What the connection test checks</h2>
+          <p>The test runs from the app server, not from your browser. It requests the companion plugin’s public status route at <code>/wp-json/servicetitan-job-integration/v1/status</code>. The WordPress API test also checks the companion plugin through the site’s REST API. A site that loads in your browser can still block requests from the app server.</p>
+        </section>
+        <section>
+          <h2>Check the website address</h2>
+          <ol>
+            <li>Open <strong>Settings</strong> and confirm the website URL is the public site root, such as <code>https://www.example.com</code>. Do not include <code>/wp-admin</code>, <code>/wp-json</code>, or the status route.</li>
+            <li>If WordPress is installed in a subdirectory, include that directory in the URL, for example <code>https://example.com/wordpress</code>.</li>
+            <li>Open <code>https://your-site.example/wp-json/servicetitan-job-integration/v1/status</code> in a private browser window, replacing the example host and including any WordPress subdirectory. It should return a small JSON response with the plugin name and version.</li>
+            <li>Also open <code>https://your-site.example/wp-json/</code>. It should return the WordPress REST API index as JSON.</li>
+          </ol>
+          <p>If either address redirects to a login page, maintenance page, CAPTCHA, or hosting error, fix that response first. A redirect from HTTP to the final HTTPS address is fine if the final page loads with a valid certificate.</p>
+        </section>
+        <section>
+          <h2>Allow REST API requests through security tools</h2>
+          <p>Ask your WordPress host or security administrator to check the CDN, WAF, bot protection, security plugin, and host firewall. They should allow normal HTTPS requests to <code>/wp-json/</code>, including <code>/wp-json/servicetitan-job-integration/v1/status</code>, from the app server.</p>
+          <ul>
+            <li>Remove browser challenges, CAPTCHA, or JavaScript verification from the REST API paths.</li>
+            <li>Allow the app server’s outbound IP if the host uses an IP allowlist. The host may need to identify the app’s egress IP.</li>
+            <li>Check access logs at the time you select <strong>Test Connection</strong> for blocked requests, rate limits, or an upstream timeout.</li>
+            <li>If the whole site is protected by HTTP Basic Authentication, ask the host to exempt the REST API paths or provide a supported server configuration for API access.</li>
+          </ul>
+          <p>Keep WordPress Application Password authentication enabled for protected API actions. Do not disable authentication for all of <code>/wp-json/</code>, expose <code>/wp-admin</code>, or put a password in a URL.</p>
+        </section>
+        <section>
+          <h2>Common responses and next steps</h2>
+          <dl className="guide-definitions">
+            <div><dt>DNS, timeout, or TLS error</dt><dd>Confirm the site has a public DNS record, accepts inbound HTTPS, and has a current certificate whose hostname matches the website URL. Ask the host to check firewall and server logs.</dd></div>
+            <div><dt>403 Forbidden or a challenge page</dt><dd>A firewall, CDN, bot rule, or security plugin may be blocking the app server. Ask the administrator to allow the REST API paths. If this happens during the authenticated WordPress API check, see <a href="/help/wordpress-permissions">WordPress permissions help</a>.</dd></div>
+            <div><dt>401 Unauthorized</dt><dd>The site was reached, but WordPress rejected the login. Check the generated Application Password and username in Settings. See <a href="/help/wordpress-credentials">WordPress credential help</a>.</dd></div>
+            <div><dt>404 Not Found</dt><dd>If the status route is missing, install and activate the companion plugin. If <code>/wp-json/</code> is missing, check the WordPress URL and REST API configuration. See <a href="/help/wordpress-plugin">plugin installation</a> and <a href="/help/wordpress-rest-api">REST API help</a>.</dd></div>
+            <div><dt>5xx server error</dt><dd>WordPress, PHP, or the hosting proxy returned a server error. Check the host’s error logs and retry when the site responds normally.</dd></div>
+          </dl>
+        </section>
+        <section>
+          <h2>Test again</h2>
+          <p>After correcting the URL or host rule, return to <a href="/settings">Settings</a> and test the plugin version and WordPress API sections. During onboarding, return to <a href="/onboarding">Step 1</a> and select <strong>Test Connection</strong>. If the error remains, send your host the request time, the response code, and the request ID shown by the app. Never send your Application Password.</p>
+        </section>
+        <p><a href="/help">Browse all help topics</a></p>
+      </article>
+    </main>
+  );
   if (topic) return <main className="guide-page"><PageHeader className="guide-hero" eyebrow={`${selectedTopic?.service || 'Connection'} help`} title={selectedTopic?.title || 'Connection issue'} description={selectedTopic?.body || 'This help topic was not found.'} actions={<Button component="a" variant="contained" href="/settings">Return to setup</Button>} /><article className="guide-content"><p>{selectedTopic?.body}</p>{topic === 'onboarding-save-failed' ? <><p>Ask the database administrator to run <code>npm run db:migrate</code> with the migration-owner connection for the hosted database. Deploying the app does not run migrations, and the migration must target the same database used by the app.</p><p>Verify migration 008 was recorded and <code>connection_id</code> is nullable:</p><pre><code>{'SELECT name FROM schema_migrations WHERE name = \'008_staged_onboarding.sql\';\nSELECT is_nullable FROM information_schema.columns\nWHERE table_schema = current_schema()\n  AND table_name = \'websites\' AND column_name = \'connection_id\';'}</code></pre><p>The first query should return a row; the second should return <code>YES</code>. If either check fails, migration 008 did not complete on the hosted app database. Run migration 009 too so plugin validation results can be saved.</p></> : <p>After applying the fix, return to Settings and select <strong>Test Connection</strong>. The next onboarding step becomes available once the test succeeds.</p>}<p><a href="/help">Browse all help topics</a></p></article></main>;
   return (
     <main className="guide-page">
