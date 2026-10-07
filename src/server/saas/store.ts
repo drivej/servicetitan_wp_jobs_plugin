@@ -9,7 +9,7 @@ export type Role = 'owner' | 'admin' | 'member';
 const allRoles: Role[] = ['owner','admin','member'];
 export interface User { workspaceId: string; workspaceName: string; role: Role; id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; isPlatformAdmin?: boolean; }
 export interface Connection { id: string; name: string; environment: 'integration' | 'production'; tenantId: string; version: number; }
-export interface Website { id: string; name: string; url: string; connectionId: string; restBase: string; zipAcfField: string; wordpressConfigured: boolean; version: number; }
+export interface Website { id: string; name: string; url: string; connectionId: string | null; restBase: string; zipAcfField: string; wordpressConfigured: boolean; version: number; }
 export interface WebsiteContext {
   workspaceId: string;
   website: Website;
@@ -18,7 +18,7 @@ export interface WebsiteContext {
 }
 const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, jobTokens: Number(row.job_tokens), isPlatformAdmin: row.is_platform_admin === true, workspaceId: String(row.workspace_id), workspaceName: String(row.workspace_name), role: row.role as Role });
 const connectionFrom = (row: Record<string, unknown>): Connection => ({ id: String(row.id), name: String(row.name), environment: row.environment as Connection['environment'], tenantId: String(row.tenant_id), version: Number(row.version) });
-const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), version: Number(row.version) });
+const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: row.connection_id == null ? null : String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), version: Number(row.version) });
 const audit = async (sql: Sql, userId: string, action: string, target: string, jobId?: number): Promise<void> => {
   await sql.query("INSERT INTO audit_logs(id, user_id, action, target_id, job_id, workspace_id) VALUES ($1,$2,$3,$4,$5,nullif(current_setting('app.workspace_id',true),'')::uuid)", [randomUUID(), userId, action, target, jobId ?? null]);
 };
