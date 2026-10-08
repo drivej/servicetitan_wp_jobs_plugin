@@ -274,6 +274,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serviceTitanFormDirty, setServiceTitanFormDirty] = useState(false);
+  const [websiteFormDirty, setWebsiteFormDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [testTokenAmount, setTestTokenAmount] = useState('1');
   const [editingConnection, setEditingConnection] = useState<Connection>();
@@ -334,6 +335,8 @@ export function Workspace({ children }: { children: ReactNode }) {
     ]);
     setConnections(connectionResult.connections);
     setWebsites(siteResult.websites);
+    setServiceTitanFormDirty(false);
+    setWebsiteFormDirty(false);
     setOnboarding(onboardingStatus);
     const site = siteResult.websites[0];
     configureApi(user.id, site?.id || '', token, user.workspaceId);
@@ -527,6 +530,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       if (kind === 'connections' && editingConnection && editingConnection.environment !== 'production') clearAccountCache(user.id);
       form.reset();
       if (kind === 'connections') setServiceTitanFormDirty(false);
+      else setWebsiteFormDirty(false);
       setEditingConnection(undefined);
       setEditingWebsite(undefined);
       await refresh(user, session!.csrfToken!);
@@ -538,11 +542,17 @@ export function Workspace({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateServiceTitanFormDirty = (form: HTMLFormElement) => {
+  const updateServiceTitanFormDirty = (form: HTMLFormElement, connection?: Connection) => {
     const data = new FormData(form);
-    const changedCredential = ['clientId', 'clientSecret', 'appKey']
+    const changed = ['clientId', 'clientSecret', 'appKey']
       .some((key) => String(data.get(key) || '').trim().length > 0);
-    setServiceTitanFormDirty(changedCredential);
+    setServiceTitanFormDirty(changed || !connection);
+  };
+
+  const updateWebsiteFormDirty = (form: HTMLFormElement, website?: Website) => {
+    const data = new FormData(form);
+    const field = (name: string) => String(data.get(name) || '').trim();
+    setWebsiteFormDirty(!website || field('url') !== website.url || field('wp-username') !== (website.wordpressUsername || '') || Boolean(field('wp-application-password')) || field('restBase') !== website.restBase || field('zipAcfField') !== website.zipAcfField);
   };
 
   const testSettingsSection = async (kind: ConnectionCheckKind) => {
@@ -858,32 +868,32 @@ export function Workspace({ children }: { children: ReactNode }) {
             <section className='panel account-panel settings-integration-panel'>
               <h2>WordPress website</h2>
               {settingsWebsite && <p>{settingsWebsite.name} · {settingsWebsite.url}</p>}
-              <form key={editingWebsite?.id || settingsWebsite?.id || 'website-settings'} onSubmit={(event) => void submit(event, 'websites')} className='account-form'>
+              <form id='wordpress-settings-form' key={editingWebsite?.id || settingsWebsite?.id || 'website-settings'} onSubmit={(event) => void submit(event, 'websites')} onChange={(event) => updateWebsiteFormDirty(event.currentTarget, editingWebsite || settingsWebsite)} className='account-form'>
                 <label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || settingsWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || settingsWebsite) } }} placeholder='https://example.com' /></label>
                 <label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(settingsWebsite?.wordpressConfigured ?? false)} defaultValue={settingsWebsite?.wordpressUsername || ''} autoComplete='username' /></label>
                 <label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(settingsWebsite?.wordpressConfigured ?? false)} placeholder={settingsWebsite?.wordpressConfigured ? '********' : undefined} autoComplete='current-password' /></label>
                 <p className='field-help'>The saved password stays on the server. Leave it blank to keep the current value or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a></p>
                 <label>Post type REST base<TextField size='small' fullWidth name='restBase' required defaultValue={settingsWebsite?.restBase || 'st-jobs'} /></label>
                 <label>ZIP ACF field<TextField size='small' fullWidth name='zipAcfField' required defaultValue={settingsWebsite?.zipAcfField || 'my_zip_codes'} /></label>
-                <div className='settings-save-actions'><Button type='submit' variant='contained' className='primary' disabled={busy || !canManage}>{busy ? 'Saving…' : 'Save WordPress settings'}</Button></div>
               </form>
               <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite?.wordpressConfigured} busy={testingSection === 'wordpress'} busyLabel='Testing WordPress…' onClick={() => void testSettingsSection('wordpress')} />
               {settingsCheck?.kind === 'wordpress' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
+              <div className='settings-save-actions'><Button type='submit' form='wordpress-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !websiteFormDirty}>{busy ? 'Saving…' : 'Save WordPress settings'}</Button></div>
             </section>
             <section className='panel account-panel settings-integration-panel'>
               <h2>ServiceTitan connection</h2>
               {settingsConnection && <p>{settingsConnection.name} · Production · Tenant {settingsConnection.tenantId}</p>}
               {settingsNeedsProductionCredentials && <p className='notice error' role='status'>This saved connection was configured for Integration. Enter all three Production credentials and save to switch it.</p>}
-              <form key={editingConnection?.id || settingsConnection?.id || 'servicetitan-settings'} onSubmit={(event) => void submit(event, 'connections')} onChange={(event) => updateServiceTitanFormDirty(event.currentTarget)} className='account-form'>
+              <form id='servicetitan-settings-form' key={editingConnection?.id || settingsConnection?.id || 'servicetitan-settings'} onSubmit={(event) => void submit(event, 'connections')} onChange={(event) => updateServiceTitanFormDirty(event.currentTarget, editingConnection || settingsConnection)} className='account-form'>
                 <label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || settingsConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection || settingsConnection) } }} /></label>
                 <label>Client ID<TextField size='small' fullWidth name='clientId' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <label>Client secret<TextField size='small' fullWidth name='clientSecret' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <label>App key<TextField size='small' fullWidth name='appKey' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <p className='field-help'>This app always uses ServiceTitan Production. Asterisks indicate saved credentials; leave those fields blank to keep them.</p>
-                <div className='settings-save-actions'><Button type='submit' variant='contained' className='primary' disabled={busy || !canManage || !serviceTitanFormDirty}>{busy ? 'Saving…' : 'Save ServiceTitan settings'}</Button></div>
               </form>
               <ConnectionTestButton disabled={busy || !canManage || !settingsConnection || !settingsWebsite?.id} busy={testingSection === 'servicetitan'} busyLabel='Testing ServiceTitan…' onClick={() => void testSettingsSection('servicetitan')} />
               {settingsCheck?.kind === 'servicetitan' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
+              <div className='settings-save-actions'><Button type='submit' form='servicetitan-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !serviceTitanFormDirty}>{busy ? 'Saving…' : 'Save ServiceTitan settings'}</Button></div>
             </section>
             <section className='panel account-panel settings-integration-panel'>
               <h2>WordPress plugin version</h2>
