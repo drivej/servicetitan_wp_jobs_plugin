@@ -126,8 +126,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
   useEffect(() => {
     const controller = new AbortController();
     void accountFetch('/api/session', { headers: { Accept: 'application/json' }, signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ user?: { isPlatformAdmin?: boolean } }> : undefined)
-      .then((session) => setIsPlatformAdmin(session?.user?.isPlatformAdmin === true))
+      .then((response) => response.ok ? response.json() as Promise<{ user?: { isPlatformAdmin?: boolean }; impersonation?: { actor?: { isPlatformAdmin?: boolean } } }> : undefined)
+      .then((session) => setIsPlatformAdmin(session?.user?.isPlatformAdmin === true || session?.impersonation?.actor?.isPlatformAdmin === true))
       .catch(() => setIsPlatformAdmin(false));
     return () => controller.abort();
   }, []);
@@ -374,18 +374,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
       />
 
       <div className='details-sections'>
-      {isPlatformAdmin && <details className='panel details-panel raw-api-panel' onToggle={(event) => {
-        if (event.currentTarget.open) void loadRawResponse();
-      }}>
-        <summary>ServiceTitan raw API response</summary>
-        <p className='field-help'>Fetched directly from ServiceTitan when opened. This response may contain customer information.</p>
-        {rawResponseLoading && <p role='status'>Loading raw response…</p>}
-        {rawResponseError && <p className='notice error' role='alert'>{rawResponseError} <Button onClick={() => { setRawResponse(undefined); void loadRawResponse(); }}>Retry</Button></p>}
-        {rawResponse !== undefined && <>
-          <div className='raw-api-actions'><Button size='small' onClick={() => void navigator.clipboard.writeText(JSON.stringify(rawResponse, null, 2)).then(() => setRawResponseCopied(true))}>{rawResponseCopied ? 'Copied' : 'Copy JSON'}</Button></div>
-          <pre className='raw-api-json'><code>{JSON.stringify(rawResponse, null, 2)}</code></pre>
-        </>}
-      </details>}
       {/* <div className='results-header'>
         <p className='page-label'>Job actions</p>
       </div> */}
@@ -475,6 +463,20 @@ export function JobDetails({ jobId }: { jobId: number }) {
         </>
       )}
       </div>
+      {isPlatformAdmin && <section className='superadmin-debug-panel' aria-labelledby='superadmin-debug-heading'>
+        <div className='superadmin-debug-banner'><strong>SUPER ADMIN CONTENT</strong><span>Visible to the signed-in platform administrator</span></div>
+        <h2 id='superadmin-debug-heading'>Raw ServiceTitan API data</h2>
+        <p>Fetched directly from ServiceTitan when opened. This response may contain customer information.</p>
+        <details className='raw-api-panel' onToggle={(event) => { if (event.currentTarget.open) void loadRawResponse(); }}>
+          <summary>Show raw response</summary>
+          {rawResponseLoading && <p role='status'>Loading raw response…</p>}
+          {rawResponseError && <p className='notice error' role='alert'>{rawResponseError} <Button onClick={() => { setRawResponse(undefined); void loadRawResponse(); }}>Retry</Button></p>}
+          {rawResponse !== undefined && <>
+            <div className='raw-api-actions'><Button size='small' onClick={() => void navigator.clipboard.writeText(JSON.stringify(rawResponse, null, 2)).then(() => setRawResponseCopied(true))}>{rawResponseCopied ? 'Copied' : 'Copy JSON'}</Button></div>
+            <pre className='raw-api-json'><code>{JSON.stringify(rawResponse, null, 2)}</code></pre>
+          </>}
+        </details>
+      </section>}
       <ErrorDialog message={error.includes('No job tokens available') ? '' : error} onClose={() => setError('')} />
     </main>
   );

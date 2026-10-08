@@ -29,7 +29,7 @@ export class PlatformMembers {
     });
   }
 
-  async auditImpersonationAction(actorId: string, actorWorkspaceId: string, memberId: string, action: 'platform.impersonation.action' | 'platform.impersonation.ended' = 'platform.impersonation.action') {
+  async auditImpersonationAction(actorId: string, actorWorkspaceId: string, memberId: string, action: 'platform.impersonation.action' | 'platform.impersonation.ended' | 'platform.impersonation.raw_service_titan_read' = 'platform.impersonation.action') {
     return this.db.transaction(actorId, async (sql) => {
       await this.requireAdmin(sql, actorId);
       await sql.query("SELECT set_config('app.workspace_id',$1,true)", [actorWorkspaceId]);

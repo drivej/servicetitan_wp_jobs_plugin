@@ -157,7 +157,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.get('/api/session', (_req, res) => {
     const actor = res.locals.actor as User;
     res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user,
-      ...(res.locals.impersonation ? { impersonation: { actor: { name: actor.name, email: actor.email } } } : {}),
+      ...(res.locals.impersonation ? { impersonation: { actor: { name: actor.name, email: actor.email, isPlatformAdmin: actor.isPlatformAdmin === true } } } : {}),
       csrfToken: csrfToken(String(res.locals.sessionToken)) });
   });
   app.get('/api/billing', async (_req, res, next) => {
@@ -447,7 +447,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.get('/api/websites/:id/admin/service-titan/jobs/:jobId/raw', async (req, res, next) => {
     try {
       const user = res.locals.user as User;
-      if (!user.isPlatformAdmin) throw new HttpError('Platform administrator access required.', 403);
+      const actor = res.locals.actor as User;
+      if (!actor.isPlatformAdmin) throw new HttpError('Platform administrator access required.', 403);
       const context = await store.websiteContext(user.id, uuid(req.params.id), user.workspaceId);
       if (!/^\d+$/.test(req.params.jobId) || !Number.isSafeInteger(Number(req.params.jobId)) || Number(req.params.jobId) < 1) {
         throw new HttpError('jobId must be a positive integer.');
@@ -457,7 +458,10 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
         authUrl: 'https://auth.servicetitan.io/connect/token',
       });
       res.set('Cache-Control', 'private, no-store');
-      res.json({ data: await serviceTitan.getRawJob(Number(req.params.jobId)) });
+      const data = await serviceTitan.getRawJob(Number(req.params.jobId));
+      const impersonation = res.locals.impersonation as { targetUserId: string } | undefined;
+      if (impersonation) await platformMembers.auditImpersonationAction(actor.id, actor.workspaceId, impersonation.targetUserId, 'platform.impersonation.raw_service_titan_read');
+      res.json({ data });
     } catch (error) { next(error); }
   });
   app.use('/api/websites/:id', async (req, res, next) => {
