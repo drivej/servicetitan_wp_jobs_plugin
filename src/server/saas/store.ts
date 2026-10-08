@@ -87,6 +87,18 @@ export class AccountStore {
       return Number(row.hits) <= maximum;
     });
   }
+  async testCooldownActive(key: string): Promise<boolean> {
+    return this.db.transaction(undefined, async (sql) => {
+      const row = (await sql.query('SELECT 1 FROM rate_limits WHERE key=$1 AND expires_at>now()', [hashToken(`settings-test:${key}`)])).rows[0];
+      return Boolean(row);
+    });
+  }
+  async startTestCooldown(key: string, seconds: number): Promise<void> {
+    await this.db.transaction(undefined, async (sql) => {
+      await sql.query(`INSERT INTO rate_limits(key,hits,expires_at) VALUES($1,1,now()+$2*interval '1 second')
+        ON CONFLICT(key) DO UPDATE SET hits=1,expires_at=excluded.expires_at`, [hashToken(`settings-test:${key}`), seconds]);
+    });
+  }
   private async workspaceTransaction<T>(userId: string, workspaceId: string, roles: Role[], action: (sql: Sql, role: Role) => Promise<T>): Promise<T> {
     return this.db.transaction(userId, async (sql) => {
       // All workspace mutations and spending use the same lock. Revocation cannot

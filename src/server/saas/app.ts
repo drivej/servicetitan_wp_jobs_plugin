@@ -156,6 +156,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const user = res.locals.user as User;
       const websiteId = uuid(req.body?.websiteId);
       const context = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
+      const cooldownKey = `${user.workspaceId}:plugin:${websiteId}:${context.website.version}`;
+      if (!await store.allowRequest(`settings-test-attempt:${cooldownKey}`, 5, 60)) { res.status(429).json({ error: 'Too many checks for these settings. Wait a minute before trying again.' }); return; }
+      if (await store.testCooldownActive(cooldownKey)) { res.status(429).json({ error: 'This check was completed recently. Change and save the settings to test again, or wait 30 seconds.' }); return; }
       const endpoint = `${websiteUrl(context.website.url)}/wp-json/servicetitan-job-integration/v1/status`;
       let response: Response;
       try {
@@ -191,6 +194,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
         });
         return;
       }
+      await store.startTestCooldown(cooldownKey, 30);
       res.json({ valid: true, version: body.version });
     } catch (error) { next(error); }
   });
@@ -199,6 +203,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const user = res.locals.user as User;
       const websiteId = uuid(req.body?.websiteId);
       const context = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
+      const cooldownKey = `${user.workspaceId}:wordpress:${websiteId}:${context.website.version}`;
+      if (!await store.allowRequest(`settings-test-attempt:${cooldownKey}`, 5, 60)) { res.status(429).json({ error: 'Too many checks for these settings. Wait a minute before trying again.' }); return; }
+      if (await store.testCooldownActive(cooldownKey)) { res.status(429).json({ error: 'This check was completed recently. Change and save the settings to test again, or wait 30 seconds.' }); return; }
       if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help/wordpress-credentials' }); return; }
       const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField });
       try { await wordpress.validateAccess(); }
@@ -209,6 +216,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
         res.status(422).json({ service: 'wordpress', code, error: message, helpUrl: `/help/wordpress-${code}` }); return;
       }
       await store.markWebsiteValidated(user.id, websiteId, user.workspaceId);
+      await store.startTestCooldown(cooldownKey, 30);
       res.json({ valid: true, service: 'wordpress' });
     } catch (error) { next(error); }
   });
@@ -221,6 +229,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const connection = connections.find((item) => item.id === connectionId);
       if (!connection) throw new HttpError('Select a saved ServiceTitan connection.');
       const connectionContext = await store.connectionContext(user.id, connectionId, user.workspaceId);
+      const cooldownKey = `${user.workspaceId}:servicetitan:${connectionId}:${connectionContext.version}`;
+      if (!await store.allowRequest(`settings-test-attempt:${cooldownKey}`, 5, 60)) { res.status(429).json({ error: 'Too many checks for these settings. Wait a minute before trying again.' }); return; }
+      if (await store.testCooldownActive(cooldownKey)) { res.status(429).json({ error: 'This check was completed recently. Change and save the settings to test again, or wait 30 seconds.' }); return; }
       const client = new ServiceTitanClient({ ...connectionContext,
         apiBaseUrl: 'https://api.servicetitan.io',
         authUrl: 'https://auth.servicetitan.io/connect/token' });
@@ -234,6 +245,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       if (!site.website.wordpressConfigured) throw new HttpError('Validate the WordPress website first.', 409);
       await store.attachConnection(user.id, websiteId, connectionId, user.workspaceId);
       await store.markConnectionValidated(user.id, connectionId, user.workspaceId);
+      await store.startTestCooldown(cooldownKey, 30);
       res.json({ valid: true, service: 'servicetitan' });
     } catch (error) { next(error); }
   });

@@ -285,6 +285,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   const [validationError, setValidationError] = useState<{ message: string; helpUrl: string }>();
   const [settingsCheck, setSettingsCheck] = useState<ConnectionCheck>();
   const [testingSection, setTestingSection] = useState<ConnectionCheckKind>();
+  const [testCooldowns, setTestCooldowns] = useState<Partial<Record<ConnectionCheckKind, number>>>({});
+  const [cooldownNow, setCooldownNow] = useState(() => Date.now());
   const [onboardingStage, setOnboardingStage] = useState<1 | 2 | 3>(() => { try { const value = Number(window.sessionStorage.getItem('onboarding-stage')); return value === 2 ? 2 : value === 3 || value === 4 ? 3 : 1; } catch { return 1; } });
   const userSelectedOnboardingStage = useRef(false);
   const [validationSuccess, setValidationSuccess] = useState('');
@@ -292,6 +294,13 @@ export function Workspace({ children }: { children: ReactNode }) {
   const websiteStepComplete = Boolean(onboarding?.websiteReady || savedOnboardingStep >= 2);
   const serviceTitanStepComplete = Boolean(onboarding?.serviceTitanReady || savedOnboardingStep >= 3);
   const onboardingComplete = Boolean(onboarding?.settingsReady || savedOnboardingStep >= 3);
+  useEffect(() => {
+    if (!Object.values(testCooldowns).some((expiresAt) => expiresAt && expiresAt > Date.now())) return;
+    const timer = setInterval(() => setCooldownNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [testCooldowns]);
+  const cooldownActive = (kind: ConnectionCheckKind) => Boolean(testCooldowns[kind] && testCooldowns[kind]! > cooldownNow);
+  const clearTestCooldowns = (...kinds: ConnectionCheckKind[]) => setTestCooldowns((current) => Object.fromEntries(Object.entries(current).filter(([kind]) => !kinds.includes(kind as ConnectionCheckKind))));
 
   useEffect(() => {
     if (!onboarding) return;
@@ -581,6 +590,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       await refresh(user, session!.csrfToken!);
       const message = kind === 'plugin' ? `Plugin version ${result.version} is detected and compatible.` : kind === 'wordpress' ? 'WordPress REST API access validated.' : 'ServiceTitan Jobs access validated.';
       setSettingsCheck({ kind, success: true, message });
+      setTestCooldowns((current) => ({ ...current, [kind]: Date.now() + 30_000 }));
     } catch (reason) {
       setSettingsCheck({ kind, success: false, message: reason instanceof Error ? reason.message : 'Connection check failed.', helpUrl: kind === 'wordpress' ? '/help/wordpress-reachability' : kind === 'plugin' ? '/help/plugin-test-failed' : '/help/servicetitan-permissions' });
     } finally {
@@ -868,7 +878,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             <section className='panel account-panel settings-integration-panel'>
               <h2>WordPress website</h2>
               {settingsWebsite && <p>{settingsWebsite.name} · {settingsWebsite.url}</p>}
-              <form id='wordpress-settings-form' key={editingWebsite?.id || settingsWebsite?.id || 'website-settings'} onSubmit={(event) => void submit(event, 'websites')} onChange={(event) => updateWebsiteFormDirty(event.currentTarget, editingWebsite || settingsWebsite)} className='account-form'>
+              <form id='wordpress-settings-form' key={editingWebsite?.id || settingsWebsite?.id || 'website-settings'} onSubmit={(event) => void submit(event, 'websites')} onChange={(event) => { updateWebsiteFormDirty(event.currentTarget, editingWebsite || settingsWebsite); clearTestCooldowns('wordpress', 'plugin'); }} className='account-form'>
                 <label>Website URL<TextField size='small' fullWidth name='url' type='url' required defaultValue={editingWebsite?.url || settingsWebsite?.url} slotProps={{ htmlInput: { readOnly: Boolean(editingWebsite || settingsWebsite) } }} placeholder='https://example.com' /></label>
                 <label>WordPress username<TextField size='small' fullWidth id='wp-username' name='wp-username' required={!(settingsWebsite?.wordpressConfigured ?? false)} defaultValue={settingsWebsite?.wordpressUsername || ''} autoComplete='username' /></label>
                 <label>Application Password<TextField size='small' fullWidth id='wp-application-password' name='wp-application-password' type='password' required={!(settingsWebsite?.wordpressConfigured ?? false)} placeholder={settingsWebsite?.wordpressConfigured ? '********' : undefined} autoComplete='current-password' /></label>
@@ -876,7 +886,7 @@ export function Workspace({ children }: { children: ReactNode }) {
                 <label>Post type REST base<TextField size='small' fullWidth name='restBase' required defaultValue={settingsWebsite?.restBase || 'st-jobs'} /></label>
                 <label>ZIP ACF field<TextField size='small' fullWidth name='zipAcfField' required defaultValue={settingsWebsite?.zipAcfField || 'my_zip_codes'} /></label>
               </form>
-              <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite?.wordpressConfigured} busy={testingSection === 'wordpress'} busyLabel='Testing WordPress…' onClick={() => void testSettingsSection('wordpress')} />
+              <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite?.wordpressConfigured || websiteFormDirty || cooldownActive('wordpress')} busy={testingSection === 'wordpress'} busyLabel='Testing WordPress…' label={websiteFormDirty ? 'Save changes before testing' : cooldownActive('wordpress') ? `Tested recently (${Math.ceil((testCooldowns.wordpress! - cooldownNow) / 1000)}s)` : 'Test Connection'} onClick={() => void testSettingsSection('wordpress')} />
               {settingsCheck?.kind === 'wordpress' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
               <div className='settings-save-actions'><Button type='submit' form='wordpress-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !websiteFormDirty}>{busy && !testingSection ? 'Saving…' : 'Save WordPress settings'}</Button></div>
             </section>
@@ -884,21 +894,21 @@ export function Workspace({ children }: { children: ReactNode }) {
               <h2>ServiceTitan connection</h2>
               {settingsConnection && <p>{settingsConnection.name} · Production · Tenant {settingsConnection.tenantId}</p>}
               {settingsNeedsProductionCredentials && <p className='notice error' role='status'>This saved connection was configured for Integration. Enter all three Production credentials and save to switch it.</p>}
-              <form id='servicetitan-settings-form' key={editingConnection?.id || settingsConnection?.id || 'servicetitan-settings'} onSubmit={(event) => void submit(event, 'connections')} onChange={(event) => updateServiceTitanFormDirty(event.currentTarget, editingConnection || settingsConnection)} className='account-form'>
+              <form id='servicetitan-settings-form' key={editingConnection?.id || settingsConnection?.id || 'servicetitan-settings'} onSubmit={(event) => void submit(event, 'connections')} onChange={(event) => { updateServiceTitanFormDirty(event.currentTarget, editingConnection || settingsConnection); clearTestCooldowns('servicetitan'); }} className='account-form'>
                 <label>Tenant ID<TextField size='small' fullWidth name='tenantId' required defaultValue={editingConnection?.tenantId || settingsConnection?.tenantId} slotProps={{ htmlInput: { pattern: '[0-9]{1,20}', readOnly: Boolean(editingConnection || settingsConnection) } }} /></label>
                 <label>Client ID<TextField size='small' fullWidth name='clientId' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <label>Client secret<TextField size='small' fullWidth name='clientSecret' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <label>App key<TextField size='small' fullWidth name='appKey' type='text' required={!settingsConnection || settingsNeedsProductionCredentials} placeholder={settingsConnection ? settingsNeedsProductionCredentials ? 'Enter Production credential' : '********' : ''} /></label>
                 <p className='field-help'>This app always uses ServiceTitan Production. Asterisks indicate saved credentials; leave those fields blank to keep them.</p>
               </form>
-              <ConnectionTestButton disabled={busy || !canManage || !settingsConnection || !settingsWebsite?.id} busy={testingSection === 'servicetitan'} busyLabel='Testing ServiceTitan…' onClick={() => void testSettingsSection('servicetitan')} />
+              <ConnectionTestButton disabled={busy || !canManage || !settingsConnection || !settingsWebsite?.id || serviceTitanFormDirty || cooldownActive('servicetitan')} busy={testingSection === 'servicetitan'} busyLabel='Testing ServiceTitan…' label={serviceTitanFormDirty ? 'Save changes before testing' : cooldownActive('servicetitan') ? `Tested recently (${Math.ceil((testCooldowns.servicetitan! - cooldownNow) / 1000)}s)` : 'Test Connection'} onClick={() => void testSettingsSection('servicetitan')} />
               {settingsCheck?.kind === 'servicetitan' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
               <div className='settings-save-actions'><Button type='submit' form='servicetitan-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !serviceTitanFormDirty}>{busy && !testingSection ? 'Saving…' : 'Save ServiceTitan settings'}</Button></div>
             </section>
             <section className='panel account-panel settings-integration-panel'>
               <h2>WordPress plugin version</h2>
               <p>Confirm the companion plugin is reachable and meets the required version.</p>
-              <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite} busy={testingSection === 'plugin'} busyLabel='Checking plugin…' label='Test plugin version' onClick={() => void testSettingsSection('plugin')} />
+              <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite || cooldownActive('plugin')} busy={testingSection === 'plugin'} busyLabel='Checking plugin…' label={cooldownActive('plugin') ? `Tested recently (${Math.ceil((testCooldowns.plugin! - cooldownNow) / 1000)}s)` : 'Test plugin version'} onClick={() => void testSettingsSection('plugin')} />
               {settingsCheck?.kind === 'plugin' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
             </section>
           </div>
