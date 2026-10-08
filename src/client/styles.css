@@ -1727,7 +1727,7 @@ td strong {
 .settings-integration-panel > form + .connection-test-button.MuiButton-root { margin-top: 16px; }
 .connection-feedback { width: 100%; margin-top: 14px; }
 .connection-feedback .notice { box-sizing: border-box; width: 100%; margin: 0; padding-block: 10px; }
-.settings-save-actions { display: flex; justify-content: flex-end; }
+.settings-save-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
 .onboarding-step-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
 
 
