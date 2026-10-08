@@ -878,7 +878,7 @@ export function Workspace({ children }: { children: ReactNode }) {
               </form>
               <ConnectionTestButton disabled={busy || !canManage || !settingsWebsite?.wordpressConfigured} busy={testingSection === 'wordpress'} busyLabel='Testing WordPress…' onClick={() => void testSettingsSection('wordpress')} />
               {settingsCheck?.kind === 'wordpress' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
-              <div className='settings-save-actions'><Button type='submit' form='wordpress-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !websiteFormDirty}>{busy ? 'Saving…' : 'Save WordPress settings'}</Button></div>
+              <div className='settings-save-actions'><Button type='submit' form='wordpress-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !websiteFormDirty}>{busy && !testingSection ? 'Saving…' : 'Save WordPress settings'}</Button></div>
             </section>
             <section className='panel account-panel settings-integration-panel'>
               <h2>ServiceTitan connection</h2>
@@ -893,7 +893,7 @@ export function Workspace({ children }: { children: ReactNode }) {
               </form>
               <ConnectionTestButton disabled={busy || !canManage || !settingsConnection || !settingsWebsite?.id} busy={testingSection === 'servicetitan'} busyLabel='Testing ServiceTitan…' onClick={() => void testSettingsSection('servicetitan')} />
               {settingsCheck?.kind === 'servicetitan' && <div className='connection-feedback'><ConnectionCheckMessage check={settingsCheck} /></div>}
-              <div className='settings-save-actions'><Button type='submit' form='servicetitan-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !serviceTitanFormDirty}>{busy ? 'Saving…' : 'Save ServiceTitan settings'}</Button></div>
+              <div className='settings-save-actions'><Button type='submit' form='servicetitan-settings-form' variant='contained' className='primary' disabled={busy || !canManage || !serviceTitanFormDirty}>{busy && !testingSection ? 'Saving…' : 'Save ServiceTitan settings'}</Button></div>
             </section>
             <section className='panel account-panel settings-integration-panel'>
               <h2>WordPress plugin version</h2>
