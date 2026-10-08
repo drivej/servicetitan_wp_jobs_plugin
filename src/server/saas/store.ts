@@ -118,6 +118,16 @@ export class AccountStore {
       JOIN workspace_memberships m ON m.workspace_id=w.id JOIN users owner ON owner.id=w.owner_user_id
       WHERE m.user_id=$1 AND owner.disabled_at IS NULL ORDER BY w.created_at,w.id`, [userId])).rows);
   }
+  async userForWorkspace(userId: string, workspaceId: string): Promise<User> {
+    return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
+      const row = (await sql.query(`SELECT u.*,w.id AS workspace_id,w.name AS workspace_name,w.job_tokens,m.role,
+        EXISTS(SELECT 1 FROM platform_administrators pa WHERE pa.user_id=u.id) AS is_platform_admin
+        FROM users u JOIN workspaces w ON w.id=$2 JOIN workspace_memberships m ON m.workspace_id=w.id AND m.user_id=u.id
+        JOIN users owner ON owner.id=w.owner_user_id WHERE u.id=$1 AND u.disabled_at IS NULL AND owner.disabled_at IS NULL`, [userId, workspaceId])).rows[0];
+      if (!row) throw new HttpError('Member workspace is unavailable.', 404);
+      return userFrom(row);
+    });
+  }
   async switchWorkspace(userId: string, token: string, workspaceId: string): Promise<void> {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
       await sql.query('UPDATE sessions SET workspace_id=$3 WHERE user_id=$1 AND token_hash=$2 AND expires_at>now()', [userId, hashToken(token), workspaceId]);

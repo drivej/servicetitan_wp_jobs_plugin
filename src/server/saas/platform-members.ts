@@ -15,33 +15,26 @@ export class PlatformMembers {
     await this.db.transaction(actorId, async (sql) => this.requireAdmin(sql, actorId));
   }
 
-  async jobPreviewOptions(actorId: string, actorWorkspaceId: string, memberId: string) {
+  async startImpersonation(actorId: string, actorWorkspaceId: string, memberId: string, workspaceId: string) {
     return this.db.transaction(actorId, async (sql) => {
       await this.requireAdmin(sql, actorId);
-      const target = (await sql.query('SELECT id,name,email,disabled_at FROM users WHERE id=$1', [memberId])).rows[0];
-      if (!target || target.disabled_at !== null) throw new HttpError('Active member not found.', 404);
-      const workspaces = (await sql.query(`SELECT w.id AS "workspaceId",w.name AS "workspaceName",m.role
-        FROM workspace_memberships m JOIN workspaces w ON w.id=m.workspace_id
-        WHERE m.user_id=$1 ORDER BY w.name,w.id`, [memberId])).rows;
-      const options = [] as Array<{ workspaceId: string; workspaceName: string; role: string; websites: Array<{ id: string; name: string }> }>;
-      for (const workspace of workspaces) {
-        await sql.query("SELECT set_config('app.user_id',$1,true),set_config('app.workspace_id',$2,true)", [memberId, workspace.workspaceId]);
-        const websites = (await sql.query(`SELECT id,name FROM websites WHERE workspace_id=$1 AND connection_id IS NOT NULL ORDER BY created_at,id`, [workspace.workspaceId])).rows;
-        options.push({ workspaceId: String(workspace.workspaceId), workspaceName: String(workspace.workspaceName), role: String(workspace.role), websites: websites.map((site) => ({ id: String(site.id), name: String(site.name) })) });
-      }
-      await sql.query("SELECT set_config('app.user_id',$1,true),set_config('app.workspace_id',$2,true)", [actorId, actorWorkspaceId]);
+      const target = (await sql.query(`SELECT u.id FROM users u
+        JOIN workspace_memberships m ON m.user_id=u.id AND m.workspace_id=$2
+        JOIN workspaces w ON w.id=m.workspace_id JOIN users owner ON owner.id=w.owner_user_id
+        WHERE u.id=$1 AND u.disabled_at IS NULL AND owner.disabled_at IS NULL`, [memberId, workspaceId])).rows[0];
+      if (!target) throw new HttpError('Active member workspace not found.', 404);
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [actorWorkspaceId]);
       await sql.query(`INSERT INTO audit_logs(id,user_id,action,target_id,workspace_id)
-        VALUES($1,$2,'platform.member.job_preview_opened',$3,$4)`, [randomUUID(), actorId, memberId, actorWorkspaceId]);
-      return { member: { id: String(target.id), name: String(target.name), email: String(target.email) }, workspaces: options };
+        VALUES($1,$2,'platform.impersonation.started',$3,$4)`, [randomUUID(), actorId, memberId, actorWorkspaceId]);
     });
   }
 
-  async auditJobPreview(actorId: string, actorWorkspaceId: string, websiteId: string, jobId?: number) {
+  async auditImpersonationAction(actorId: string, actorWorkspaceId: string, memberId: string, action: 'platform.impersonation.action' | 'platform.impersonation.ended' = 'platform.impersonation.action') {
     return this.db.transaction(actorId, async (sql) => {
       await this.requireAdmin(sql, actorId);
       await sql.query("SELECT set_config('app.workspace_id',$1,true)", [actorWorkspaceId]);
-      await sql.query(`INSERT INTO audit_logs(id,user_id,action,target_id,job_id,workspace_id)
-        VALUES($1,$2,'platform.member.job_preview_read',$3,$4,$5)`, [randomUUID(), actorId, websiteId, jobId ?? null, actorWorkspaceId]);
+      await sql.query(`INSERT INTO audit_logs(id,user_id,action,target_id,workspace_id)
+        VALUES($1,$2,$3,$4,$5)`, [randomUUID(), actorId, action, memberId, actorWorkspaceId]);
     });
   }
 

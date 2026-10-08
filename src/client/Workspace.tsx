@@ -44,6 +44,7 @@ interface Session {
   mode: 'saas' | 'local';
   testTokensEnabled?: boolean;
   user?: User;
+  impersonation?: { actor: { name: string; email: string } };
   csrfToken?: string;
 }
 interface OnboardingStatus { activeProduct: boolean; pluginReady: boolean; websiteReady: boolean; serviceTitanReady: boolean; settingsReady: boolean; onboardingStep: number; }
@@ -122,7 +123,7 @@ const SettingsButton = ({ path }: { path: string }) => {
   // );
 };
 
-const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => void; busy: boolean }) => {
+const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean }) => {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -190,7 +191,7 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
           )}
           <a href='/help'>Help</a>
           <Button type='button' variant='text' sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }} disabled={busy} onClick={onSignOut}>
-            Sign out
+            {impersonating ? 'Exit user view' : 'Sign out'}
           </Button>
         </div>
       )}
@@ -508,6 +509,12 @@ export function Workspace({ children }: { children: ReactNode }) {
     setBusy(true);
     setError('');
     try {
+      if (session?.impersonation) {
+        const response = await accountFetch('/api/admin/impersonation/end', { method: 'POST' });
+        if (!response.ok) await json(response);
+        window.location.assign('/admin/members');
+        return;
+      }
       const response = await accountFetch('/api/logout', { method: 'POST' });
       if (!response.ok) await json(response);
       clearAccountCache(user.id);
@@ -750,6 +757,10 @@ export function Workspace({ children }: { children: ReactNode }) {
   return (
     <>
       <LoadingModal open={navigating} />
+      {session?.impersonation && <aside className='impersonation-banner' role='status'>
+        <span><strong>Super admin view as {user.name}</strong> · {user.email} <span className='impersonation-actor'>— signed in as {session.impersonation.actor.email}</span></span>
+        <Button size='small' disabled={busy} onClick={() => void logout()}>Exit user view</Button>
+      </aside>}
       <header className='workspace-bar'>
         <BrandBanner />
         <div className='workspace-menu-row d-flex gap-2 p-2 align-end'>
@@ -759,7 +770,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <PluginButton path={path} />
           <WordpressButton path={path} />
           <SettingsButton path={path} />
-          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} />
+          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} />
         </div>
       </header>
 

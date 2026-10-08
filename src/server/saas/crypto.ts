@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const randomToken = (): string => randomBytes(32).toString('base64url');
 export const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
@@ -15,6 +15,20 @@ export class SecretVault {
       this.keys.set(id, key);
     }
     if (!this.keys.has(activeKey)) throw new Error('Active encryption key is missing.');
+  }
+  signToken(value: string, context: string): string {
+    const payload = Buffer.from(value).toString('base64url');
+    const signature = createHmac('sha256', this.keys.get(this.activeKey)!).update(`${context}.${payload}`).digest('base64url');
+    return `${payload}.${signature}`;
+  }
+  verifyToken(token: string, context: string): string | undefined {
+    const [payload, signature, extra] = token.split('.');
+    if (!payload || !signature || extra !== undefined) return undefined;
+    const expected = createHmac('sha256', this.keys.get(this.activeKey)!).update(`${context}.${payload}`).digest();
+    let received: Buffer;
+    try { received = Buffer.from(signature, 'base64url'); } catch { return undefined; }
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) return undefined;
+    try { return Buffer.from(payload, 'base64url').toString('utf8'); } catch { return undefined; }
   }
   encrypt(value: unknown, context: string): string {
     const iv = randomBytes(12);

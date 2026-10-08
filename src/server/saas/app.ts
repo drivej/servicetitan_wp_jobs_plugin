@@ -10,7 +10,6 @@ import type { GoogleLogin } from './google.js';
 import type { WebsiteAppFactory } from './providers.js';
 import { AccountStore, type User } from './store.js';
 import { ServiceTitanClient } from '../service-titan.js';
-import { parseJobsQuery } from '../app.js';
 import { WordPressClient } from '../wordpress.js';
 import { ServiceTitanRequestError } from '../service-titan-error.js';
 import { WordPressRequestError } from '../wordpress-error.js';
@@ -18,6 +17,7 @@ import { connectionInput, HttpError, uuid, websiteInput, websiteUrl } from './va
 import { publicFetch } from './public-fetch.js';
 
 export const sessionCookieName = (secure: boolean): string => secure ? '__Host-st_session' : 'st_session';
+const viewAsCookieName = (secure: boolean): string => secure ? '__Host-st_view_as' : 'st_view_as';
 const cookieValue = (header: string | undefined, name: string): string => {
   const values = (header || '').split(';').map((item) => item.trim()).filter((item) => item.startsWith(`${name}=`));
   return values.length === 1 ? values[0]!.slice(name.length + 1) : '';
@@ -46,6 +46,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   const tokenAccounts = new TokenAccounts(store.db);
   const platformMembers = new PlatformMembers(store.db);
   const sessionName = sessionCookieName(config.secureCookies);
+  const viewAsName = viewAsCookieName(config.secureCookies);
   const loginName = config.secureCookies ? '__Host-st_login' : 'st_login';
   let publicPlansCache: { expiresAt: number; plans: Omit<Awaited<ReturnType<BillingService['plans']>>[number], 'id'>[] } | undefined;
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'lax' as const, path: '/' };
@@ -114,25 +115,50 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.use('/api', async (req, res, next) => {
     try {
       const token = cookieValue(req.headers.cookie, sessionName);
-      const user = await store.session(token);
-      if (!user) throw new HttpError('Sign in to continue.', 401);
+      const actor = await store.session(token);
+      if (!actor) throw new HttpError('Sign in to continue.', 401);
+      let user = actor;
+      let impersonation: { targetUserId: string } | undefined;
+      const viewToken = cookieValue(req.headers.cookie, viewAsName);
+      if (viewToken) {
+        const verified = config.vault.verifyToken(viewToken, 'platform-impersonation');
+        try {
+          const payload = verified ? JSON.parse(verified) as { actorId?: string; targetUserId?: string; workspaceId?: string; expiresAt?: number } : undefined;
+          if (!payload || payload.actorId !== actor.id || !actor.isPlatformAdmin || !payload.targetUserId || !payload.workspaceId || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt! <= Date.now()) {
+            throw new HttpError('The user view has expired.', 401);
+          }
+          user = await store.userForWorkspace(payload.targetUserId, payload.workspaceId);
+          impersonation = { targetUserId: user.id };
+        } catch (error) {
+          if (error instanceof HttpError) res.clearCookie(viewAsName, cookieOptions);
+          else throw error;
+        }
+      }
       if (req.get('X-Workspace-ID') && req.get('X-Workspace-ID') !== user.workspaceId && req.path !== '/session') throw new HttpError('Your active workspace changed. Refresh the page.', 409);
       res.locals.user = user;
+      res.locals.actor = actor;
+      res.locals.impersonation = impersonation;
       res.locals.sessionToken = token;
       const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
       if (mutation && (req.get('Origin') !== config.origin || !equalToken(req.get('X-CSRF-Token') || '', csrfToken(token)))) {
         throw new HttpError('The request could not be verified. Refresh the page and try again.', 403);
       }
       const ai = req.path.endsWith('/ai-copy');
-      if (!await store.allowRequest(`${ai ? 'ai' : mutation ? 'write' : 'read'}:${user.id}`, ai ? 10 : mutation ? 30 : 180, 60)) {
+      if (!await store.allowRequest(`${ai ? 'ai' : mutation ? 'write' : 'read'}:${actor.id}`, ai ? 10 : mutation ? 30 : 180, 60)) {
         throw new HttpError('Too many requests. Try again in a minute.', 429);
+      }
+      if (mutation && impersonation && !req.path.startsWith('/admin/impersonation/')) {
+        await platformMembers.auditImpersonationAction(actor.id, actor.workspaceId, impersonation.targetUserId);
       }
       next();
     } catch (error) { next(error); }
   });
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/session', (_req, res) => {
-    res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user, csrfToken: csrfToken(String(res.locals.sessionToken)) });
+    const actor = res.locals.actor as User;
+    res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user,
+      ...(res.locals.impersonation ? { impersonation: { actor: { name: actor.name, email: actor.email } } } : {}),
+      csrfToken: csrfToken(String(res.locals.sessionToken)) });
   });
   app.get('/api/billing', async (_req, res, next) => {
     try {
@@ -284,39 +310,26 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.get('/api/admin/members', async (req, res, next) => {
     try { res.json(await platformMembers.list((res.locals.user as User).id, req.query.search, req.query.after)); } catch (error) { next(error); }
   });
-  app.get('/api/admin/members/:memberId/job-preview', async (req, res, next) => {
+  app.post('/api/admin/impersonation/start', async (req, res, next) => {
     try {
-      const actor = res.locals.user as User;
-      res.json(await platformMembers.jobPreviewOptions(actor.id, actor.workspaceId, uuid(req.params.memberId)));
+      if (res.locals.impersonation) throw new HttpError('Exit the current user view before starting another.', 409);
+      const actor = res.locals.actor as User;
+      const targetUserId = uuid(req.body?.targetUserId);
+      const workspaceId = uuid(req.body?.workspaceId);
+      await platformMembers.startImpersonation(actor.id, actor.workspaceId, targetUserId, workspaceId);
+      const expiresAt = Date.now() + 60 * 60_000;
+      const signed = config.vault.signToken(JSON.stringify({ actorId: actor.id, targetUserId, workspaceId, expiresAt }), 'platform-impersonation');
+      res.cookie(viewAsName, signed, { ...cookieOptions, maxAge: 60 * 60_000 });
+      res.status(204).end();
     } catch (error) { next(error); }
   });
-  app.get('/api/admin/members/:memberId/job-preview/jobs', async (req, res, next) => {
+  app.post('/api/admin/impersonation/end', async (_req, res, next) => {
     try {
-      const actor = res.locals.user as User;
-      const memberId = uuid(req.params.memberId);
-      await platformMembers.requirePlatformAdmin(actor.id);
-      const workspaceId = uuid(req.query.workspaceId);
-      const websiteId = uuid(req.query.websiteId);
-      const context = await store.websiteContext(memberId, websiteId, workspaceId);
-      const provider = new ServiceTitanClient({ ...context.connection, apiBaseUrl: 'https://api.servicetitan.io', authUrl: 'https://auth.servicetitan.io/connect/token' });
-      const jobs = await provider.getJobs(parseJobsQuery(req.query as Record<string, unknown>));
-      await platformMembers.auditJobPreview(actor.id, actor.workspaceId, websiteId);
-      res.json(jobs);
-    } catch (error) { next(error); }
-  });
-  app.get('/api/admin/members/:memberId/job-preview/jobs/:jobId/raw', async (req, res, next) => {
-    try {
-      const actor = res.locals.user as User;
-      const memberId = uuid(req.params.memberId);
-      await platformMembers.requirePlatformAdmin(actor.id);
-      const workspaceId = uuid(req.query.workspaceId);
-      const websiteId = uuid(req.query.websiteId);
-      if (typeof req.params.jobId !== 'string' || !/^\d+$/.test(req.params.jobId) || !Number.isSafeInteger(Number(req.params.jobId)) || Number(req.params.jobId) < 1) throw new HttpError('jobId must be a positive integer.');
-      const context = await store.websiteContext(memberId, websiteId, workspaceId);
-      const provider = new ServiceTitanClient({ ...context.connection, apiBaseUrl: 'https://api.servicetitan.io', authUrl: 'https://auth.servicetitan.io/connect/token' });
-      const data = await provider.getRawJob(Number(req.params.jobId));
-      await platformMembers.auditJobPreview(actor.id, actor.workspaceId, websiteId, Number(req.params.jobId));
-      res.json({ data });
+      const actor = res.locals.actor as User;
+      const impersonation = res.locals.impersonation as { targetUserId: string } | undefined;
+      if (impersonation) await platformMembers.auditImpersonationAction(actor.id, actor.workspaceId, impersonation.targetUserId, 'platform.impersonation.ended');
+      res.clearCookie(viewAsName, cookieOptions);
+      res.status(204).end();
     } catch (error) { next(error); }
   });
   app.post('/api/admin/members/:memberId/disable', async (req, res, next) => {
@@ -334,6 +347,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.post('/api/logout', async (_req, res, next) => {
     try {
+      if (res.locals.impersonation) throw new HttpError('Exit the user view before signing out.', 409);
       await store.logout((res.locals.user as User).id, String(res.locals.sessionToken));
       res.clearCookie(sessionName, cookieOptions);
       res.status(204).end();
