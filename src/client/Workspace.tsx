@@ -182,6 +182,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: U
             {displayedRole && <small className='account-menu-role'>{displayedRole}</small>}
           </div>
           <a href='/settings'>Settings</a>
+          <a href='/team'>Team</a>
           <a href='/add-tokens'>Tokens</a>
           {user.isPlatformAdmin && (
             <>
@@ -433,6 +434,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const onboardingPage = path === '/onboarding';
   const settingsPage = path === '/settings';
+  const teamPage = path === '/team';
   const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/help' ? 'guide' : path === '/jobs' || path.startsWith('/jobs/') ? 'jobs' : undefined;
   const jobsHref = currentPage === 'jobs' ? `/jobs${window.location.search}` : '/jobs';
   const redirectTarget = loaded && !signedOut ? workspaceRedirect(path, onboarding, session?.mode === 'local', Boolean(invitationToken)) : undefined;
@@ -886,6 +888,11 @@ export function Workspace({ children }: { children: ReactNode }) {
               </p>
             )}
           </section>
+        </main>
+      ) : teamPage ? (
+        <main className='account-page'>
+          <PageHeader className='account-page-hero' eyebrow='Your workspace' title='Team' description={`People with access to ${user.workspaceName}.`} />
+          <TeamSettings role={user.role} workspaceId={user.workspaceId} />
         </main>
       ) : settingsPage ? (
         <main className='account-page'>

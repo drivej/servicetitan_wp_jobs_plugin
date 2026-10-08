@@ -40,7 +40,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create invitation.'); }
     finally { setBusy(false); }
   };
-  return <section className="panel account-panel" id="team">
+  return <section className="panel account-panel team-settings-panel" id="team">
     <h2>Team</h2>
     <p>Everyone on this team can process jobs on all workspace websites and uses the same token balance.</p>
     <p className="field-help">Owners manage tokens and all team roles. Admins manage integrations and invite or remove members. Members process jobs.</p>
@@ -50,7 +50,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     <ul className="account-resource-list">{team?.members.map((member) => <li key={member.id}>
       <div><strong>{member.name}</strong><small>{member.email} · {member.role}</small></div>
       {role === 'owner' && member.role !== 'owner' && <Select size="small" variant='outlined' sx={{ width: '100%' }} aria-label={`Role for ${member.email}`} value={member.role} disabled={busy} onChange={(event) => void update(`/api/team/members/${member.id}`, 'PATCH', { role: event.target.value })}><MenuItem value="member">Member</MenuItem><MenuItem value="admin">Admin</MenuItem></Select>}
-      {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <Button disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.email} from this workspace?`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>Remove</Button>}
+      {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <Button color="error" disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.name} (${member.email}) from ${workspaceId ? 'this workspace' : 'the team'}? They will lose access to its shared jobs, websites, and token balance.`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>{busy ? 'Updating…' : 'Remove access'}</Button>}
     </li>)}</ul>
     {role !== 'member' && <>
       <form className="account-form" onSubmit={(event) => void createInvite(event)}>
