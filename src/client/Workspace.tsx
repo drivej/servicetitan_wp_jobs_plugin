@@ -246,8 +246,9 @@ const ConnectionTestButton = ({ disabled, busy, busyLabel, label = 'Test Connect
 );
 
 const ConnectionCheckMessage = ({ check }: { check: ConnectionCheck }) => (
-  <p className={check.success ? 'notice' : 'notice error'} role={check.success ? 'status' : 'alert'}>
-    {check.message}{check.helpUrl && <> <a href={check.helpUrl}>Open help</a></>}
+  <p className={`notice${check.success ? ' connection-success' : ' error'}`} role={check.success ? 'status' : 'alert'}>
+    {check.success && <span className='connection-success-icon' aria-hidden='true'>✓</span>}
+    <span>{check.success && <strong>Connection successful! </strong>}{check.message}{check.helpUrl && <> <a href={check.helpUrl}>Open help</a></>}</span>
   </p>
 );
 
