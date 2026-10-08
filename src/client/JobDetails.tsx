@@ -95,7 +95,15 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const hasValidImage = Boolean(details?.attachments.some((attachment) => imageStates[attachment.id] === 'loaded'));
   const recordImageState = (id: string, state: 'loaded' | 'error') => {
     setImageStates((current) => ({ ...current, [id]: state }));
-    if (state === 'error') setSelectedIds((current) => current.filter((selected) => selected !== id));
+    if (state === 'error') {
+      setSelectedIds((current) => {
+        if (!current.includes(id)) return current;
+        const nextImage = details?.attachments.find((attachment) => attachment.id !== id && imageStates[attachment.id] === 'loaded');
+        return nextImage ? [nextImage.id] : [];
+      });
+      return;
+    }
+    setSelectedIds((current) => current.length ? current : [id]);
   };
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
