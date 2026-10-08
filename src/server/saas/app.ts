@@ -10,6 +10,7 @@ import type { GoogleLogin } from './google.js';
 import type { WebsiteAppFactory } from './providers.js';
 import { AccountStore, type User } from './store.js';
 import { ServiceTitanClient } from '../service-titan.js';
+import { parseJobsQuery } from '../app.js';
 import { WordPressClient } from '../wordpress.js';
 import { ServiceTitanRequestError } from '../service-titan-error.js';
 import { WordPressRequestError } from '../wordpress-error.js';
@@ -282,6 +283,41 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.get('/api/admin/members', async (req, res, next) => {
     try { res.json(await platformMembers.list((res.locals.user as User).id, req.query.search, req.query.after)); } catch (error) { next(error); }
+  });
+  app.get('/api/admin/members/:memberId/job-preview', async (req, res, next) => {
+    try {
+      const actor = res.locals.user as User;
+      res.json(await platformMembers.jobPreviewOptions(actor.id, actor.workspaceId, uuid(req.params.memberId)));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/admin/members/:memberId/job-preview/jobs', async (req, res, next) => {
+    try {
+      const actor = res.locals.user as User;
+      const memberId = uuid(req.params.memberId);
+      await platformMembers.requirePlatformAdmin(actor.id);
+      const workspaceId = uuid(req.query.workspaceId);
+      const websiteId = uuid(req.query.websiteId);
+      const context = await store.websiteContext(memberId, websiteId, workspaceId);
+      const provider = new ServiceTitanClient({ ...context.connection, apiBaseUrl: 'https://api.servicetitan.io', authUrl: 'https://auth.servicetitan.io/connect/token' });
+      const jobs = await provider.getJobs(parseJobsQuery(req.query as Record<string, unknown>));
+      await platformMembers.auditJobPreview(actor.id, actor.workspaceId, websiteId);
+      res.json(jobs);
+    } catch (error) { next(error); }
+  });
+  app.get('/api/admin/members/:memberId/job-preview/jobs/:jobId/raw', async (req, res, next) => {
+    try {
+      const actor = res.locals.user as User;
+      const memberId = uuid(req.params.memberId);
+      await platformMembers.requirePlatformAdmin(actor.id);
+      const workspaceId = uuid(req.query.workspaceId);
+      const websiteId = uuid(req.query.websiteId);
+      if (typeof req.params.jobId !== 'string' || !/^\d+$/.test(req.params.jobId) || !Number.isSafeInteger(Number(req.params.jobId)) || Number(req.params.jobId) < 1) throw new HttpError('jobId must be a positive integer.');
+      const context = await store.websiteContext(memberId, websiteId, workspaceId);
+      const provider = new ServiceTitanClient({ ...context.connection, apiBaseUrl: 'https://api.servicetitan.io', authUrl: 'https://auth.servicetitan.io/connect/token' });
+      const data = await provider.getRawJob(Number(req.params.jobId));
+      await platformMembers.auditJobPreview(actor.id, actor.workspaceId, websiteId, Number(req.params.jobId));
+      res.json({ data });
+    } catch (error) { next(error); }
   });
   app.post('/api/admin/members/:memberId/disable', async (req, res, next) => {
     try { await platformMembers.disable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
