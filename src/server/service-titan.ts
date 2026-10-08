@@ -140,6 +140,19 @@ export class ServiceTitanClient implements JobsProvider {
     return (await this.getJobDetails(jobId)).summary;
   }
 
+  async getRawJob(jobId: number): Promise<unknown> {
+    try {
+      const token = await this.getAccessToken();
+      const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
+      const response = await this.api.get<unknown>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey },
+      });
+      return response.data;
+    } catch (error) {
+      throw this.toRequestError(error);
+    }
+  }
+
   async getJobDetails(jobId: number): Promise<JobDetails> {
     try {
       const token = await this.getAccessToken();

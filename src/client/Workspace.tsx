@@ -153,6 +153,11 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
       .join('') ||
     user.email[0]?.toUpperCase() ||
     '?';
+  const displayedRole = user.isPlatformAdmin
+    ? 'Super admin'
+    : user.role === 'admin'
+      ? 'Admin'
+      : undefined;
   return (
     <div className='account-menu' ref={container}>
       <IconButton
@@ -173,6 +178,7 @@ const AccountMenu = ({ user, onSignOut, busy }: { user: User; onSignOut: () => v
           <div className='account-menu-identity'>
             <strong>{user.name}</strong>
             <small>{user.email}</small>
+            {displayedRole && <small className='account-menu-role'>{displayedRole}</small>}
           </div>
           <a href='/settings'>Settings</a>
           <a href='/add-tokens'>Tokens</a>

@@ -4,7 +4,7 @@ import type { BuildTask } from '../shared/build-queue';
 import { ErrorDialog } from './ErrorDialog';
 import { JobTableHeader, JobTableRow } from './JobTable';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
-import { apiFetch, apiUrl, wordpressStatusStorage } from './api';
+import { accountFetch, apiFetch, apiUrl, wordpressStatusStorage } from './api';
 
 import { formatJobCopy, hasCompleteJobBody, hasFormattedJobBody, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { showTokenError, useTokensExhausted } from './tokenState';
@@ -114,9 +114,39 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [wordpressStatus, setWordpressStatus] = useState<WordPressStatus>();
   const [wordpressStatusLoading, setWordpressStatusLoading] = useState(true);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [rawResponse, setRawResponse] = useState<unknown>();
+  const [rawResponseLoading, setRawResponseLoading] = useState(false);
+  const [rawResponseError, setRawResponseError] = useState('');
+  const [rawResponseCopied, setRawResponseCopied] = useState(false);
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
   const { ready: wordpressPluginReady } = useWordPressPluginStatus();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void accountFetch('/api/session', { headers: { Accept: 'application/json' }, signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ user?: { isPlatformAdmin?: boolean } }> : undefined)
+      .then((session) => setIsPlatformAdmin(session?.user?.isPlatformAdmin === true))
+      .catch(() => setIsPlatformAdmin(false));
+    return () => controller.abort();
+  }, []);
+
+  const loadRawResponse = async () => {
+    if (rawResponse !== undefined || rawResponseLoading) return;
+    setRawResponseLoading(true);
+    setRawResponseError('');
+    try {
+      const response = await apiFetch(`/api/admin/service-titan/jobs/${jobId}/raw`, { headers: { Accept: 'application/json' } });
+      const body = await readJson<{ data?: unknown; error?: string }>(response);
+      if (!response.ok) throw new Error(body.error || 'Unable to load the raw ServiceTitan response.');
+      setRawResponse(body.data);
+    } catch (requestError) {
+      setRawResponseError(requestError instanceof Error ? requestError.message : 'Unable to load the raw ServiceTitan response.');
+    } finally {
+      setRawResponseLoading(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -344,6 +374,18 @@ export function JobDetails({ jobId }: { jobId: number }) {
       />
 
       <div className='details-sections'>
+      {isPlatformAdmin && <details className='panel details-panel raw-api-panel' onToggle={(event) => {
+        if (event.currentTarget.open) void loadRawResponse();
+      }}>
+        <summary>ServiceTitan raw API response</summary>
+        <p className='field-help'>Fetched directly from ServiceTitan when opened. This response may contain customer information.</p>
+        {rawResponseLoading && <p role='status'>Loading raw response…</p>}
+        {rawResponseError && <p className='notice error' role='alert'>{rawResponseError} <Button onClick={() => { setRawResponse(undefined); void loadRawResponse(); }}>Retry</Button></p>}
+        {rawResponse !== undefined && <>
+          <div className='raw-api-actions'><Button size='small' onClick={() => void navigator.clipboard.writeText(JSON.stringify(rawResponse, null, 2)).then(() => setRawResponseCopied(true))}>{rawResponseCopied ? 'Copied' : 'Copy JSON'}</Button></div>
+          <pre className='raw-api-json'><code>{JSON.stringify(rawResponse, null, 2)}</code></pre>
+        </>}
+      </details>}
       {/* <div className='results-header'>
         <p className='page-label'>Job actions</p>
       </div> */}
