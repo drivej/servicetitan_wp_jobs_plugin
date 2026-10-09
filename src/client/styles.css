@@ -1706,17 +1706,8 @@ td strong {
   line-height: 1.55;
 }
 .team-invitation-email {
-  display: inline-flex;
   margin: 6px 0 20px;
-  padding: 11px 16px;
-  border-radius: 8px;
-  background: #186d4c;
-  color: #fff;
-  font-weight: 700;
-  text-decoration: none;
-}
-.team-invitation-email:hover {
-  background: #11593d;
+  padding: 9px 16px;
 }
 .team-invitation-link-row {
   display: grid;
