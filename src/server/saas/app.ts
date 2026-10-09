@@ -65,11 +65,12 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       next();
     } catch (error) { next(error); }
   });
-  app.get('/auth/google', async (_req, res, next) => {
+  app.get('/auth/google', async (req, res, next) => {
     try {
       const state = randomToken(), browser = randomToken(), verifier = randomToken(), nonce = randomToken();
       const url = await google.authorization(state, nonce, verifier);
-      await store.beginLogin(state, browser, verifier, nonce);
+      const returnTo = req.query.returnTo === '/invite' ? '/invite' : '/pricing';
+      await store.beginLogin(state, browser, verifier, nonce, returnTo);
       res.cookie(loginName, browser, { ...cookieOptions, maxAge: 10 * 60_000 });
       res.redirect(url);
     } catch (error) { next(error); }
@@ -84,7 +85,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const identity = await google.exchange(new URL(req.originalUrl, config.origin), state, attempt.nonce, attempt.verifier);
       const result = await store.login(identity, cookieValue(req.headers.cookie, sessionName));
       res.cookie(sessionName, result.token, { ...cookieOptions, maxAge: 7 * 86_400_000 });
-      res.redirect('/pricing');
+      res.redirect(attempt.returnTo === '/invite' ? '/invite' : '/pricing');
     } catch {
       // Provider errors may contain tokens/codes; never log them or put them in the redirect.
       res.redirect('/?login=failed');

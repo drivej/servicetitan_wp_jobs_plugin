@@ -451,7 +451,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   }, [onboardingPage, onboardingStage]);
 
   if (signedOut)
-    return <><LoadingModal open={navigating} /><MarketingPage />{invitationToken && <p className='marketing-invite-notice'>Sign in with the Google email address that received your team invitation. <a href='/auth/google'>Continue with Google</a></p>}{new URLSearchParams(window.location.search).get('login') === 'failed' && <p className='marketing-login-error' role='alert'>Sign-in could not be completed. Please try again.</p>}</>;
+    return <><LoadingModal open={navigating} /><MarketingPage />{invitationToken && <p className='marketing-invite-notice'>Sign in with the Google email address that received your team invitation. <a href='/auth/google?returnTo=%2Finvite' onClick={() => { try { window.sessionStorage.setItem('pending-team-invite', invitationToken); } catch { /* The invite URL remains available for this browser session. */ } }}>Continue with Google</a></p>}{new URLSearchParams(window.location.search).get('login') === 'failed' && <p className='marketing-login-error' role='alert'>Sign-in could not be completed. Please try again.</p>}</>;
   if (!loaded && !error) return <LoadingPage />;
   if (!loaded)
     return (

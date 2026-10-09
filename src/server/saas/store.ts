@@ -65,14 +65,14 @@ export class AccountStore {
       await audit(sql, userId, 'account.logout', userId);
     });
   }
-  async beginLogin(state: string, browser: string, verifier: string, nonce: string): Promise<void> {
+  async beginLogin(state: string, browser: string, verifier: string, nonce: string, returnTo = '/pricing'): Promise<void> {
     await this.db.transaction(undefined, async (sql) => {
       await sql.query('DELETE FROM oauth_attempts WHERE expires_at <= now()');
       await sql.query("INSERT INTO oauth_attempts(state_hash,browser_hash,secret,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes')",
-        [hashToken(state), hashToken(browser), this.vault.encrypt({ verifier, nonce }, `oauth:${hashToken(state)}`)]);
+        [hashToken(state), hashToken(browser), this.vault.encrypt({ verifier, nonce, returnTo }, `oauth:${hashToken(state)}`)]);
     });
   }
-  async consumeLogin(state: string, browser: string): Promise<{ verifier: string; nonce: string }> {
+  async consumeLogin(state: string, browser: string): Promise<{ verifier: string; nonce: string; returnTo?: string }> {
     return this.db.transaction(undefined, async (sql) => {
       const row = (await sql.query('DELETE FROM oauth_attempts WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>now() RETURNING secret', [hashToken(state), hashToken(browser)])).rows[0];
       if (!row) throw new HttpError('Sign-in expired or was already used. Please try again.', 400);

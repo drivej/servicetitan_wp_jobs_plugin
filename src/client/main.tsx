@@ -28,6 +28,8 @@ const page = helpTopicMatch
     ? <WordPressPluginSetup />
   : path === '/team'
     ? <WelcomePage />
+  : path === '/invite'
+    ? <WelcomePage />
   : jobDetailsMatch
       ? <JobDetails jobId={Number(jobDetailsMatch[1])} />
       : path === '/jobs'
