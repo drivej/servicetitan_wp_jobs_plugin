@@ -4,7 +4,7 @@ import { isSaaSWorkspace } from './api';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { PageHeader } from './PageHeader';
 
-const pluginFilename = 'servicetitan-job-integration-1.18.1.zip';
+const pluginFilename = 'job-showcase-for-servicetitan-1.18.1.zip';
 const pluginDownload = `/downloads/${pluginFilename}`;
 
 export function WordPressPluginSetup() {

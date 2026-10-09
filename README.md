@@ -80,8 +80,8 @@ The companion plugin registers the `st_job` post type and exposes it through the
 
 The independently deployable PHP source lives in
 `wordpress-plugin/servicetitan-job-integration`. Run `npm run build:plugin` to
-package it as `dist/downloads/servicetitan-job-integration-1.18.1.zip`. The app serves
-that archive at `/downloads/servicetitan-job-integration-1.18.1.zip` (with the
+package it as `dist/downloads/job-showcase-for-servicetitan-1.18.1.zip`. The app serves
+that archive at `/downloads/job-showcase-for-servicetitan-1.18.1.zip` (with the
 unversioned URL retained as a compatibility alias).
 
 The plugin registers the `st_job` post type when it does not already exist and

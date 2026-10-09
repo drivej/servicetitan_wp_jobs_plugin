@@ -120,7 +120,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
               <li>Install and activate <strong>Advanced Custom Fields</strong> if it is not already active.</li>
               <li>Open the app’s <a href="/wordpress-plugin">WordPress plugin tab</a> and download the plugin ZIP. Do not extract it.</li>
               <li>In WordPress, open <strong>Plugins → Add New Plugin → Upload Plugin</strong>.</li>
-              <li>Select <code>servicetitan-job-integration-1.18.1.zip</code>, then choose <strong>Install Now</strong>.</li>
+              <li>Select <code>job-showcase-for-servicetitan-1.18.1.zip</code>, then choose <strong>Install Now</strong>.</li>
               <li>Activate <strong>Job Showcase for ServiceTitan</strong>.</li>
             </ol>
             <p>Activation requires Advanced Custom Fields and creates the ServiceTitan Jobs post type, REST endpoint, shared ZIP ACF fields, ZIP-code taxonomy, and page shortcode automatically. For an update, upload the newer ZIP and choose <strong>Replace current with uploaded</strong>.</p>

@@ -478,8 +478,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     } catch (error) { next(error); }
   });
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
-  app.get('/downloads/servicetitan-job-integration-1.18.1.zip', (_req, res, next) => {
-    res.download(resolve('dist/downloads/servicetitan-job-integration-1.18.1.zip'), (error) => { if (error && !res.headersSent) next(error); });
+  app.get('/downloads/job-showcase-for-servicetitan-1.18.1.zip', (_req, res, next) => {
+    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.18.1.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));
