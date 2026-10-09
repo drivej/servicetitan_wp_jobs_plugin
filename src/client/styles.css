@@ -1445,8 +1445,10 @@ td strong {
   padding: var(--panel-padding);
 }
 .team-settings-panel {
-  max-width: 820px;
+  width: 100%;
+  max-width: none;
   margin-top: 0;
+  margin-bottom: 0;
 }
 .account-panel h2 {
   margin-top: 4px;
