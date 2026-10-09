@@ -12,6 +12,7 @@ import { navigateTo } from './navigation';
 import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
+import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
 
 interface JobsResponse {
   data: JobTableItem[];
@@ -57,6 +58,7 @@ export function App() {
   const { status: wordpressPluginStatus, loading: wordpressPluginLoading, ready: wordpressPluginReady } = useWordPressPluginStatus();
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
   const tokensExhausted = useTokensExhausted();
+  const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -237,8 +239,31 @@ export function App() {
 
   const regenerateWordpress = async (jobId: number, currentStatus: WordPressStatus) => {
     if (!wordpressPluginReady || currentStatus.state !== 'exists') return;
-    navigateTo(jobDetailsUrl(jobId));
-    return;
+    if (tokensExhausted) { showTokenError(); return; }
+    const force = currentStatus.seoState === 'modified';
+    if (force && !window.confirm('This post was edited in WordPress. Rebuilding will replace its title, excerpt, and content. Continue?')) return;
+    if (!(await confirmTokenSpend(currentStatus.seoState === 'current' ? 'rebuild' : 'update_seo'))) return;
+    setWordpressBusy(jobId, true);
+    setActionError(undefined);
+    setWordpressStatuses((current) => ({ ...current, [jobId]: { ...currentStatus, label: 'Regenerating…' } }));
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/regenerate`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      const body = await readApiResponse<WordPressStatus | { error?: string }>(response, 'WordPress could not rebuild the post.');
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not rebuild the post.');
+      const status = body as WordPressStatus;
+      setWordpressStatuses((current) => ({ ...current, [jobId]: status }));
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'WordPress could not rebuild the post.';
+      setWordpressStatuses((current) => ({ ...current, [jobId]: { ...currentStatus, label: currentStatus.postStatus === 'publish' ? 'Published' : 'Unknown', message } }));
+      setActionError({ title: 'Could not rebuild WordPress post', message });
+    } finally {
+      setWordpressBusy(jobId, false);
+    }
   };
 
   const refreshWordpressStatuses = async (jobIds: number[], options: { showBulkProgress: boolean; reportError: boolean }) => {
@@ -453,6 +478,7 @@ export function App() {
         actionLabel='Add Tokens'
         detail={queueError ? 'Builds already queued continue on the server.' : undefined}
       />
+      {tokenSpendDialog}
     </main>
   );
 }
