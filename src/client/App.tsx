@@ -5,13 +5,13 @@ import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { apiFetch, wordpressStatusStorage } from './api';
 
 import { ErrorDialog } from './ErrorDialog';
+import { LoadingModal } from './LoadingModal';
+import { PageHeader } from './PageHeader';
 import { jobDetailsUrl, jobsListUrl, parseJobsSearch, type JobFilters } from './jobsSearch';
+import { navigateTo } from './navigation';
 import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { readCachedWordPressStatuses, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
-import { PageHeader } from './PageHeader';
-import { LoadingModal } from './LoadingModal';
-import { navigateTo } from './navigation';
 
 interface JobsResponse {
   data: JobTableItem[];
@@ -89,8 +89,10 @@ export function App() {
     const poll = async () => {
       try {
         const response = await apiFetch('/api/build-deploy/statuses', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobIds: result.data.map((job) => job.id) }), signal: controller.signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobIds: result.data.map((job) => job.id) }),
+          signal: controller.signal
         });
         const body = await readApiResponse<{ tasks: BuildTask[]; error?: string }>(response, 'Unable to check build progress.');
         if (!response.ok) throw new Error(body.error || 'Unable to check build progress.');
@@ -99,12 +101,13 @@ export function App() {
         setBuildTasks(Object.fromEntries(body.tasks.map((task) => [task.jobId, task])));
         // Read live status once per completed task so a saved queue result
         // cannot overwrite later WordPress edits.
-        if (wordpressPluginReady) for (const task of body.tasks) {
-          if (task.state === 'succeeded' && !observed.has(task.id)) {
-            observed.add(task.id);
-            void requestWordpress(task.jobId);
+        if (wordpressPluginReady)
+          for (const task of body.tasks) {
+            if (task.state === 'succeeded' && !observed.has(task.id)) {
+              observed.add(task.id);
+              void requestWordpress(task.jobId);
+            }
           }
-        }
       } catch (error) {
         if (!controller.signal.aborted) setQueueError(error instanceof Error ? error.message : 'Unable to check build progress.');
       } finally {
@@ -113,7 +116,10 @@ export function App() {
     };
     const observed = new Set<string>();
     void poll();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [result, wordpressPluginReady]);
 
   const enqueueBuild = async (jobId: number) => {
@@ -126,7 +132,11 @@ export function App() {
     } catch (error) {
       setActionError({ title: 'Build and deploy failed', message: error instanceof Error ? error.message : 'Unable to queue build.' });
     } finally {
-      setQueueingJobs((current) => { const next = new Set(current); next.delete(jobId); return next; });
+      setQueueingJobs((current) => {
+        const next = new Set(current);
+        next.delete(jobId);
+        return next;
+      });
     }
   };
 
@@ -297,13 +307,13 @@ export function App() {
       <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
 
       {wordpressPluginLoading ? (
-        <Alert severity="info" role='status'>
+        <Alert severity='info' role='status'>
           Checking WordPress plugin compatibility…
         </Alert>
       ) : (
         !wordpressPluginReady &&
         !wordpressPluginUpdateRequired && (
-          <Alert severity="warning" role='alert'>
+          <Alert severity='warning' role='alert'>
             <div>
               <strong>{wordpressPluginStatus?.state === 'update_required' ? 'WordPress plugin update required' : 'WordPress plugin could not be verified'}</strong>
               <span>
@@ -319,17 +329,29 @@ export function App() {
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
         <form className='job-search-form' action='/jobs' method='get'>
-          <label>
-            <span>Start date</span>
-            <TextField name='start' type='date' required size="small" value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
-          </label>
-          <label>
-            <span>End date</span>
-            <TextField name='end' type='date' required size="small" value={draftRange.end} slotProps={{ htmlInput: { min: draftRange.start } }} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
-          </label>
+          <div className='job-search-date-range'>
+            <label>
+              <span>Start date</span>
+              <TextField fullWidth name='start' type='date' required size='small' value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
+            </label>
+            <label>
+              <span>End date</span>
+              <TextField fullWidth name='end' type='date' required size='small' value={draftRange.end} slotProps={{ htmlInput: { min: draftRange.start } }} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
+            </label>
+          </div>
           <label>
             <span>ZIP code</span>
-            <TextField name={draftRange.zip ? 'zip' : undefined} type='text' size="small" slotProps={{ htmlInput: { inputMode: 'numeric', pattern: '\\d{5}(-\\d{4})?' } }} autoComplete='postal-code' placeholder='Optional' value={draftRange.zip} onChange={(event) => setDraftRange((current) => ({ ...current, zip: event.target.value.trim() }))} />
+            <TextField
+              fullWidth
+              name={draftRange.zip ? 'zip' : undefined}
+              type='text'
+              size='small'
+              slotProps={{ htmlInput: { inputMode: 'numeric', pattern: '\\d{5}(-\\d{4})?' } }}
+              autoComplete='postal-code'
+              placeholder='Optional'
+              value={draftRange.zip}
+              onChange={(event) => setDraftRange((current) => ({ ...current, zip: event.target.value.trim() }))}
+            />
           </label>
           <input name='pageSize' type='hidden' value={search.pageSize} />
           <Button variant='contained' className='primary' type='submit' disabled={loading}>
@@ -375,23 +397,35 @@ export function App() {
               </colgroup>
               <JobTableHeader refreshing={bulkRefreshing} disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onRefresh={() => void refreshPageWordpressStatuses()} />
               <tbody>
-                {result.data.map((job) => <JobTableRow key={job.id} job={job} wordpressStatus={wordpressStatuses[job.id] || unknownWordPressStatus} wordpressBusy={busyWordpressJobs.has(job.id) || queueingJobs.has(job.id) || buildTasks[job.id]?.state === 'queued' || buildTasks[job.id]?.state === 'running'} buildTask={buildTasks[job.id]} queueError={queueError} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onOpen={() => navigateTo(jobDetailsUrl(job.id))} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } if (wordpressPluginReady && !queueError) void enqueueBuild(job.id); }} onPublish={() => void updateWordpressStatus(job.id, 'publish')} onRebuild={() => void regenerateWordpress(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)} onRefresh={() => void requestWordpress(job.id)} />)}
+                {result.data.map((job) => (
+                  <JobTableRow
+                    key={job.id}
+                    job={job}
+                    wordpressStatus={wordpressStatuses[job.id] || unknownWordPressStatus}
+                    wordpressBusy={busyWordpressJobs.has(job.id) || queueingJobs.has(job.id) || buildTasks[job.id]?.state === 'queued' || buildTasks[job.id]?.state === 'running'}
+                    buildTask={buildTasks[job.id]}
+                    queueError={queueError}
+                    wordpressPluginReady={wordpressPluginReady}
+                    tokensExhausted={tokensExhausted}
+                    onOpen={() => navigateTo(jobDetailsUrl(job.id))}
+                    onBuild={() => {
+                      if (tokensExhausted) {
+                        showTokenError();
+                        return;
+                      }
+                      if (wordpressPluginReady && !queueError) void enqueueBuild(job.id);
+                    }}
+                    onPublish={() => void updateWordpressStatus(job.id, 'publish')}
+                    onRebuild={() => void regenerateWordpress(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)}
+                    onRefresh={() => void requestWordpress(job.id)}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
         )}
 
-        {result && !error && (
-          <Pagination
-            className='pagination'
-            aria-label='Jobs pages'
-            count={pageCount ?? Math.max(search.page, result.hasMore ? search.page + 1 : search.page)}
-            page={search.page}
-            color='primary'
-            shape='rounded'
-            onChange={(_event, page) => navigateTo(jobsListUrl(search, page))}
-          />
-        )}
+        {result && !error && <Pagination className='pagination' aria-label='Jobs pages' count={pageCount ?? Math.max(search.page, result.hasMore ? search.page + 1 : search.page)} page={search.page} color='primary' shape='rounded' onChange={(_event, page) => navigateTo(jobsListUrl(search, page))} />}
       </section>
 
       {actionError && (
@@ -410,10 +444,13 @@ export function App() {
       )}
       <ErrorDialog
         message={error || queueError}
-        onClose={() => { setError(''); setQueueError(''); }}
+        onClose={() => {
+          setError('');
+          setQueueError('');
+        }}
         title={queueError && !error ? 'Unable to check build progress' : error.includes('No job tokens available') ? 'No job tokens available' : undefined}
         actionHref={error.includes('No job tokens available') || queueError.includes('No job tokens available') ? '/add-tokens' : undefined}
-        actionLabel="Add Tokens"
+        actionLabel='Add Tokens'
         detail={queueError ? 'Builds already queued continue on the server.' : undefined}
       />
     </main>

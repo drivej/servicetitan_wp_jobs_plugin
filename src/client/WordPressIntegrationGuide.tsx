@@ -18,7 +18,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
   };
   const selectedTopic = topic ? topics[topic] : undefined;
   if (topic === 'wordpress-reachability') return (
-    <main className="guide-page guide-page-layout">
+    <main className="guide-page-layout">
       <PageHeader className="guide-hero" eyebrow="WordPress connection help" title="The WordPress site could not be reached" description="The app server must reach your public WordPress REST API over HTTPS. Use these checks to find whether the issue is the site URL, WordPress, or a hosting security rule." actions={<Button component="a" variant="contained" href="/settings">Return to Settings</Button>} />
       <article className="guide-content">
         <section>
@@ -64,9 +64,9 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
       </article>
     </main>
   );
-  if (topic) return <main className="guide-page guide-page-layout"><PageHeader className="guide-hero" eyebrow={`${selectedTopic?.service || 'Connection'} help`} title={selectedTopic?.title || 'Connection issue'} description={selectedTopic?.body || 'This help topic was not found.'} actions={<Button component="a" variant="contained" href="/settings">Return to setup</Button>} /><article className="guide-content guide-topic-content"><p>{selectedTopic?.body}</p>{topic === 'onboarding-save-failed' ? <><p>Ask the database administrator to run <code>npm run db:migrate</code> with the migration-owner connection for the hosted database. Deploying the app does not run migrations, and the migration must target the same database used by the app.</p><p>Verify migration 008 was recorded and <code>connection_id</code> is nullable:</p><pre><code>{'SELECT name FROM schema_migrations WHERE name = \'008_staged_onboarding.sql\';\nSELECT is_nullable FROM information_schema.columns\nWHERE table_schema = current_schema()\n  AND table_name = \'websites\' AND column_name = \'connection_id\';'}</code></pre><p>The first query should return a row; the second should return <code>YES</code>. If either check fails, migration 008 did not complete on the hosted app database. Run migration 009 too so plugin validation results can be saved.</p></> : <p>After applying the fix, return to Settings and select <strong>Test Connection</strong>. The next onboarding step becomes available once the test succeeds.</p>}<p><a href="/help">Browse all help topics</a></p></article></main>;
+  if (topic) return <main className="guide-page-layout"><PageHeader className="guide-hero" eyebrow={`${selectedTopic?.service || 'Connection'} help`} title={selectedTopic?.title || 'Connection issue'} description={selectedTopic?.body || 'This help topic was not found.'} actions={<Button component="a" variant="contained" href="/settings">Return to setup</Button>} /><article className="guide-content guide-topic-content"><p>{selectedTopic?.body}</p>{topic === 'onboarding-save-failed' ? <><p>Ask the database administrator to run <code>npm run db:migrate</code> with the migration-owner connection for the hosted database. Deploying the app does not run migrations, and the migration must target the same database used by the app.</p><p>Verify migration 008 was recorded and <code>connection_id</code> is nullable:</p><pre><code>{'SELECT name FROM schema_migrations WHERE name = \'008_staged_onboarding.sql\';\nSELECT is_nullable FROM information_schema.columns\nWHERE table_schema = current_schema()\n  AND table_name = \'websites\' AND column_name = \'connection_id\';'}</code></pre><p>The first query should return a row; the second should return <code>YES</code>. If either check fails, migration 008 did not complete on the hosted app database. Run migration 009 too so plugin validation results can be saved.</p></> : <p>After applying the fix, return to Settings and select <strong>Test Connection</strong>. The next onboarding step becomes available once the test succeeds.</p>}<p><a href="/help">Browse all help topics</a></p></article></main>;
   return (
-    <main className="guide-page guide-page-layout">
+    <main className="guide-page-layout">
 
       <PageHeader className='guide-hero' eyebrow='ServiceTitan Jobs' title='Connect your WordPress site' description='Install the companion plugin, authorize the ServiceTitan Jobs app, and publish a ZIP-targeted job directory on any WordPress page.' actions={<Button component="a" variant="contained" href="/wordpress-plugin" className="guide-setup-link">Open WordPress plugin setup</Button>} />
 
@@ -95,7 +95,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
         </aside>
 
         <article className="guide-content">
-          <section className="guide-callout">
+          <section className="panel guide-callout">
             <h2>What the integration does</h2>
             <p>The app reads jobs from ServiceTitan and creates correlated WordPress <code>st_job</code> posts. The plugin registers the job post type, enables REST creation, assigns each service ZIP code to an indexed taxonomy, and provides the <code>[servicetitan_jobs]</code> page shortcode.</p>
             <p>The plugin never stores your ServiceTitan credentials or WordPress Application Password.</p>
@@ -248,7 +248,7 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
             <p>Please describe the problem you were having and what you were doing when it happened.</p>
           </section>
 
-          <section className="guide-callout security-callout">
+          <section className="panel guide-callout security-callout">
             <h2>Security checklist</h2>
             <ul>
               <li>Use a dedicated integration user and Application Password.</li>

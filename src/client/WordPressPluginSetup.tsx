@@ -11,10 +11,10 @@ export function WordPressPluginSetup() {
   const saas = isSaaSWorkspace();
   const { status, loading, refresh, ready } = useWordPressPluginStatus();
   return (
-    <main className="plugin-page plugin-page-layout">
+    <main className="plugin-page-layout">
       <PageHeader className='plugin-page-hero' eyebrow='ServiceTitan Jobs' title='Companion plugin' description='Install the plugin and connect your site with a WordPress Application Password so the app can verify the plugin version and publish jobs.' />
 
-      <section className={`plugin-install-card plugin-install-card-${status?.state || 'checking'}`}>
+      <section className={`panel plugin-install-card plugin-install-card-${status?.state || 'checking'}`}>
         <div className="plugin-version-status" aria-live="polite">
           <span className="plugin-version-icon" aria-hidden="true">{loading ? '…' : ready ? '✓' : '!'}</span>
           <div>
@@ -38,7 +38,7 @@ export function WordPressPluginSetup() {
         </div>
       </section>
 
-      <section className="plugin-instructions">
+      <section className="panel plugin-instructions">
         <h2>Install or update</h2>
         <ol>
           <li>Download the ZIP above. Do not extract it.</li>
@@ -50,7 +50,7 @@ export function WordPressPluginSetup() {
         <p>The Jobs tab enables WordPress actions only after the installed plugin reports a compatible version.</p>
       </section>
 
-      <section className="plugin-instructions">
+      <section className="panel plugin-instructions">
         <h2>Connect with an Application Password</h2>
         <p>Installing the plugin is only the first step. The app also needs your WordPress username and a generated <strong>Application Password</strong> to check the installed version and publish jobs. Your regular WordPress login password is not the credential to enter here.</p>
         <ol>

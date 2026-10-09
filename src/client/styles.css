@@ -9,7 +9,7 @@
   --space-8: 32px;
   --space-12: 48px;
   --page-gutter: 24px;
-  --panel-padding: 26px;
+  --panel-padding: 24px;
   font-family:
     Inter,
     ui-sans-serif,
@@ -30,7 +30,7 @@ body {
   min-height: 100vh;
 }
 main {
-  width: min(1320px, calc(100% - 32px));
+  width: min(1024px, calc(100% - 32px));
   margin: 0 auto;
   padding: 20px;
 }
@@ -89,13 +89,9 @@ END - REUSABLE CLASSES
   gap: 6px;
   margin-bottom: 0;
 }
-.hero {
-  max-width: 720px;
-  margin-bottom: 0;
-}
 .page-header {
   max-width: 900px;
-  margin-bottom: 0;
+  margin: 0;
 }
 .page-header-layout {
   display: flex;
@@ -103,11 +99,7 @@ END - REUSABLE CLASSES
   align-items: flex-start;
   gap: var(--space-3);
 }
-.page-header-layout > .eyebrow,
-.page-header-layout > .intro {
-  margin: 0;
-}
-.page-header-layout > .page-title {
+.page-header-layout > .eyebrow {
   margin: 0;
 }
 .page-header-layout > :not(.eyebrow, .page-title, .intro) {
@@ -148,15 +140,12 @@ h2 {
   line-height: 1.65;
 }
 .panel {
-/* .results { */
+  padding: var(--panel-padding);
+  margin: 0;
   background: #fcfcf8;
   border: 1px solid #d9ddd7;
   border-radius: 18px;
   box-shadow: 0 14px 40px rgba(43, 57, 49, 0.06);
-}
-.panel {
-  padding: 24px;
-  margin-bottom: 20px;
 }
 .panel h2 {
   font-family: inherit;
@@ -170,6 +159,20 @@ h2 {
   gap: 16px;
   align-items: end;
   /* margin-top: 18px; */
+}
+.job-search-date-range {
+  display: grid;
+  grid-column: span 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+.job-search-form > label,
+.job-search-date-range > label {
+  min-width: 0;
+}
+.job-search-form > .MuiButton-root {
+  margin-bottom: 7px;
 }
 .job-search-form label > span {
   display: block;
@@ -510,9 +513,6 @@ td strong {
   display: grid;
   gap: 24px;
 }
-.details-sections > .panel {
-  margin-bottom: 0;
-}
 .details-sections > .notice {
   margin: 0;
 }
@@ -805,23 +805,12 @@ td strong {
   justify-content: flex-end;
   padding: 20px 30px;
 }
-.guide-page {
-  width: min(1180px, calc(100% - 32px));
-}
 .guide-page-layout {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-6) 0 var(--space-12);
 }
-.guide-hero {
-  max-width: 850px;
-  margin-bottom: 0;
-}
-.guide-hero .intro {
-  max-width: 720px;
-}
-.guide-setup-link { margin-top: 0; }
 .guide-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 760px);
@@ -874,7 +863,6 @@ td strong {
 .guide-content > section {
   scroll-margin-top: 24px;
   padding: 0 0 var(--space-8);
-  margin: 0;
   border-bottom: 1px solid #d6dbd6;
 }
 .guide-content > section:last-child {
@@ -930,13 +918,6 @@ td strong {
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-}
-.guide-callout {
-  padding: 28px !important;
-  background: #fcfcf8;
-  border: 1px solid #d9ddd7 !important;
-  border-radius: 15px;
-  box-shadow: 0 12px 35px rgba(43, 57, 49, 0.05);
 }
 .guide-callout p:last-child,
 .guide-callout ul:last-child {
@@ -1017,26 +998,11 @@ td strong {
   margin-bottom: 0;
   padding-left: 20px;
 }
-.plugin-page {
-  width: min(960px, calc(100% - 32px));
-}
 .plugin-page-layout {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   padding: var(--space-6) 0 var(--space-12);
-}
-.plugin-page-hero {
-  max-width: 760px;
-  margin-bottom: 0;
-}
-.plugin-install-card {
-  padding: var(--panel-padding);
-  margin-bottom: 0;
-  background: #fcfcf8;
-  border: 1px solid #d9ddd7;
-  border-radius: 18px;
-  box-shadow: 0 14px 40px rgba(43, 57, 49, 0.06);
 }
 .plugin-install-card-current {
   background: #edf7f0;
@@ -1104,14 +1070,12 @@ td strong {
   color: inherit;
   font-weight: 750;
 }
-.plugin-instructions {
-  padding: var(--panel-padding);
-  background: #fcfcf8;
-  border: 1px solid #d9ddd7;
-  border-radius: 18px;
-}
 .plugin-instructions h2 {
   margin-bottom: var(--space-4);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.8rem, 4vw, 2.55rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
 }
 .plugin-instructions li,
 .plugin-instructions p {
@@ -1207,6 +1171,13 @@ td strong {
   .job-search-form {
     grid-template-columns: 1fr;
   }
+  .job-search-form > .MuiButton-root {
+    margin-bottom: 0;
+  }
+  .job-search-date-range {
+    grid-column: 1;
+    grid-template-columns: 1fr;
+  }
   .primary {
     width: 100%;
   }
@@ -1245,9 +1216,6 @@ td strong {
     justify-content: center;
     padding-inline: 20px;
   }
-  .guide-page {
-    width: min(100% - 20px, 1180px);
-  }
   .guide-layout {
     grid-template-columns: 1fr;
     gap: 28px;
@@ -1255,23 +1223,13 @@ td strong {
   .guide-toc {
     position: static;
   }
-  .guide-content > section {
-    padding-bottom: var(--space-8);
-    margin-bottom: 0;
-  }
   .guide-layout {
     gap: var(--space-6);
-  }
-  .guide-callout {
-    padding: 22px !important;
   }
   .settings-table > div,
   .guide-definitions > div {
     grid-template-columns: 1fr;
     gap: 6px;
-  }
-  .plugin-page {
-    width: min(100% - 20px, 960px);
   }
   .plugin-install-actions {
     align-items: stretch;
@@ -1417,22 +1375,11 @@ td strong {
   color: #506773;
 }
 .account-page {
-  max-width: 1180px;
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
   margin: var(--space-12) auto;
   padding: 0 var(--page-gutter) 60px;
-}
-.account-page-hero {
-  max-width: 900px;
-  margin-bottom: 0;
-}
-.account-page h1 {
-  margin: 0;
-}
-.account-page .intro {
-  max-width: 650px;
 }
 .account-grid {
   display: grid;
@@ -1441,20 +1388,12 @@ td strong {
   margin-top: 0;
   align-items: start;
 }
-.account-panel {
-  padding: var(--panel-padding);
-}
 .team-settings-layout {
   display: grid;
   gap: var(--space-6);
   width: 100%;
-  max-width: 100%;
 }
 .team-settings-layout > .notice {
-  margin: 0;
-}
-.team-settings-layout > .account-panel {
-  width: 100%;
   margin: 0;
 }
 .team-members-panel .team-member-row {
@@ -1482,9 +1421,6 @@ td strong {
   .team-members-panel .team-member-role {
     width: min(100%, 220px);
   }
-}
-.account-panel h2 {
-  margin-top: 4px;
 }
 .account-form {
   display: flex;
@@ -1547,16 +1483,6 @@ td strong {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-}
-.jobs-page > .hero,
-.jobs-page > .page-header,
-.jobs-page > .MuiAlert-root,
-.jobs-page > .panel,
-.jobs-page > .results {
-  margin: 0;
-}
-.jobs-page > .page-header + .MuiAlert-root {
-  margin-top: 0;
 }
 .jobs-page > .results {
   min-width: 0;
@@ -1959,7 +1885,6 @@ td strong {
 .billing-plan-price { font-size: 1.8rem; font-weight: 750; }
 .billing-plan-price small { font-size: .85rem; font-weight: 400; }
 
-.token-history { margin-top: 0; }
 .token-table-scroll { overflow-x: auto; }
 .token-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88rem; }
 .token-table th, .token-table td { padding: 12px; border-bottom: 1px solid #dce3e8; vertical-align: top; }
@@ -1971,7 +1896,7 @@ td strong {
 .onboarding-steps button[aria-current="step"] { background: #186d4c; border-color: #186d4c; color: #fff; }
 .onboarding-steps button:disabled { opacity: .5; cursor: not-allowed; }
 .onboarding-step-check { display: inline-block; margin-left: 5px; font-weight: 800; }
-.onboarding-step, .settings-integration-panel { grid-column: 1 / -1; width: 100%; max-width: 760px; }
+.onboarding-step, .settings-integration-panel { grid-column: 1 / -1; width: 100%; max-width: 1024px; }
 .connection-test-button.MuiButton-root { width: 100%; border-color: #66869a; color: #426477; }
 .connection-test-button.MuiButton-root:hover { border-color: #426477; background: #edf3f6; }
 .settings-integration-panel > form + .connection-test-button.MuiButton-root { margin-top: 16px; }
