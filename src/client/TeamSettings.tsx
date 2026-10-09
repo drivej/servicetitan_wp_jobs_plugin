@@ -43,21 +43,23 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
   const invitationMailto = invite
     ? `mailto:${invite.email}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`
     : undefined;
-  return <section className="panel account-panel team-settings-panel" id="team">
-    <h2>Team</h2>
-    <p>Everyone on this team can process jobs on all workspace websites and uses the same token balance.</p>
-    <p className="field-help">Owners manage tokens and all team roles. Admins manage integrations and invite or remove members. Members process jobs.</p>
+  return <div className="team-settings-layout" id="team">
     {error && <p className="notice error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
-    {!team && !error && <p role="status">Loading team…</p>}
-    <ul className="account-resource-list">{team?.members.map((member) => <li key={member.id}>
-      <div><strong>{member.name}</strong><small>{member.email} · {member.role}</small></div>
-      {role === 'owner' && member.role !== 'owner' && <Select size="small" variant='outlined' sx={{ width: '100%' }} aria-label={`Role for ${member.email}`} value={member.role} disabled={busy} onChange={(event) => void update(`/api/team/members/${member.id}`, 'PATCH', { role: event.target.value })}><MenuItem value="member">Member</MenuItem><MenuItem value="admin">Admin</MenuItem></Select>}
-      {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <Button color="error" disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.name} (${member.email}) from ${workspaceId ? 'this workspace' : 'the team'}? They will lose access to its shared jobs, websites, and token balance.`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>{busy ? 'Updating…' : 'Remove access'}</Button>}
-    </li>)}</ul>
-    {role !== 'member' && <>
+    <section className="panel account-panel team-members-panel" aria-labelledby="team-members-heading">
+      <h2 id="team-members-heading">Team members</h2>
+      <p>Everyone on this team can process jobs on all workspace websites and uses the same token balance.</p>
+      <p className="field-help">Owners manage tokens and all team roles. Admins manage integrations and invite or remove members. Members process jobs.</p>
+      {!team && !error && <p role="status">Loading team…</p>}
+      <ul className="account-resource-list">{team?.members.map((member) => <li className="team-member-row" key={member.id}>
+        <div><strong>{member.name}</strong><small>{member.email} · {member.role}</small></div>
+        {role === 'owner' && member.role !== 'owner' && <Select className="team-member-role" size="small" variant='outlined' aria-label={`Role for ${member.email}`} value={member.role} disabled={busy} onChange={(event) => void update(`/api/team/members/${member.id}`, 'PATCH', { role: event.target.value })}><MenuItem value="member">Member</MenuItem><MenuItem value="admin">Admin</MenuItem></Select>}
+        {member.role !== 'owner' && (role === 'owner' || role === 'admin' && member.role === 'member') && <Button color="error" disabled={busy} onClick={() => { if (window.confirm(`Remove ${member.name} (${member.email}) from ${workspaceId ? 'this workspace' : 'the team'}? They will lose access to its shared jobs, websites, and token balance.`)) void update(`/api/team/members/${member.id}`, 'DELETE'); }}>{busy ? 'Updating…' : 'Remove access'}</Button>}
+      </li>)}</ul>
+    </section>
+    {role !== 'member' && <section className="panel account-panel team-invites-panel" aria-labelledby="team-invites-heading">
+      <h2 id="team-invites-heading">Invite teammates</h2>
       <form className="account-form" onSubmit={(event) => void createInvite(event)}>
-        <h3>Invite a teammate</h3>
         <label>Google account email<TextField variant="outlined" size="small" fullWidth name="email" type="email" required placeholder="teammate@company.com" slotProps={{ htmlInput: { maxLength: 254 } }}/></label>
         <label>Role<Select size="small" variant='outlined' sx={{ width: '100%' }} name="role" aria-label="Role" defaultValue="member"><MenuItem value="member">Member</MenuItem>{role === 'owner' && <MenuItem value="admin">Admin</MenuItem>}</Select></label>
         <p className="field-help">Invitations expire after 7 days and must be accepted using the invited Google email. Creating a new invite for the same email replaces its previous link.</p>
@@ -78,6 +80,6 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
       <h3>Pending invitations</h3>
       {team?.invitations.length === 0 && <p>No pending invitations.</p>}
       <ul className="account-resource-list">{team?.invitations.map((pending) => <li key={pending.id}><div><strong>{pending.email}</strong><small>{pending.role} · Expires {new Date(pending.expiresAt).toLocaleDateString()}</small></div>{(role === 'owner' || pending.role === 'member') && <Button disabled={busy} onClick={() => void update(`/api/team/invitations/${pending.id}`, 'DELETE')}>Revoke</Button>}</li>)}</ul>
-    </>}
-  </section>;
+    </section>}
+  </div>;
 }

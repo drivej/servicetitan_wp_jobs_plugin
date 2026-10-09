@@ -1444,11 +1444,44 @@ td strong {
 .account-panel {
   padding: var(--panel-padding);
 }
-.team-settings-panel {
+.team-settings-layout {
+  display: grid;
+  gap: var(--space-6);
   width: 100%;
-  max-width: none;
-  margin-top: 0;
-  margin-bottom: 0;
+  max-width: 100%;
+}
+.team-settings-layout > .notice {
+  margin: 0;
+}
+.team-settings-layout > .account-panel {
+  width: 100%;
+  margin: 0;
+}
+.team-members-panel .team-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 156px auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+.team-members-panel .team-member-row > div {
+  min-width: 0;
+}
+.team-members-panel .team-member-role {
+  width: 156px;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .team-members-panel .team-member-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .team-members-panel .team-member-row > div {
+    flex: 1 1 100%;
+  }
+  .team-members-panel .team-member-role {
+    width: min(100%, 220px);
+  }
 }
 .account-panel h2 {
   margin-top: 4px;
