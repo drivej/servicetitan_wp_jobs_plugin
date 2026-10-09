@@ -30,7 +30,7 @@ body {
   min-height: 100vh;
 }
 main {
-  width: min(1024px, calc(100% - 32px));
+  width: min(1100px, calc(100% - 32px));
   margin: 0 auto;
   padding: 20px;
 }
@@ -1543,30 +1543,33 @@ td strong {
   right: 0;
   display: grid;
   min-width: 220px;
-  padding: 6px;
+  padding: 6px 0;
   border: 1px solid #d7e5dd;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 12px 28px rgba(20, 42, 31, 0.15);
 }
 .account-menu-identity {
   display: grid;
   gap: 2px;
-  padding: 10px 11px;
-  border-bottom: 1px solid #e3ebe6;
-  margin-bottom: 4px;
+  padding: 8px 16px 10px;
+  margin-bottom: 6px;
 }
 .account-menu-identity small {
   color: #526159;
   font-size: 0.76rem;
   overflow-wrap: anywhere;
 }
+.account-menu-group {
+  display: grid;
+  padding: 6px 0;
+  border-top: 1px solid #e3ebe6;
+}
 .account-menu-panel a {
   display: block;
   width: 100%;
-  padding: 9px 11px;
+  padding: 7px 16px;
   border: 0;
-  border-radius: 6px;
   background: transparent;
   color: #263b31;
   font: inherit;
@@ -1576,7 +1579,22 @@ td strong {
   cursor: pointer;
 }
 .account-menu-panel a:hover {
-  background: #e8ede9;
+  background: #f1f5f2;
+}
+.account-menu-panel .account-menu-signout {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 7px 16px;
+  border-top: 1px solid #e3ebe6;
+  border-radius: 0;
+  color: #263b31;
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  text-transform: none;
+}
+.account-menu-panel .account-menu-signout:hover {
+  background: #f1f5f2;
 }
 
 .impersonation-banner {

@@ -12,7 +12,7 @@ export function WordPressPluginSetup() {
   const { status, loading, refresh, ready } = useWordPressPluginStatus();
   return (
     <main className="app-page">
-      <PageHeader  eyebrow='ServiceTitan Jobs' title='Companion plugin' description='Install the plugin and connect your site with a WordPress Application Password so the app can verify the plugin version and publish jobs.' />
+      <PageHeader  eyebrow='ServiceTitan Jobs' title='WordPress Plugin' description='Install the plugin and connect your site with a WordPress Application Password so the app can verify the plugin version and publish jobs.' />
 
       <section className={`panel plugin-install-card plugin-install-card-${status?.state || 'checking'}`}>
         <div className="plugin-version-status" aria-live="polite">

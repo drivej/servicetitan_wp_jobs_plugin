@@ -108,21 +108,6 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   );
 };
 
-const SettingsButton = ({ path }: { path: string }) => {
-  const href = '/settings';
-  return (
-    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
-      Settings
-    </Button>
-  );
-
-  // return (
-  //   <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/settings' ? 'contained' : 'text'} href='/settings' aria-label='Settings' title='Settings' aria-current={path === '/settings' ? 'page' : undefined}>
-  //     <SettingsRoundedIcon aria-hidden='true' />
-  //   </Button>
-  // );
-};
-
 const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean }) => {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
@@ -181,17 +166,22 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: U
             <small>{user.email}</small>
             {displayedRole && <small className='account-menu-role'>{displayedRole}</small>}
           </div>
-          <a href='/settings'>Settings</a>
-          <a href='/team'>Team</a>
-          <a href='/add-tokens'>Tokens</a>
+          <nav className='account-menu-group' aria-label='Workspace'>
+            <a href='/settings' aria-current={window.location.pathname === '/settings' ? 'page' : undefined}>Settings</a>
+            <a href='/team' aria-current={window.location.pathname === '/team' ? 'page' : undefined}>Team</a>
+            <a href='/add-tokens' aria-current={window.location.pathname === '/add-tokens' ? 'page' : undefined}>Tokens</a>
+          </nav>
+          <nav className='account-menu-group' aria-label='Resources'>
+            <a href='/wordpress-plugin' aria-current={window.location.pathname === '/wordpress-plugin' ? 'page' : undefined}>WordPress Plugin</a>
+            <a href='/help' aria-current={window.location.pathname === '/help' || window.location.pathname.startsWith('/help/') ? 'page' : undefined}>Help &amp; guides</a>
+          </nav>
           {user.isPlatformAdmin && (
-            <>
-              <a href='/admin/tokens'>Token admin</a>
-              <a href='/admin/members'>Account members</a>
-            </>
+            <nav className='account-menu-group' aria-label='Administration'>
+              <a href='/admin/tokens' aria-current={window.location.pathname === '/admin/tokens' ? 'page' : undefined}>Token admin</a>
+              <a href='/admin/members' aria-current={window.location.pathname === '/admin/members' ? 'page' : undefined}>Account members</a>
+            </nav>
           )}
-          <a href='/help'>Help</a>
-          <Button type='button' variant='text' sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }} disabled={busy} onClick={onSignOut}>
+          <Button className='account-menu-signout' type='button' variant='text' disabled={busy} onClick={onSignOut}>
             {impersonating ? 'Exit user view' : 'Sign out'}
           </Button>
         </div>
@@ -206,38 +196,6 @@ const JobsButton = ({ href, path }: { href: string; path: string }) => {
       Jobs
     </Button>
   );
-};
-
-const PluginButton = ({ path }: { path: string }) => {
-  return (
-    <Button component='a' className='btn-nav' variant={path === '/wordpress-plugin' ? 'contained' : 'text'} href='/wordpress-plugin' aria-current={path === '/wordpress-plugin' ? 'page' : undefined}>
-      Plugin
-    </Button>
-  );
-};
-
-const WordpressButton = ({ path }: { path: string }) => {
-  const href = '/help';
-  return (
-    <Button component='a' className='btn-nav' variant={path === href ? 'contained' : 'text'} href={href} aria-current={path === href ? 'page' : undefined}>
-      Help
-    </Button>
-  );
-  // return (
-  //   <a
-  //   className=''
-  //   href='/help'
-  //   aria-label='Help'
-  //   title='Help'
-  //   aria-current={path === '/help' ? 'page' : undefined}>
-  //     Help
-  //   </a>
-  // );
-  // return (
-  //   <Button component='a' className='btn-nav workspace-icon-link' variant={path === '/help' ? 'contained' : 'text'} href='/help' aria-label='Help' title='Help' aria-current={path === '/help' ? 'page' : undefined}>
-  //     <HelpOutlineRoundedIcon aria-hidden='true' />
-  //   </Button>
-  // );
 };
 
 const ConnectionTestButton = ({ disabled, busy, busyLabel, label = 'Test Connection', type = 'button', onClick }: {
@@ -769,9 +727,6 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
           <JobsButton href={jobsHref} path={path} />
-          <PluginButton path={path} />
-          <WordpressButton path={path} />
-          <SettingsButton path={path} />
           <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} />
         </div>
       </header>
