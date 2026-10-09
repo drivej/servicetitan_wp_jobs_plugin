@@ -60,12 +60,18 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
         <p className="field-help">Invitations expire after 7 days and must be accepted using the invited Google email. Creating a new invite for the same email replaces its previous link.</p>
         <Button type="submit" variant="contained" className="primary" disabled={busy}>{busy ? 'Creating invitation…' : 'Create invitation'}</Button>
       </form>
-      {invite && <div className="notice" role="status">
-        <p>Invitation created for {invite.email}. Share the link below; no email has been sent automatically.</p>
-        <label>Invitation link<TextField className="team-invite-link" variant="outlined" size="small" fullWidth slotProps={{ htmlInput: { readOnly: true } }} value={invite.url} onFocus={(event) => event.target.select()} /></label>
-        <div className="account-actions"><Button onClick={() => { void navigator.clipboard.writeText(invite.url).then(() => setMessage('Invitation link copied.'), () => setError('Select and copy the invitation link above.')); }}>Copy link</Button>
-        <a href={`mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`}>Open email invitation</a></div>
-      </div>}
+      {invite && <section className="team-invitation-created" aria-labelledby="team-invitation-created-title">
+        <p className="eyebrow">Next step · Send the invitation</p>
+        <h3 id="team-invitation-created-title">Invitation ready for {invite.email}</h3>
+        <p>Creating the invitation does not email your teammate. Send them the invite link so they can join. They must sign in with this Google email address.</p>
+        <a className="team-invitation-email" href={`mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`}>Open a prefilled email to send</a>
+        <div className="team-invitation-link-row">
+          <label htmlFor="team-invitation-link">Or copy and send this invitation link</label>
+          <TextField id="team-invitation-link" className="team-invite-link" variant="outlined" size="small" fullWidth slotProps={{ htmlInput: { readOnly: true, 'aria-label': 'Invitation link' } }} value={invite.url} onFocus={(event) => event.target.select()} />
+          <Button onClick={() => { void navigator.clipboard.writeText(invite.url).then(() => setMessage('Invitation link copied. Send it to your teammate to complete the invitation.'), () => setError('Select and copy the invitation link above, then send it to your teammate.')); }}>Copy link</Button>
+        </div>
+        <p className="team-invitation-expiry">This link expires in 7 days. Creating another invitation for the same email replaces this link.</p>
+      </section>}
       <h3>Pending invitations</h3>
       {team?.invitations.length === 0 && <p>No pending invitations.</p>}
       <ul className="account-resource-list">{team?.invitations.map((pending) => <li key={pending.id}><div><strong>{pending.email}</strong><small>{pending.role} · Expires {new Date(pending.expiresAt).toLocaleDateString()}</small></div>{(role === 'owner' || pending.role === 'member') && <Button disabled={busy} onClick={() => void update(`/api/team/invitations/${pending.id}`, 'DELETE')}>Revoke</Button>}</li>)}</ul>
