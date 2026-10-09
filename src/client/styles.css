@@ -1352,8 +1352,8 @@ td strong {
   top: -5px;
   right: -5px;
   z-index: 1;
-  width: 17px;
-  height: 17px;
+  width: 12px;
+  height: 12px;
   border: 1px solid #d5ae55;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff5cf, #f2d47c 72%);
