@@ -40,12 +40,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create invitation.'); }
     finally { setBusy(false); }
   };
-  const openInvitationEmail = () => {
-    if (!invite) return;
-    const email = `mailto:${invite.email}?subject=Join my ServiceTitan Jobs workspace&body=You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`;
-    window.location.href = encodeURI(email);
-    setMessage('Your email app should open with the invitation ready to send. If it does not, copy the invitation link and send it in an email.');
-  };
+  const invitationMailto = invite ? `mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}` : undefined;
   return <section className="panel account-panel team-settings-panel" id="team">
     <h2>Team</h2>
     <p>Everyone on this team can process jobs on all workspace websites and uses the same token balance.</p>
@@ -70,7 +65,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
         <p className="eyebrow">Next step · Send the invitation</p>
         <h3 id="team-invitation-created-title">Invitation ready for {invite.email}</h3>
         <p>Creating the invitation does not email your teammate. Send them the invite link so they can join. They must sign in with this Google email address.</p>
-        <Button type="button" variant="contained" className="team-invitation-email" onClick={openInvitationEmail}>Open email app</Button>
+        <a className="team-invitation-email" href={invitationMailto}>Open email app</a>
         <div className="team-invitation-link-row">
           <label htmlFor="team-invitation-link">Or copy and send this invitation link</label>
           <TextField id="team-invitation-link" className="team-invite-link" variant="outlined" size="small" fullWidth slotProps={{ htmlInput: { readOnly: true, 'aria-label': 'Invitation link' } }} value={invite.url} onFocus={(event) => event.target.select()} />
