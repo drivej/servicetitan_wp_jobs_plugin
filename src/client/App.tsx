@@ -292,18 +292,18 @@ export function App() {
   }, [result, wordpressPluginReady, wordpressPluginStatus?.seoGeneratorVersion]);
 
   return (
-    <main>
+    <main className='jobs-page'>
       <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
       <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
 
       {wordpressPluginLoading ? (
-        <Alert severity="info" sx={{ mb: 2 }} role='status'>
+        <Alert severity="info" role='status'>
           Checking WordPress plugin compatibility…
         </Alert>
       ) : (
         !wordpressPluginReady &&
         !wordpressPluginUpdateRequired && (
-          <Alert severity="warning" sx={{ mb: 2 }} role='alert'>
+          <Alert severity="warning" role='alert'>
             <div>
               <strong>{wordpressPluginStatus?.state === 'update_required' ? 'WordPress plugin update required' : 'WordPress plugin could not be verified'}</strong>
               <span>
