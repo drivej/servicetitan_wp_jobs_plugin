@@ -27,7 +27,7 @@ export function MarketingPage() {
 
   return <main className="marketing-page">
     <header className="marketing-nav">
-      <a className="marketing-brand" href="/" aria-label="ServiceTitan Jobs home"><span className="brand-mark">S</span> ServiceTitan Jobs</a>
+      <a className="marketing-brand" href="/" aria-label="Job Showcase for ServiceTitan home"><span className="brand-mark">J</span> Job Showcase for ServiceTitan</a>
       <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><a className="nav-signin" href="/auth/google">Sign in <span aria-hidden="true">↗</span></a></nav>
     </header>
 
@@ -74,6 +74,6 @@ export function MarketingPage() {
     </section>
 
     <section className="closing-cta"><div><p className="marketing-eyebrow">YOUR NEXT GREAT PROJECT STORY</p><h2>Let the work speak<br/><em>for itself.</em></h2></div><a className="marketing-cta" href="/auth/google">Get started with Google <span>→</span></a></section>
-    <footer className="marketing-footer"><a className="marketing-brand" href="/"><span className="brand-mark">S</span> ServiceTitan Jobs</a><span>Turn completed work into a local story.</span><div><a href="/help">Setup guide</a><a href="#pricing">Pricing</a><a href="/auth/google">Sign in</a></div></footer>
+    <footer className="marketing-footer"><a className="marketing-brand" href="/"><span className="brand-mark">J</span> Job Showcase for ServiceTitan</a><span>Turn completed work into a local story.</span><div><a href="/help">Setup guide</a><a href="#pricing">Pricing</a><a href="/auth/google">Sign in</a></div></footer>
   </main>;
 }

@@ -82,7 +82,7 @@ async function json<T>(response: Response): Promise<T> {
 const BrandBanner = () => {
   return (
     <a className='workspace-brand p-3' href='/'>
-      ServiceTitan Jobs
+      Job Showcase for ServiceTitan
     </a>
   );
 };
@@ -456,7 +456,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   if (!loaded)
     return (
       <main className='account-page'>
-        <h1>ServiceTitan Jobs</h1>
+        <h1>Job Showcase for ServiceTitan</h1>
         <p role='alert'>{error}</p>
         {error && <Button onClick={() => window.location.reload()}>Try again</Button>}
       </main>

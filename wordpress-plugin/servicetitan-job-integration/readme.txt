@@ -1,4 +1,4 @@
-=== ServiceTitan Job Integration ===
+=== Job Showcase for ServiceTitan ===
 Contributors: servicetitan-jobs
 Tags: servicetitan, rest-api, custom-post-type
 Requires at least: 6.5
@@ -41,7 +41,7 @@ The plugin does not store ServiceTitan or WordPress credentials.
 1. Install and activate Advanced Custom Fields.
 2. Download the ZIP from the ServiceTitan Jobs application.
 3. In WordPress, go to Plugins > Add New Plugin > Upload Plugin.
-4. Select the ZIP, install it, and activate ServiceTitan Job Integration.
+4. Select the ZIP, install it, and activate Job Showcase for ServiceTitan.
 5. Confirm the integration user has the post type's edit and publish capabilities.
 
 Developers can change the default st_job post type key with the stji_post_type

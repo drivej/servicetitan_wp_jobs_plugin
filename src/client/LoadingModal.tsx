@@ -19,7 +19,7 @@ export function LoadingModal({ open, label = 'Loading page' }: { open: boolean; 
 export function LoadingPage() {
   return <>
     <div className='loading-page-placeholder' aria-hidden='true' inert>
-      <header className='workspace-bar'><span className='workspace-brand p-3'>ServiceTitan Jobs</span><div className='loading-placeholder-nav' /></header>
+      <header className='workspace-bar'><span className='workspace-brand p-3'>Job Showcase for ServiceTitan</span><div className='loading-placeholder-nav' /></header>
       <main className='account-page'>
         <div className='loading-placeholder-title' />
         <div className='loading-placeholder-description' />

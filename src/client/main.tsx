@@ -79,7 +79,7 @@ function WelcomePage() {
     <main className='account-page'>
       <PageHeader
         eyebrow='Your workspace'
-        title='Welcome to ServiceTitan Jobs'
+        title='Welcome to Job Showcase for ServiceTitan'
         description='Browse the latest ServiceTitan jobs and choose one to work on.'
         actions={<Button component='a' href='/jobs' variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>}>View latest jobs</Button>}
       />

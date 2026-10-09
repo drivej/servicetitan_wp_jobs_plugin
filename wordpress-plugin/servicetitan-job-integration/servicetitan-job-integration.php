@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: ServiceTitan Job Integration
+ * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
  * Version: 1.18.1
  * Requires at least: 6.5
