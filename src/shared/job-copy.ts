@@ -17,15 +17,23 @@ export interface GeneratedJobCopy {
 export const formatJobCopy = ({ title, bodyHtml }: GeneratedJobCopy): string =>
   `TITLE: ${title.trim()}\nBODY:\n${bodyHtml.trim()}`;
 
-export const hasCompleteJobBody = (copy: GeneratedJobCopy): boolean =>
-  Boolean(copy.title.trim() && isWordPressBodyHtml(copy.bodyHtml));
+export const hasCompleteJobBody = (copy: unknown): copy is GeneratedJobCopy => {
+  if (!copy || typeof copy !== 'object') return false;
+  const record = copy as Record<string, unknown>;
+  return typeof record.title === 'string'
+    && record.title.trim().length > 0
+    && typeof record.bodyHtml === 'string'
+    && isWordPressBodyHtml(record.bodyHtml);
+};
 
 export const hasFormattedJobBody = (value: string): boolean => {
+  if (typeof value !== 'string') return false;
   const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]+)$/i);
   return Boolean(match && isWordPressBodyHtml(match[2]!.trim()));
 };
 
-export const isWordPressBodyHtml = (value: string): boolean => {
+export const isWordPressBodyHtml = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
   if (value.length < 40 || value.length > 6_000 || /<(?!\/?(?:p|blockquote)\b)[^>]*>/i.test(value)) return false;
   const blocks = value.match(/<(p|blockquote)>([\s\S]*?)<\/\1>/gi) || [];
   const paragraphs = blocks.filter((block) => /^<p>/i.test(block));
