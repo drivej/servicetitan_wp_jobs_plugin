@@ -26,7 +26,9 @@ const page = helpTopicMatch
     ? <main className='account-page'><PageHeaderFallback /><BillingPlans workspaceId='current' /></main>
   : path === '/wordpress-plugin'
     ? <WordPressPluginSetup />
-    : jobDetailsMatch
+  : path === '/team'
+    ? <WelcomePage />
+  : jobDetailsMatch
       ? <JobDetails jobId={Number(jobDetailsMatch[1])} />
       : path === '/jobs'
         ? <App />

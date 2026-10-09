@@ -58,7 +58,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
         <label>Google account email<TextField variant="outlined" size="small" fullWidth name="email" type="email" required placeholder="teammate@company.com" slotProps={{ htmlInput: { maxLength: 254 } }}/></label>
         <label>Role<Select size="small" variant='outlined' sx={{ width: '100%' }} name="role" aria-label="Role" defaultValue="member"><MenuItem value="member">Member</MenuItem>{role === 'owner' && <MenuItem value="admin">Admin</MenuItem>}</Select></label>
         <p className="field-help">Invitations expire after 7 days and must be accepted using the invited Google email. Creating a new invite for the same email replaces its previous link.</p>
-        <Button variant="contained" className="primary" disabled={busy}>Create invitation</Button>
+        <Button type="submit" variant="contained" className="primary" disabled={busy}>{busy ? 'Creating invitation…' : 'Create invitation'}</Button>
       </form>
       {invite && <div className="notice" role="status">
         <p>Invitation created for {invite.email}. Share the link below; no email has been sent automatically.</p>
