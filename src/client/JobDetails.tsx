@@ -427,7 +427,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
               <h2 id='ai-copy-heading'>Prepare the complete post</h2>
             </div>
             <p>
-              <Button variant='contained' className='primary generate-copy-button' type='button' disabled={generatingCopy || !hasValidImage} aria-disabled={generatingCopy || tokensExhausted || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : undefined} onClick={() => { if (tokensExhausted) { showTokenError(); return; } void generateAiCopy(); }}>
+              <Button variant='contained' className='primary generate-copy-button token-cost' type='button' disabled={generatingCopy || !hasValidImage} aria-disabled={generatingCopy || tokensExhausted || !hasValidImage} title={!hasValidImage ? 'This job needs at least one working image before generating copy.' : 'Uses 1 job token.'} onClick={() => { if (tokensExhausted) { showTokenError(); return; } void generateAiCopy(); }}>
                 {generatingCopy ? 'Generating…' : 'Generate Copy'}
               </Button>
             </p>

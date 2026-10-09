@@ -1342,6 +1342,24 @@ td strong {
 .workspace-token-pill.is-current { box-shadow: 0 0 0 2px #d4a94355, 0 2px 8px #9b741d33; }
 .workspace-token-pill strong { font-weight: 800; }
 .workspace-token-dot { color: #a47719; font-size: 0.8rem; }
+.token-cost.MuiButton-root {
+  position: relative;
+  overflow: visible;
+}
+.token-cost.MuiButton-root::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 1;
+  width: 17px;
+  height: 17px;
+  border: 1px solid #d5ae55;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff5cf, #f2d47c 72%);
+  box-shadow: 0 1px 3px #80601d44, inset 0 0 0 2px #f8e6a8;
+  pointer-events: none;
+}
 .workspace-token-pill.is-spending { animation: token-spend-glow 700ms ease-out; }
 .workspace-token-pill.is-spending::after {
   content: '';
