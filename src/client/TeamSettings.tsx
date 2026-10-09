@@ -40,7 +40,9 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create invitation.'); }
     finally { setBusy(false); }
   };
-  const invitationMailto = invite ? `mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}` : undefined;
+  const invitationMailto = invite
+    ? `mailto:${invite.email}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`
+    : undefined;
   return <section className="panel account-panel team-settings-panel" id="team">
     <h2>Team</h2>
     <p>Everyone on this team can process jobs on all workspace websites and uses the same token balance.</p>
