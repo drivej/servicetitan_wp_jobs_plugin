@@ -6,6 +6,7 @@ export interface WordPressStatus {
   link?: string;
   postTitle?: string;
   postExcerpt?: string;
+  postModifiedOn?: string;
   message?: string;
   seoVersion?: number;
   currentSeoVersion?: number;
@@ -14,6 +15,19 @@ export interface WordPressStatus {
   featuredImageId?: number;
   featuredImageFileName?: string;
   featuredImageAttachmentId?: string;
+}
+
+export function isSeoPromptOutOfSync(status: WordPressStatus, serviceTitanModifiedOn?: string): boolean {
+  if (status.state !== 'exists' || status.seoState === 'newer') return false;
+  const serviceTitanModifiedTime = serviceTitanModifiedOn ? Date.parse(serviceTitanModifiedOn) : Number.NaN;
+  const wordpressModifiedTime = status.postModifiedOn ? Date.parse(status.postModifiedOn) : Number.NaN;
+  if (Number.isFinite(serviceTitanModifiedTime) && Number.isFinite(wordpressModifiedTime)
+    && serviceTitanModifiedTime > wordpressModifiedTime) return true;
+  if (status.seoVersion !== undefined && status.currentSeoVersion !== undefined) {
+    return status.seoVersion < status.currentSeoVersion;
+  }
+  return status.seoState === 'legacy' || status.seoState === 'outdated'
+    || (status.seoState === 'modified' && status.seoVersion === undefined);
 }
 
 interface CachedWordPressStatus {

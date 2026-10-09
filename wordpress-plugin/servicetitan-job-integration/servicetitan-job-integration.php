@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.18.1
+ * Version: 1.18.2
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.18.1');
+define('STJI_VERSION', '1.18.2');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -706,6 +706,7 @@ function stji_rest_bulk_statuses(WP_REST_Request $request)
             'link'       => is_string($link) ? $link : '',
             'postTitle'  => $post->post_title,
             'postExcerpt' => $post->post_excerpt,
+            'postModifiedOn' => get_post_modified_time('c', false, $post),
             'seoVersion' => $seo_version,
             'seoModified' => '' !== $generated_hash && !hash_equals($generated_hash, stji_generated_content_hash($post)),
             'generatedAt' => $generated_at,

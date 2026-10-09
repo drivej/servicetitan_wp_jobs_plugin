@@ -26,7 +26,7 @@ function fixture() {
       return { title: 'Drain Clearing in Torrance, CA', bodyHtml: '<p>The company completed drain clearing in Torrance, California, to address a reported kitchen blockage.</p><p>The technician assessed the reported issue and identified the affected drain line.</p><p>The documented drain clearing addressed the reported blockage. Contact the company for drain service in Torrance.</p>' };
     } },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.1', seoGeneratorVersion: 6 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.18.2', seoGeneratorVersion: 6 }),
       getStatus: async () => ({ state: 'not_found', label: 'None' }), getStatuses: async () => ({}),
       pushJob: async (job, images, status, copy) => {
         assert.equal(job.id, 42); assert.equal(images.length, 1); assert.equal(images[0]?.id, 'first');

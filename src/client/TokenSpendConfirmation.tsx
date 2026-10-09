@@ -6,7 +6,6 @@ import { isSaaSWorkspace, tokenPreferenceKey } from './api';
 const actionLabels = {
   ai_generation: 'Generate Copy',
   push: 'Push to WordPress',
-  rebuild: 'Rebuild Post',
   update_seo: 'Update SEO',
 } as const;
 type TokenAction = keyof typeof actionLabels;

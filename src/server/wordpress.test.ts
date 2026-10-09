@@ -55,7 +55,7 @@ test('reports a missing WordPress post with the current SEO version', async () =
 test('detects the installed companion plugin version', async () => {
   const mockFetch: typeof fetch = async (input) => {
     assert.equal(String(input), 'https://wordpress.example/wp-json/servicetitan-job-integration/v1/status');
-    return new Response(JSON.stringify({ version: '1.18.1' }), {
+    return new Response(JSON.stringify({ version: '1.18.2' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -64,8 +64,8 @@ test('detects the installed companion plugin version', async () => {
 
   assert.deepEqual(await client.getPluginStatus(), {
     state: 'current',
-    requiredVersion: '1.18.1',
-    installedVersion: '1.18.1',
+    requiredVersion: '1.18.2',
+    installedVersion: '1.18.2',
     seoGeneratorVersion: SEO_GENERATOR_VERSION,
   });
 });
@@ -75,7 +75,7 @@ test('syncs the configured ACF field and backfills missing ZIP location metadata
   const mockFetch: typeof fetch = async (input, init) => {
     requests.push({ url: String(input), ...(init ? { init } : {}) });
     if (requests.length === 1) {
-      return new Response(JSON.stringify({ version: '1.18.1' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ version: '1.18.2' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (requests.length === 2) {
       return new Response(JSON.stringify({ zipcodes: [
@@ -120,7 +120,7 @@ test('requires an update when the companion plugin status route is missing', asy
   const status = await client.getPluginStatus();
 
   assert.equal(status.state, 'update_required');
-  assert.equal(status.requiredVersion, '1.18.1');
+  assert.equal(status.requiredVersion, '1.18.2');
 });
 
 test('loads multiple correlated post statuses in one plugin request', async () => {
@@ -136,6 +136,7 @@ test('loads multiple correlated post statuses in one plugin request', async () =
           postStatus: 'publish',
           postTitle: 'Existing WordPress title',
           postExcerpt: 'Existing WordPress excerpt.',
+          postModifiedOn: '2026-08-02T11:00:00',
           seoVersion: 1,
           seoModified: false,
         },
@@ -153,6 +154,7 @@ test('loads multiple correlated post statuses in one plugin request', async () =
   assert.equal(statuses[123456]?.postStatus, 'publish');
   assert.equal(statuses[123456]?.postTitle, 'Existing WordPress title');
   assert.equal(statuses[123456]?.postExcerpt, 'Existing WordPress excerpt.');
+  assert.equal(statuses[123456]?.postModifiedOn, '2026-08-02T11:00:00');
   assert.equal(statuses[123456]?.seoState, 'outdated');
   assert.equal(statuses[123456]?.currentSeoVersion, SEO_GENERATOR_VERSION);
   assert.equal(statuses[123457]?.state, 'not_found');
@@ -261,6 +263,7 @@ test('updates the status of a correlated WordPress post', async () => {
       slug: 'servicetitan-job-123456',
       status: 'publish',
       link: 'https://wordpress.example/jobs/servicetitan-job-123456',
+      modified: '2026-09-11T10:15:00',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   const client = new WordPressClient(config, mockFetch);
@@ -271,6 +274,7 @@ test('updates the status of a correlated WordPress post', async () => {
   assert.equal(requests[1]!.init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(requests[1]!.init?.body)), { status: 'publish' });
   assert.equal(status.postStatus, 'publish');
+  assert.equal(status.postModifiedOn, '2026-09-11T10:15:00');
   assert.equal(status.seoState, 'current');
 });
 

@@ -10,6 +10,8 @@ interface WordPressPost {
   slug: string;
   status: string;
   link?: string;
+  modified_gmt?: string;
+  modified?: string;
 }
 
 interface WordPressErrorBody {
@@ -24,6 +26,7 @@ export interface WordPressPostStatus {
   link?: string;
   postTitle?: string;
   postExcerpt?: string;
+  postModifiedOn?: string;
   message?: string;
   seoVersion?: number;
   currentSeoVersion?: number;
@@ -55,7 +58,7 @@ export interface WordPressProvider {
 }
 
 type FetchImplementation = typeof fetch;
-export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.18.1';
+export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.18.2';
 export const SEO_GENERATOR_VERSION = 7;
 
 export class WordPressClient implements WordPressProvider {
@@ -134,10 +137,12 @@ export class WordPressClient implements WordPressProvider {
       body: JSON.stringify({ jobIds: serviceTitanJobIds }),
     });
     const body = await parseJson<{ statuses?: Record<string, WordPressPostStatus> }>(response);
+    const rawStatuses = body.statuses || {};
     const statuses: Record<number, WordPressPostStatus> = {};
 
     for (const jobId of serviceTitanJobIds) {
-      statuses[jobId] = decorateSeoStatus(body.statuses?.[String(jobId)] || { state: 'not_found', label: 'None' });
+      const status = rawStatuses[String(jobId)] || { state: 'not_found' as const, label: 'None' };
+      statuses[jobId] = decorateSeoStatus(status);
     }
     return statuses;
   }
@@ -370,7 +375,7 @@ export class WordPressClient implements WordPressProvider {
     url.searchParams.set('status', 'any');
     url.searchParams.set('context', 'edit');
     url.searchParams.set('per_page', '1');
-    url.searchParams.set('_fields', 'id,slug,status,link');
+    url.searchParams.set('_fields', 'id,slug,status,link,modified_gmt');
 
     const response = await this.request(url.toString());
     const posts = await parseJson<WordPressPost[]>(response);
@@ -462,6 +467,7 @@ const postToStatus = (post: WordPressPost): WordPressPostStatus => ({
   postId: post.id,
   postStatus: post.status,
   ...(post.link ? { link: post.link } : {}),
+  ...(post.modified_gmt || post.modified ? { postModifiedOn: post.modified_gmt || post.modified } : {}),
 });
 
 const decorateSeoStatus = (

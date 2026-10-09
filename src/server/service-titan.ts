@@ -8,7 +8,7 @@ import { publicFetch } from './saas/public-fetch.js';
 
 interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
-interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
+interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; modifiedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
 interface ServiceTitanJobType { id: number; name: string; }
 interface ServiceTitanLocation { id: number; address?: { street?: string; unit?: string; city?: string; state?: string; zip?: string; }; }
 interface ServiceTitanInstalledEquipment { id: number; name?: string | null; }
@@ -35,6 +35,7 @@ export interface JobListItem {
   jobName: string;
   status: string;
   completedOn?: string;
+  modifiedOn?: string;
   location: { address?: string; city: string; state: string; zip: string; };
   summaryText?: string;
   seoDetails?: { issue?: string; action?: string; };
@@ -463,6 +464,7 @@ export class ServiceTitanClient implements JobsProvider {
         jobName: jobTypeById.get(job.jobTypeId)?.name || `Job ${job.jobNumber}`,
         status: job.jobStatus,
         ...(job.completedOn ? { completedOn: job.completedOn } : {}),
+        ...(job.modifiedOn ? { modifiedOn: job.modifiedOn } : {}),
         location: {
           ...(includeStreetAddress && address ? { address: formatServiceAddress(address) } : {}),
           city: address?.city || '—',
