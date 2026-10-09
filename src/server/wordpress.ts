@@ -56,7 +56,7 @@ export interface WordPressProvider {
 
 type FetchImplementation = typeof fetch;
 export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.18.1';
-export const SEO_GENERATOR_VERSION = 6;
+export const SEO_GENERATOR_VERSION = 7;
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;
