@@ -47,7 +47,7 @@ export function TokenBalanceCard({ tokens }: { tokens: number }) {
         </p>
         <p className='token-balance-message'>{empty ? 'Your token reserve is empty.' : 'Ready for your next great post.'}</p>
         <p className='token-balance-description'>{empty
-          ? 'Add tokens below to get back to publishing, rebuilding posts, and creating AI descriptions.'
+          ? 'Add tokens below to generate copy, build drafts, and update existing posts.'
           : 'Put your tokens to work turning completed jobs into your next great posts.'}</p>
       </div>
       <div className='token-balance-art' aria-hidden='true'>

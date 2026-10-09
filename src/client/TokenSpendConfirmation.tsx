@@ -2,13 +2,7 @@ import { Checkbox } from '@mui/material';
 import { Button } from '@mui/material';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isSaaSWorkspace, tokenPreferenceKey } from './api';
-
-const actionLabels = {
-  ai_generation: 'Generate Copy',
-  push: 'Push to WordPress',
-  update_seo: 'Update SEO',
-} as const;
-type TokenAction = keyof typeof actionLabels;
+import { TOKEN_ACTIONS, type TokenAction } from '../shared/token-actions';
 interface PendingConfirmation {
   action: TokenAction;
   preferenceKey: string;
@@ -36,7 +30,9 @@ export function useTokenSpendConfirmation() {
     if (pendingRef.current) return Promise.resolve(false);
     // Standalone installations do not charge tokens.
     if (!isSaaSWorkspace()) return Promise.resolve(true);
-    const preferenceKey = tokenPreferenceKey(action, 1);
+    const cost = TOKEN_ACTIONS[action].cost;
+    if (cost === 0) return Promise.resolve(true);
+    const preferenceKey = tokenPreferenceKey(action, cost);
     try {
       if (window.localStorage.getItem(preferenceKey) === 'hidden') return Promise.resolve(true);
     } catch { /* Ask normally when browser storage is unavailable. */ }
@@ -68,8 +64,8 @@ export function useTokenSpendConfirmation() {
     aria-describedby={descriptionId}
     onCancel={(event) => { event.preventDefault(); finish(false); }}
   >
-    <h2 id={titleId}>{pending ? actionLabels[pending.action] : 'Confirm token spend'}</h2>
-    <p id={descriptionId}>This will cost 1 token. Continue?</p>
+    <h2 id={titleId}>{pending ? TOKEN_ACTIONS[pending.action].label : 'Confirm token spend'}</h2>
+    <p id={descriptionId}>This will cost {pending ? TOKEN_ACTIONS[pending.action].cost : 1} token{pending && TOKEN_ACTIONS[pending.action].cost === 1 ? '' : 's'}. Continue?</p>
     <label className="token-spend-preference">
       <Checkbox checked={dontShowAgain} onChange={(event) => setDontShowAgain(event.target.checked)} />
       <span>Don’t show this again for this action</span>

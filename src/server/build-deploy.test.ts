@@ -40,10 +40,10 @@ function fixture() {
   return { providers, events };
 }
 
-test('build generates validated copy, selects first usable image and pushes a draft with normal token accounting', async () => {
+test('build generates validated copy, selects first usable image and pushes a draft for one token', async () => {
   const { providers, events } = fixture();
   assert.equal((await buildAndDeploy(42, providers)).postStatus, 'draft');
-  assert.deepEqual(events, ['image:broken', 'image:first', 'spend:ai_generation', 'generate', 'spend:push', 'push:draft']);
+  assert.deepEqual(events, ['image:broken', 'image:first', 'spend:build', 'generate', 'push:draft']);
 });
 
 test('missing images, existing posts, unknown status and invalid copy cannot publish', async () => {

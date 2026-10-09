@@ -45,7 +45,7 @@ job data on the server and sends the service title, redacted summary, service
 address, and available equipment names to the OpenAI Responses API. A strict
 JSON schema requires separate `title` and `excerpt` fields. The generated result
 is placed in the existing editor for human review; it is not published until the
-user chooses **Push** or **Rebuild**. The prompt permits city, state, and ZIP in
+user chooses **Push** or **Update**. The prompt permits city, state, and ZIP in
 public copy while explicitly prohibiting the street address and unit number.
 
 ## WordPress configuration
@@ -218,7 +218,7 @@ The dates are inclusive calendar dates and filter on a job's first appointment. 
 
 ### Job tokens
 
-Hosted accounts display their available job tokens in the workspace header. Each successful WordPress push, rebuild, or AI copy generation costs one token; status changes and reads are free. The active workspace shares one balance across its team and websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
+Hosted accounts display their available job tokens in the workspace header. Generating copy costs one token. Build costs one token for the combined copy generation and draft creation. Update costs one token for fresh copy generation and updating the existing post. Publishing a draft, changing post status, and reading data are free. The active workspace shares one balance across its team and websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
 
 Apply all migrations, including `005_token_ledger.sql`, and the runtime-role grants in [the ledger setup guide](docs/token-ledger.md) before starting the updated server. New workspaces start with zero tokens. Platform administrators allocate or correct tokens through **Token admin**, which records an audited ledger transaction; direct balance updates are rejected. When `ENABLE_TEST_TOKENS=true`, workspace owners can also add one free token at a time on Add Tokens; disable this setting before paid use.
 
@@ -311,9 +311,9 @@ https://callwiseway.com/recent-project/garbage-disposal-replacement-in-hermosa-b
 
 ### One-click build and deploy
 
-On the job list, **Build & deploy** queues a job that has no WordPress post. The server fetches its details, selects the first downloadable image in attachment order, generates and validates complete copy, and pushes a **draft**. Closing the browser or signing out does not cancel an accepted task. Queued/running state and any failure are shown when the list is opened again. Existing posts use the existing Details/Rebuild workflow.
+On the job list, **Build** queues a job that has no WordPress post. The server fetches its details, selects the first downloadable image in attachment order, generates and validates complete copy, and pushes a **draft**. Closing the browser or signing out does not cancel an accepted task. Queued/running state and any failure are shown when the list is opened again. Existing posts use the Details/Update workflow.
 
-The action uses the existing token rules: one token for successful copy generation and one for a successful WordPress push. If the push fails after generation, the generation token remains spent; retrying generates new copy. Missing images fail before generation. The button submits immediately without a confirmation dialog.
+The action costs one token for the combined copy generation and WordPress draft creation. Missing images fail before the paid operation. The button submits immediately without a confirmation dialog.
 
 SaaS deployments must run migrations through `011_token_spend_reservations.sql` before starting this version. For a separate runtime role, also grant `SELECT, INSERT, UPDATE` on `build_deploy_tasks` and `token_spend_operations` (substitute your actual role):
 

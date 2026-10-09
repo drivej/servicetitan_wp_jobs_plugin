@@ -228,6 +228,7 @@ test('all paid routes enforce the server token gate even with forged billing fie
   const actions: string[] = [];
   let imageUnavailable = false;
   const app = createApp({
+    copyGenerator: { generate: async () => ({ title: 'Drain Clearing in Austin, TX', bodyHtml: '<p>The company completed drain clearing in Austin, Texas, for a reported kitchen blockage.</p><p>The technician reviewed the reported drain concern.</p><p>The documented work addressed the blockage. Contact the company for drain service.</p>' }) },
     spendJobToken: async (action) => { actions.push(action); throw new HttpError('No job tokens available.', 402); },
     serviceTitan: {
       getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
@@ -257,7 +258,7 @@ test('all paid routes enforce the server token gate even with forged billing fie
       assert.equal(response.status, 402);
       assert.match((await response.json()).error, /No job tokens/);
     }
-    assert.deepEqual(actions, ['ai_generation', 'push', 'rebuild']);
+    assert.deepEqual(actions, ['ai_generation', 'build', 'update']);
     imageUnavailable = true;
     const failedPush = await fetch(`http://127.0.0.1:${address.port}/api/jobs/1/wordpress`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -266,6 +267,6 @@ test('all paid routes enforce the server token gate even with forged billing fie
     assert.equal(failedPush.status, 502);
     assert.match((await failedPush.json()).error, /Image unavailable/);
     // The token callback and WordPress publishing are never reached when the image fails.
-    assert.deepEqual(actions, ['ai_generation', 'push', 'rebuild']);
+    assert.deepEqual(actions, ['ai_generation', 'build', 'update']);
   } finally { await new Promise<void>((done, reject) => server.close((error) => error ? reject(error) : done())); }
 });

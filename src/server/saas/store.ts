@@ -1,4 +1,6 @@
 import { postTokenTransaction } from './token-ledger.js';
+import { TOKEN_ACTIONS, type TokenAction } from '../../shared/token-actions.js';
+import { TokenOperationSafeFailure } from '../token-operation.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database, Sql } from './database.js';
 import { hashToken, randomToken, type SecretVault } from './crypto.js';
@@ -344,6 +346,9 @@ export class AccountStore {
     });
   }
   async spendJobToken<T>(userId: string, websiteId: string, action: string, operation: () => Promise<T>, workspaceId = userId, jobId: number | undefined = undefined, operationId: string = randomUUID(), fingerprint = ''): Promise<T> {
+    if (!Object.hasOwn(TOKEN_ACTIONS, action)) throw new HttpError('Unknown token action.', 400);
+    const cost = TOKEN_ACTIONS[action as TokenAction].cost;
+    if (cost === 0) return operation();
     if (!/^[a-zA-Z0-9:_-]{1,128}$/.test(operationId)) throw new HttpError('A valid Idempotency-Key is required.');
     const requestFingerprint = createHash('sha256').update(fingerprint).digest('hex');
     const reservation = await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
@@ -353,7 +358,7 @@ export class AccountStore {
         FROM token_spend_operations WHERE workspace_id=$1 AND action='ai_generation' AND state='reserved'
         AND updated_at < now()-interval '5 minutes' FOR UPDATE`, [workspaceId])).rows;
       for (const old of abandonedCopies) {
-        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: 1,
+        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: TOKEN_ACTIONS[String(old.action) as TokenAction]?.cost || 1,
           actorUserId: String(old.actor_user_id), websiteId: String(old.website_id), ...(old.job_id == null ? {} : { jobId: Number(old.job_id) }),
           reference: `spend-refund:${String(old.operation_id)}:${Number(old.attempt)}`, reason: 'Abandoned AI generation reservation refund' });
         await sql.query("UPDATE token_spend_operations SET state='failed',updated_at=now() WHERE workspace_id=$1 AND operation_id=$2 AND state='reserved'", [workspaceId, old.operation_id]);
@@ -381,8 +386,8 @@ export class AccountStore {
       if (blocking) throw new HttpError(`A previous operation for this job is unresolved. Reconcile operation ${String(blocking.operation_id)} before starting another.`, 409);
       const attempt = existing ? Number(existing.attempt) + 1 : 1;
       const row = (await sql.query('SELECT job_tokens FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
-      if (!row || Number(row.job_tokens) < 1) throw new HttpError('No job tokens available. Add tokens before trying again.', 402);
-      await postTokenTransaction(sql, { workspaceId, kind: 'spend', requestedAmount: -1, actorUserId: userId, websiteId,
+      if (!row || Number(row.job_tokens) < cost) throw new HttpError('No job tokens available. Add tokens before trying again.', 402);
+      await postTokenTransaction(sql, { workspaceId, kind: 'spend', requestedAmount: -cost, actorUserId: userId, websiteId,
         ...(jobId === undefined ? {} : { jobId }), reference: `spend:${operationId}:${attempt}`, reason: action });
       if (existing) {
         await sql.query("UPDATE token_spend_operations SET state='reserved',attempt=$3,result=NULL,error=NULL,updated_at=now() WHERE workspace_id=$1 AND operation_id=$2", [workspaceId, operationId, attempt]);
@@ -401,10 +406,11 @@ export class AccountStore {
       // Copy generation has no WordPress side effect and can be safely refunded
       // and retried with the same key. A WordPress error can follow a successful
       // partial write, so keep its reservation charged and require reconciliation.
-      if (action === 'ai_generation') await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'failed', undefined, true);
+      const safeFailure = error instanceof TokenOperationSafeFailure;
+      if (action === 'ai_generation' || safeFailure) await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'failed', undefined, true);
       else await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'uncertain');
-      if (action !== 'ai_generation') throw new HttpError(`The provider outcome could not be confirmed. Check WordPress before retrying. Operation ID: ${operationId}`, 409);
-      throw error;
+      if (action !== 'ai_generation' && !safeFailure) throw new HttpError(`The provider outcome could not be confirmed. Check WordPress before retrying. Operation ID: ${operationId}`, 409);
+      throw safeFailure ? error.originalError : error;
     }
     await this.finishSpendOperation(userId, workspaceId, operationId, reservation.attempt, 'settled', result);
     return result;
@@ -419,7 +425,7 @@ export class AccountStore {
       if (!changed.rows.length) return;
       const row = changed.rows[0]!;
       if (refund) {
-        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: 1,
+        await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: TOKEN_ACTIONS[String(row.action) as TokenAction]?.cost || 1,
           actorUserId: String(row.actor_user_id), websiteId: String(row.website_id), ...(row.job_id == null ? {} : { jobId: Number(row.job_id) }),
           reference: `spend-refund:${operationId}:${attempt}`, reason: `Failed ${String(row.action)} operation refund` });
       }

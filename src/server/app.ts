@@ -10,9 +10,10 @@ import type { JobsProvider, JobsQuery } from './service-titan.js';
 import { ServiceTitanRequestError } from './service-titan-error.js';
 import type { ApprovedPostCopy, WordPressProvider, WordPressWritableStatus } from './wordpress.js';
 import { WordPressRequestError } from './wordpress-error.js';
+import { TokenOperationSafeFailure } from './token-operation.js';
 
 import type { BuildTask } from '../shared/build-queue.js';
-import { isWordPressBodyHtml } from '../shared/job-copy.js';
+import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
@@ -152,7 +153,7 @@ export const createApp = ({
       const approvedCopy = parseApprovedPostCopy(request.body?.aiCopy, true)!;
       const details = await serviceTitan.getJobDetails(jobId);
       const images = await Promise.all(attachmentIds.map((attachmentId) => serviceTitan.getJobImage(jobId, attachmentId)));
-      response.status(201).json(await spendJobToken('push', () => wordpress.pushJob(details.summary, images, status, approvedCopy), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'push', jobId, attachmentIds, status, approvedCopy })));
+      response.status(201).json(await spendJobToken('build', () => wordpress.pushJob(details.summary, images, status, approvedCopy), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'build', jobId, attachmentIds, status, approvedCopy })));
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/wordpress/regenerate`, async (request, response, next) => {
@@ -160,11 +161,19 @@ export const createApp = ({
       const jobId = parseJobId(request.params.jobId);
       const force = parseRegenerationForce(request.body?.force);
       const attachmentId = parseOptionalAttachmentId(request.body?.attachmentId);
-      const approvedCopy = parseApprovedPostCopy(request.body?.aiCopy, false);
       const details = await serviceTitan.getJobDetails(jobId);
       const image = attachmentId ? await serviceTitan.getJobImage(jobId, attachmentId) : undefined;
+      const promptSource = { ...details.summary,
+        technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
+        imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+      };
       response.set('Cache-Control', 'no-store');
-      response.json(await spendJobToken('rebuild', () => wordpress.regenerateJob(details.summary, force, image, approvedCopy), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'rebuild', jobId, force, attachmentId, approvedCopy })));
+      response.json(await spendJobToken('update', async () => {
+        let approvedCopy: ApprovedPostCopy;
+        try { approvedCopy = parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(promptSource)), true)!; }
+        catch (error) { throw new TokenOperationSafeFailure(error); }
+        return wordpress.regenerateJob(details.summary, force, image, approvedCopy);
+      }, jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'update', jobId, force, attachmentId })));
     } catch (error) { next(error); }
   });
   const updateWordpressStatus: RequestHandler = async (request, response, next) => {
@@ -172,7 +181,7 @@ export const createApp = ({
       const jobId = parseJobId(request.params.jobId);
       const status = parseWordPressStatus(request.body?.status);
       response.set('Cache-Control', 'no-store');
-      response.json(await wordpress.updateStatus(jobId, status));
+      response.json(await spendJobToken('publish', () => wordpress.updateStatus(jobId, status), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'publish', jobId, status })));
     } catch (error) { next(error); }
   };
   app.post(`${apiPrefix}/jobs/:jobId/wordpress/status`, updateWordpressStatus);

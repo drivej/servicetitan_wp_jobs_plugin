@@ -4,6 +4,7 @@ import type { JobsProvider, JobImage } from './service-titan.js';
 import type { WordPressProvider } from './wordpress.js';
 import { formatJobCopy } from '../shared/job-copy.js';
 import { parseApprovedPostCopy } from './app.js';
+import { TokenOperationSafeFailure } from './token-operation.js';
 
 export interface BuildProviders {
   serviceTitan: JobsProvider;
@@ -16,7 +17,7 @@ export async function buildAndDeploy(jobId: number, providers: BuildProviders, o
   const { serviceTitan, wordpress, copyGenerator, spendJobToken = async (_action, operation) => operation() } = providers;
   if ((await wordpress.getPluginStatus()).state !== 'current') throw new Error('Verify the WordPress plugin before building a draft.');
   const existing = await wordpress.getStatus(jobId);
-  if (existing.state === 'exists') throw new Error('This job already has a WordPress post. Open Details to rebuild it.');
+  if (existing.state === 'exists') throw new Error('This job already has a WordPress post. Open Details to update it.');
   if (existing.state !== 'not_found') throw new Error('Unable to verify whether this job already has a WordPress post.');
   const details = await serviceTitan.getJobDetails(jobId);
   let image: JobImage | undefined;
@@ -30,9 +31,10 @@ export async function buildAndDeploy(jobId: number, providers: BuildProviders, o
     } catch { /* Try the next available image in source order. */ }
   }
   if (!image) throw new Error('This job has no available image. Add a working image and try again.');
-  const copy = await spendJobToken('ai_generation', async () =>
-    parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(details.summary)), true)!, jobId,
-    `${operationScopeId}-ai`, JSON.stringify({ operationScopeId, stage: 'ai_generation', jobId }));
-  return spendJobToken('push', () => wordpress.pushJob(details.summary, [image!], 'draft', copy), jobId,
-    `${operationScopeId}-push`, JSON.stringify({ operationScopeId, stage: 'push', jobId, attachmentId: image.id, copy }));
+  return spendJobToken('build', async () => {
+    let copy;
+    try { copy = parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(details.summary)), true)!; }
+    catch (error) { throw new TokenOperationSafeFailure(error); }
+    return wordpress.pushJob(details.summary, [image!], 'draft', copy);
+  }, jobId, `${operationScopeId}-build`, JSON.stringify({ operationScopeId, stage: 'build', jobId, attachmentId: image.id }));
 }

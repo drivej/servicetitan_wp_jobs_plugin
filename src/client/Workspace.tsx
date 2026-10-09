@@ -756,7 +756,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       )}
       {!onboardingPage && tokensExhausted && (isLocal || onboardingComplete) && (
         <div className='token-violator' role='status'>
-          <span>You’re out of job tokens. Add tokens to keep publishing and rebuilding posts.</span>
+          <span>You’re out of job tokens. Add tokens to generate copy, build drafts, and update existing posts.</span>
           <Button component='a' href='/add-tokens' className='token-violator-link'>
             Get tokens
           </Button>
@@ -819,7 +819,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         )
       ) : tokensPage ? (
         <main className='app-page'>
-          <PageHeader  eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to publish posts, rebuild posts, and generate AI descriptions.' />
+          <PageHeader  eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to generate copy, build drafts, and update existing posts. Publishing a draft is free.' />
           <TokenBalanceCard tokens={user.jobTokens} />
           <section className='panel account-panel'>
             <h2>Keep your tokens topped up</h2>
