@@ -3,7 +3,7 @@ import type { WordPressConfig } from './config.js';
 import type { ZipCodeLookup, ZipCodePlace } from './zip-lookup.js';
 import { normalizeServiceName, serviceGuidance } from './job-seo.js';
 import { WordPressRequestError } from './wordpress-error.js';
-import type { GeneratedJobBody, GeneratedJobCopy } from '../shared/job-copy.js';
+import type { GeneratedJobCopy } from '../shared/job-copy.js';
 
 interface WordPressPost {
   id: number;
@@ -235,7 +235,7 @@ export class WordPressClient implements WordPressProvider {
     if (currentStatus.seoState === 'modified' && !force) {
       throw new WordPressRequestError('This post was edited in WordPress. Confirm that you want to replace its generated title, excerpt, and content.', 409);
     }
-    if ((!currentStatus.seoVersion || currentStatus.seoVersion < SEO_GENERATOR_VERSION) && !approvedCopy?.body) {
+    if ((!currentStatus.seoVersion || currentStatus.seoVersion < SEO_GENERATOR_VERSION) && !approvedCopy?.bodyHtml) {
       throw new WordPressRequestError('Generate or paste the complete AI post copy before updating this post to the latest SEO version.', 400);
     }
 
@@ -245,7 +245,7 @@ export class WordPressClient implements WordPressProvider {
       delete generatedFields.title;
       delete generatedFields.excerpt;
     }
-    if (!approvedCopy?.body) delete generatedFields.content;
+    if (!approvedCopy?.bodyHtml) delete generatedFields.content;
     const response = await this.request(`${this.config.collectionUrl}/${currentStatus.postId}`, {
       method: 'POST',
       body: JSON.stringify({
@@ -498,33 +498,18 @@ const generatedPostFields = (job: JobListItem, approvedCopy?: ApprovedPostCopy):
   const zipcode = normalizeZipcode(job.location.zip);
   return {
     title: approvedCopy?.title || `${normalizeServiceName(job.jobName)} in ${formatCityState(job)}`,
-    content: approvedCopy?.body ? buildAiPostContent(approvedCopy.body) : buildPostContent(job),
-    excerpt: approvedCopy?.excerpt || buildPostExcerpt(job),
+  content: approvedCopy?.bodyHtml ? buildAiPostContent(approvedCopy.bodyHtml) : buildPostContent(job),
+    excerpt: approvedCopy?.bodyHtml ? stripHtml(approvedCopy.bodyHtml).slice(0, 320) : buildPostExcerpt(job),
     stji_generation: { version: SEO_GENERATOR_VERSION, jobId: job.id },
     ...(zipcode ? { stji_zipcode: zipcode } : {}),
   };
 };
 
-const buildAiPostContent = (body: GeneratedJobBody): string => [
-  '<!-- wp:paragraph -->',
-  `<p>${escapeHtml(body.intro)}</p>`,
-  '<!-- /wp:paragraph -->',
-  '<!-- wp:heading {"level":2} -->',
-  `<h2>${escapeHtml(body.contextHeading)}</h2>`,
-  '<!-- /wp:heading -->',
-  '<!-- wp:paragraph -->',
-  `<p>${escapeHtml(body.contextParagraph)}</p>`,
-  '<!-- /wp:paragraph -->',
-  '<!-- wp:heading {"level":2} -->',
-  `<h2>${escapeHtml(body.workHeading)}</h2>`,
-  '<!-- /wp:heading -->',
-  '<!-- wp:list -->',
-  `<ul>${body.workItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`,
-  '<!-- /wp:list -->',
-  '<!-- wp:paragraph -->',
-  `<p>${escapeHtml(body.closing)}</p>`,
-  '<!-- /wp:paragraph -->',
-].join('\n');
+const buildAiPostContent = (bodyHtml: string): string => bodyHtml
+  .replace(/<p>/gi, '<!-- wp:paragraph -->\n<p>')
+  .replace(/<\/p>/gi, '</p>\n<!-- /wp:paragraph -->')
+  .replace(/<blockquote>/gi, '<!-- wp:quote -->\n<blockquote>')
+  .replace(/<\/blockquote>/gi, '</blockquote>\n<!-- /wp:quote -->');
 
 const humanizeStatus = (status: string): string =>
   status === 'publish'

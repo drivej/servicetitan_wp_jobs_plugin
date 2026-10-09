@@ -12,6 +12,7 @@ import type { ApprovedPostCopy, WordPressProvider, WordPressWritableStatus } fro
 import { WordPressRequestError } from './wordpress-error.js';
 
 import type { BuildTask } from '../shared/build-queue.js';
+import { isWordPressBodyHtml } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
@@ -108,7 +109,11 @@ export const createApp = ({
     try {
       const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
       response.set('Cache-Control', 'no-store');
-      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(details.summary), details.summary.id, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId: details.summary.id })));
+      const promptSource = { ...details.summary,
+        technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
+        imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+      };
+      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), details.summary.id, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId: details.summary.id })));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {
@@ -282,59 +287,16 @@ export const parseApprovedPostCopy = (value: unknown, required: boolean): Approv
     if (required) throw new ValidationError('Generate or paste the complete AI post copy before pushing.');
     return undefined;
   }
-  if (typeof value !== 'string') throw new ValidationError('AI-generated copy must be plain text.');
-  if (/<[^>]+>/.test(value)) throw new ValidationError('AI-generated copy must be plain text without HTML.');
-  const lines = value.trim().replace(/\r\n?/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean);
-  const readLine = (index: number, label: string): string | undefined => {
-    const line = lines[index];
-    return line?.toUpperCase().startsWith(`${label}:`)
-      ? line.slice(label.length + 1).replace(/\s+/g, ' ').trim()
-      : undefined;
-  };
-  const title = readLine(0, 'TITLE') || '';
-  const excerpt = readLine(1, 'EXCERPT') || '';
-  if (!title || !excerpt) {
-    throw new ValidationError('Start with TITLE: on the first line and EXCERPT: on the next line.');
-  }
-  if (title.length < 10 || title.length > 100) {
-    throw new ValidationError('AI-generated title must be between 10 and 100 characters.');
-  }
-  if (excerpt.length < 20 || excerpt.length > 1_000) {
-    throw new ValidationError('AI-generated excerpt must be between 20 and 1,000 characters.');
-  }
-  if (lines.length === 2) {
-    if (required) throw new ValidationError('The AI-generated copy must include the intro, context, work items, and closing before pushing.');
-    return { title, excerpt };
-  }
-
-  const intro = readLine(2, 'INTRO') || '';
-  const contextHeading = readLine(3, 'CONTEXT HEADING') || '';
-  const contextParagraph = readLine(4, 'CONTEXT') || '';
-  const workHeading = readLine(5, 'WORK HEADING') || '';
-  if (lines[6]?.toUpperCase() !== 'WORK ITEMS:') {
-    throw new ValidationError('Place WORK ITEMS: after the work heading, followed by two to four bullet lines.');
-  }
-  const closingIndex = lines.findIndex((line, index) => index > 6 && line.toUpperCase().startsWith('CLOSING:'));
-  const workItems = closingIndex > 6
-    ? lines.slice(7, closingIndex).map((line) => line.match(/^-\s+(.+)$/)?.[1]?.replace(/\s+/g, ' ').trim() || '')
-    : [];
-  const closing = closingIndex >= 0 ? readLine(closingIndex, 'CLOSING') || '' : '';
-  if (!validApprovedBodyText(intro, 20, 1_500)
-    || !validApprovedBodyText(contextHeading, 8, 140)
-    || !validApprovedBodyText(contextParagraph, 20, 1_500)
-    || !validApprovedBodyText(workHeading, 8, 140)
-    || workItems.length < 2
-    || workItems.length > 4
-    || workItems.some((item) => !validApprovedBodyText(item, 5, 500))
-    || !validApprovedBodyText(closing, 20, 1_500)
-    || closingIndex !== lines.length - 1) {
-    throw new ValidationError('The AI-generated body must include a complete intro, context section, two to four work items, and closing.');
-  }
-  return { title, excerpt, body: { intro, contextHeading, contextParagraph, workHeading, workItems, closing } };
+  if (typeof value !== 'string') throw new ValidationError('AI-generated copy must contain a title and HTML body.');
+  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]+)$/i);
+  if (!match) throw new ValidationError('Start with TITLE: followed by BODY: and the WordPress-ready HTML.');
+  const title = match[1]!.trim();
+  const bodyHtml = match[2]!.trim();
+  if (title.length < 5 || title.length > 160) throw new ValidationError('AI-generated title must be between 5 and 160 characters.');
+  if (!isWordPressBodyHtml(bodyHtml)) throw new ValidationError('The body must contain 3–5 short paragraphs using p tags and optional blockquote.');
+  if (/<(?:script|style|img|a|h[1-6]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) throw new ValidationError('The body contains unsupported HTML.');
+  return { title, bodyHtml };
 };
-
-const validApprovedBodyText = (value: string, minimum: number, maximum: number): boolean =>
-  value.length >= minimum && value.length <= maximum;
 
 const parseJobIds = (value: unknown): number[] => {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_PAGE_SIZE) {

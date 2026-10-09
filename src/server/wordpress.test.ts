@@ -31,15 +31,7 @@ const image: JobImage = {
 };
 const approvedCopy = {
   title: 'Water Heater Repair in Austin, TX',
-  excerpt: 'Our Austin team completed a targeted water heater repair to address a hot-water performance issue and restore dependable service.',
-  body: {
-    intro: 'An Austin homeowner needed help with a documented hot-water performance issue involving a Bradford White water heater.',
-    contextHeading: 'Why Did the Hot-Water Issue Need Attention?',
-    contextParagraph: 'Unreliable hot water can disrupt everyday routines, making a focused evaluation and documented repair important for the property.',
-    workHeading: 'What Did the Water-Heater Service Include?',
-    workItems: ['Evaluated the reported hot-water performance issue.', 'Completed the targeted repairs documented for the service visit.'],
-    closing: 'The completed water-heater repair addressed the documented concern for this Austin, Texas property.',
-  },
+  bodyHtml: '<p>An Austin homeowner needed help with a documented hot-water performance issue.</p><p>The technician evaluated the reported concern involving the water heater.</p><p>The documented repair addressed the hot-water issue for this Austin property.</p>',
 };
 
 test('uses a stable ServiceTitan ID slug for correlation', () => {
@@ -194,10 +186,10 @@ test('uses the selected status and sets the selected image as featured', async (
   assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
   assert.equal(payload.title, 'Water Heater Repair in Austin, TX');
   assert.match(payload.content!, /hot-water performance issue/);
-  assert.match(payload.content!, /Why Did the Hot-Water Issue Need Attention/);
-  assert.match(payload.content!, /<ul><li>Evaluated the reported/);
+  assert.match(payload.content!, /The technician evaluated the reported concern/);
+  assert.match(payload.content!, /<p>The documented repair addressed/);
   assert.doesNotMatch(payload.content!, /Need water heater repair|Contact our team|About water heater repair/i);
-  assert.equal(payload.excerpt, approvedCopy.excerpt);
+  assert.equal(payload.excerpt, approvedCopy.bodyHtml.replace(/<[^>]+>/g, '').slice(0, 320));
   assert.equal(payload.title, approvedCopy.title);
   assert.doesNotMatch(payload.content!, /J-9000|78701|ServiceTitan/);
   assert.equal(payload.stji_zipcode, '78701');
@@ -296,7 +288,7 @@ test('preserves existing content when editing only title and excerpt on a curren
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   const client = new WordPressClient(config, mockFetch);
-  const titleAndExcerpt = { title: approvedCopy.title, excerpt: approvedCopy.excerpt };
+  const titleAndExcerpt = { title: approvedCopy.title } as typeof approvedCopy;
   const status = await client.regenerateJob(job, false, undefined, titleAndExcerpt);
 
   assert.equal(requests.length, 2);
@@ -305,7 +297,7 @@ test('preserves existing content when editing only title and excerpt on a curren
   assert.equal('status' in payload, false);
   assert.equal('featured_media' in payload, false);
   assert.equal(payload.title, titleAndExcerpt.title);
-  assert.equal(payload.excerpt, titleAndExcerpt.excerpt);
+  assert.notEqual(payload.excerpt, '');
   assert.equal('content' in payload, false);
   assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
   assert.equal(status.seoState, 'current');
@@ -318,7 +310,7 @@ test('requires complete AI copy before upgrading an outdated post', async () => 
   const client = new WordPressClient(config, mockFetch);
 
   await assert.rejects(
-    () => client.regenerateJob(job, false, undefined, { title: approvedCopy.title, excerpt: approvedCopy.excerpt }),
+    () => client.regenerateJob(job, false, undefined, { title: approvedCopy.title }),
     /complete AI post copy/,
   );
 });
@@ -348,7 +340,7 @@ test('replaces the featured image when one is selected during regeneration', asy
   assert.equal(requests[2]!.url, 'https://wordpress.example/wp-json/wp/v2/st_job/77');
   const payload = JSON.parse(String(requests[2]!.init?.body)) as Record<string, unknown>;
   assert.equal(payload.featured_media, 808);
-  assert.equal(payload.excerpt, approvedCopy.excerpt);
+  assert.equal(payload.excerpt, approvedCopy.bodyHtml.replace(/<[^>]+>/g, '').slice(0, 320));
   assert.equal(payload.title, approvedCopy.title);
   assert.equal(status.featuredImageId, 808);
   assert.equal(status.featuredImageAttachmentId, image.id);

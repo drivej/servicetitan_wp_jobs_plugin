@@ -3,17 +3,7 @@ import { test } from 'node:test';
 
 import { OpenAIJobCopyGenerator } from './openai.js';
 
-const generatedBody = {
-  intro: 'A Torrance homeowner reported unreliable hot water from a tankless water heater, prompting a focused service visit.',
-  contextHeading: 'Why Did the Hot-Water Issue Need Attention?',
-  contextParagraph: 'Inconsistent hot water can point to several service needs, so a professional evaluation helps narrow down the documented concern without assuming an unsupported diagnosis.',
-  workHeading: 'What Did the Service Visit Cover?',
-  workItems: [
-    'Reviewed the reported hot-water performance concern.',
-    'Evaluated the tankless water heater named in the job record.',
-  ],
-  closing: 'The visit provided the homeowner with job-specific information about the reported water-heater issue in Torrance, California.',
-};
+const bodyHtml = '<p>The company completed water heater service in Torrance, California, after the customer reported unreliable hot water.</p><p>The technician reviewed the reported concern and evaluated the tankless water heater listed in the job record.</p><p>The documented service addressed the reported issue. Contact the company for help with water heater service in Torrance.</p>';
 
 test('generates structured job copy with the Responses API', async () => {
   let requestBody: Record<string, unknown> | undefined;
@@ -27,8 +17,7 @@ test('generates structured job copy with the Responses API', async () => {
           type: 'output_text',
           text: JSON.stringify({
             title: 'Water Heater Service in Torrance, CA',
-            excerpt: 'Local water heater service addressed the documented concern for a homeowner in Torrance, California.',
-            body: generatedBody,
+            bodyHtml,
           }),
         }],
       }],
@@ -49,14 +38,13 @@ test('generates structured job copy with the Responses API', async () => {
 
   assert.deepEqual(generated, {
     title: 'Water Heater Service in Torrance, CA',
-    excerpt: 'Local water heater service addressed the documented concern for a homeowner in Torrance, California.',
-    body: generatedBody,
+    bodyHtml,
   });
   assert.equal(requestBody?.model, 'test-model');
   assert.equal(requestBody?.store, false);
   assert.match(String(requestBody?.input), /Tankless water heater/);
-  assert.match(String(requestBody?.instructions), /ZIP code may be published/);
-  assert.match(String(requestBody?.instructions), /Do not publish the street address or unit number/);
+  assert.match(String(requestBody?.instructions), /3–5 short paragraphs/);
+  assert.match(String(requestBody?.instructions), /Exclude customer contact information, street addresses, access codes/);
   assert.doesNotMatch(String(requestBody?.instructions), /Do not publish[^.]*ZIP code/);
   assert.equal((requestBody?.text as { format?: { type?: string } })?.format?.type, 'json_schema');
 });
@@ -68,8 +56,7 @@ test('uses no reasoning for GPT-6 copy generation so short JSON completes reliab
     return new Response(JSON.stringify({
       output_text: JSON.stringify({
         title: 'Drain Clearing Service in Austin, TX',
-        excerpt: 'Professional drain clearing addressed the documented blockage for a local property in Austin, Texas.',
-        body: generatedBody,
+        bodyHtml,
       }),
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as typeof fetch;
@@ -82,7 +69,7 @@ test('uses no reasoning for GPT-6 copy generation so short JSON completes reliab
   await generator.generate({ jobName: 'Drain Clearing', location: { city: 'Austin', state: 'TX', zip: '78701' } });
 
   assert.deepEqual(requestBody?.reasoning, { effort: 'none' });
-  assert.equal(requestBody?.max_output_tokens, 1_600);
+  assert.equal(requestBody?.max_output_tokens, 2_000);
 });
 
 test('returns a safe message when OpenAI rejects the API key', async () => {

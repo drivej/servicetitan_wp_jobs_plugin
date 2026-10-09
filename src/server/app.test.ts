@@ -147,14 +147,7 @@ test('passes an optional replacement image through the regeneration route', asyn
 
 test('generates editable AI copy from trusted ServiceTitan job details', async () => {
   let generatedJobName = '';
-  const body = {
-    intro: 'A Torrance property had a documented kitchen drain blockage that required professional drain-clearing service.',
-    contextHeading: 'Why Did the Kitchen Drain Need Attention?',
-    contextParagraph: 'A blocked kitchen drain can interrupt daily use and may worsen if the obstruction is not properly addressed.',
-    workHeading: 'What Did the Drain Service Include?',
-    workItems: ['Located the documented kitchen drain blockage.', 'Cleared the obstruction from the affected drain line.'],
-    closing: 'The completed drain-clearing work addressed the reported blockage for this Torrance, California property.',
-  };
+  const bodyHtml = '<p>A Torrance property had a documented kitchen drain blockage that required drain clearing.</p><p>The technician located the documented blockage and cleared the affected drain line.</p><p>The completed work addressed the reported issue. Contact the company for drain clearing in Torrance.</p>';
   const app = createApp({
     serviceTitan: {
       getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
@@ -187,8 +180,7 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
         generatedJobName = job.jobName;
         return {
           title: 'Drain Clearing Service in Torrance, CA',
-          excerpt: 'Professional drain clearing resolved the documented kitchen blockage for a local property in Torrance, California.',
-          body,
+          bodyHtml,
         };
       },
     },
@@ -205,68 +197,31 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
     assert.equal(generatedJobName, 'Drain Clearing');
     assert.deepEqual(await response.json(), {
       title: 'Drain Clearing Service in Torrance, CA',
-      excerpt: 'Professional drain clearing resolved the documented kitchen blockage for a local property in Torrance, California.',
-      body,
+      bodyHtml,
     });
   } finally {
     await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
   }
 });
 
-test('parses complete AI post copy and allows title-only edits for existing current posts', () => {
+test('parses title and WordPress-ready HTML body', () => {
   const fullCopy = [
     'TITLE: Water Heater Repair in Austin, TX',
-    'EXCERPT: A concise local description of the completed water heater service.',
-    'INTRO: An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
-    'CONTEXT HEADING: Why Did the Hot-Water Issue Need Attention?',
-    'CONTEXT: Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
-    'WORK HEADING: What Did the Water-Heater Service Include?',
-    'WORK ITEMS:',
-    '- Reviewed the reported hot-water performance issue.',
-    '- Completed the targeted repairs documented for this service visit.',
-    'CLOSING: The completed work addressed the documented water-heater concern for this Austin, Texas property.',
+    'BODY:',
+    '<p>The company completed water heater repair in Austin, Texas, after unreliable hot water was reported.</p>',
+    '<p>The technician reviewed the concern and evaluated the water heater named in the job record.</p>',
+    '<p>The documented repair addressed the reported concern. Contact the company for water heater service in Austin.</p>',
   ].join('\n');
-  assert.deepEqual(
-    parseApprovedPostCopy(fullCopy, true),
-    {
-      title: 'Water Heater Repair in Austin, TX',
-      excerpt: 'A concise local description of the completed water heater service.',
-      body: {
-        intro: 'An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
-        contextHeading: 'Why Did the Hot-Water Issue Need Attention?',
-        contextParagraph: 'Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
-        workHeading: 'What Did the Water-Heater Service Include?',
-        workItems: ['Reviewed the reported hot-water performance issue.', 'Completed the targeted repairs documented for this service visit.'],
-        closing: 'The completed work addressed the documented water-heater concern for this Austin, Texas property.',
-      },
-    },
-  );
-  assert.deepEqual(
-    parseApprovedPostCopy('TITLE: Water Heater Repair in Austin, TX\nEXCERPT: A concise local description of the completed water heater service.', false),
-    { title: 'Water Heater Repair in Austin, TX', excerpt: 'A concise local description of the completed water heater service.' },
-  );
-  assert.throws(
-    () => parseApprovedPostCopy('TITLE: Water Heater Repair in Austin, TX\nEXCERPT: A concise local description of the completed water heater service.', true),
-    /must include the intro/,
-  );
+  assert.deepEqual(parseApprovedPostCopy(fullCopy, true), {
+    title: 'Water Heater Repair in Austin, TX',
+    bodyHtml: '<p>The company completed water heater repair in Austin, Texas, after unreliable hot water was reported.</p>\n<p>The technician reviewed the concern and evaluated the water heater named in the job record.</p>\n<p>The documented repair addressed the reported concern. Contact the company for water heater service in Austin.</p>',
+  });
   assert.throws(() => parseApprovedPostCopy('A title without labeled fields', true), /Start with TITLE/);
-  assert.throws(() => parseApprovedPostCopy('TITLE: Short\nEXCERPT: A valid excerpt that is long enough to pass.', true), /title must be between/);
+  assert.throws(() => parseApprovedPostCopy('TITLE: Short\nBODY:\n<p>Too short.</p>', true), /title must be between/);
 });
 
-
 test('all paid routes enforce the server token gate even with forged billing fields', async () => {
-  const fullCopy = [
-    'TITLE: Water Heater Repair in Austin, TX',
-    'EXCERPT: A concise local description of the completed water heater service.',
-    'INTRO: An Austin homeowner reported a hot-water performance problem that required a focused water-heater service visit.',
-    'CONTEXT HEADING: Why Did the Hot-Water Issue Need Attention?',
-    'CONTEXT: Inconsistent hot water can interrupt everyday use and warrants a professional evaluation of the documented concern.',
-    'WORK HEADING: What Did the Water-Heater Service Include?',
-    'WORK ITEMS:',
-    '- Reviewed the reported hot-water performance issue.',
-    '- Completed the targeted repairs documented for this service visit.',
-    'CLOSING: The completed work addressed the documented water-heater concern for this Austin, Texas property.',
-  ].join('\n');
+  const fullCopy = 'TITLE: Drain Clearing in Torrance, CA\nBODY:\n<p>The company completed drain clearing in Torrance, California.</p><p>The technician reviewed the reported kitchen blockage.</p><p>The documented service addressed the blockage. Contact the company for drain service.</p>';
 
   const { HttpError } = await import('./saas/validation.js');
   const { DisabledWordPressClient } = await import('./wordpress.js');
