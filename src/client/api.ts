@@ -18,7 +18,8 @@ const paidOperationPath = (path: string, method: string): boolean => method.toUp
   && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/regenerate)?)$/.test(new URL(path, window.location.origin).pathname);
 const paidOperationKey = async (path: string, init: RequestInit): Promise<{ key: string; storageKey: string }> => {
   const body = typeof init.body === 'string' ? init.body : '';
-  const material = `${userId}:${websiteId}:${path}:${body}`;
+  const copyContractVersion = /\/jobs\/\d+\/ai-copy$/.test(new URL(path, window.location.origin).pathname) ? 'copy-v2' : 'operation-v1';
+  const material = `${copyContractVersion}:${userId}:${websiteId}:${path}:${body}`;
   const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
   const suffix = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const storageKey = `st-spend-op:${suffix}`;
@@ -39,11 +40,21 @@ export const apiFetch = async (path: string, init?: RequestInit): Promise<Respon
     const response = await accountFetch(apiUrl(path), { ...request, headers });
     if (isSaaSWorkspace() && response.status === 402) markTokensExhausted();
     if (operation && response.ok) {
-      const readJson = response.json.bind(response);
-      response.json = async () => {
-        const body = await readJson();
+      let operationSettled = false;
+      const settleOperation = () => {
+        if (operationSettled) return;
+        operationSettled = true;
         try { window.sessionStorage.removeItem(operation.storageKey); } catch { /* Ignore unavailable storage. */ }
-        return body;
+      };
+      const readJson = response.json.bind(response);
+      const readText = response.text.bind(response);
+      response.json = async () => {
+        try { return await readJson(); }
+        finally { settleOperation(); }
+      };
+      response.text = async () => {
+        try { return await readText(); }
+        finally { settleOperation(); }
       };
     }
     if (operation && response.status === 409) {

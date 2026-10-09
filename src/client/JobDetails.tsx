@@ -235,8 +235,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
       });
       if (response.status === 402) return;
       const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
-      if (!response.ok) throw new Error(body.error || 'Unable to generate copy.');
-      if (!body.title || !hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
+      if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Unable to generate copy.');
+      if (!hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
       setAiCopyEdited(true);
       setAiCopy(formatJobCopy(body));
     } catch (requestError) {
