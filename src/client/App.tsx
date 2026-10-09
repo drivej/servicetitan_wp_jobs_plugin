@@ -302,7 +302,7 @@ export function App() {
   }, [result, wordpressPluginReady, wordpressPluginStatus?.seoGeneratorVersion]);
 
   return (
-    <main className='jobs-page'>
+    <main className='app-page'>
       <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
       <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
 

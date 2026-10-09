@@ -58,7 +58,7 @@ export function AccountMembersAdmin() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to view as this user.'); setStartingViewAs(false); }
   };
 
-  return <main className='account-page'>
+  return <main className='app-page'>
     <p className='eyebrow'>Platform administration</p><h1>Account members</h1>
     <p className='intro'>View users and their roles across workspaces. Disabling a member ends their sessions and blocks new sign-ins.</p>
     {viewAsMemberId && <section className='panel member-view-as-panel'>

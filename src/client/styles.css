@@ -34,6 +34,13 @@ main {
   margin: 0 auto;
   padding: 20px;
 }
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: var(--space-12) auto;
+  padding: 0 var(--page-gutter) 60px;
+}
 /*
 
 START - REUSABLE CLASSES
@@ -805,12 +812,6 @@ td strong {
   justify-content: flex-end;
   padding: 20px 30px;
 }
-.guide-page-layout {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-6) 0 var(--space-12);
-}
 .guide-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 760px);
@@ -862,11 +863,10 @@ td strong {
 }
 .guide-content > section {
   scroll-margin-top: 24px;
-  padding: 0 0 var(--space-8);
+  padding: var(--panel-padding);
   border-bottom: 1px solid #d6dbd6;
 }
 .guide-content > section:last-child {
-  padding-bottom: 0;
   border-bottom: 0;
 }
 .guide-content h2 {
@@ -997,12 +997,6 @@ td strong {
 .troubleshooting-list details p {
   margin-bottom: 0;
   padding-left: 20px;
-}
-.plugin-page-layout {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-6) 0 var(--space-12);
 }
 .plugin-install-card-current {
   background: #edf7f0;
@@ -1374,13 +1368,6 @@ td strong {
   font-size: 11px;
   color: #506773;
 }
-.account-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  margin: var(--space-12) auto;
-  padding: 0 var(--page-gutter) 60px;
-}
 .account-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1479,12 +1466,7 @@ td strong {
 .account-notice {
   margin: 20px 5%;
 }
-.jobs-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-.jobs-page > .results {
+.app-page > .results {
   min-width: 0;
 }
 .login-page {

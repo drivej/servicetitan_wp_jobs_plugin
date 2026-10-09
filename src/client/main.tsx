@@ -23,7 +23,7 @@ const page = helpTopicMatch
   : path === '/landing'
     ? <MarketingPage />
   : path === '/pricing'
-    ? <main className='account-page'><PageHeaderFallback /><BillingPlans workspaceId='current' /></main>
+    ? <main className='app-page'><PageHeaderFallback /><BillingPlans workspaceId='current' /></main>
   : path === '/wordpress-plugin'
     ? <WordPressPluginSetup />
   : path === '/team'
@@ -73,12 +73,12 @@ function AppShell({ children }: { children: ReactNode }) {
 }
 
 function PageHeaderFallback() {
-  return <header className='account-page-hero'><p className='eyebrow'>Choose a plan</p><h1>Pricing</h1><p>Select a subscription to continue to setup.</p></header>;
+  return <header ><p className='eyebrow'>Choose a plan</p><h1>Pricing</h1><p>Select a subscription to continue to setup.</p></header>;
 }
 
 function WelcomePage() {
   return (
-    <main className='account-page'>
+    <main className='app-page'>
       <PageHeader
         eyebrow='Your workspace'
         title='Welcome to Job Showcase for ServiceTitan'

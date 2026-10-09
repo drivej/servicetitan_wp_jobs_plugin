@@ -455,7 +455,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   if (!loaded && !error) return <LoadingPage />;
   if (!loaded)
     return (
-      <main className='account-page'>
+      <main className='app-page'>
         <h1>Job Showcase for ServiceTitan</h1>
         <p role='alert'>{error}</p>
         {error && <Button onClick={() => window.location.reload()}>Try again</Button>}
@@ -808,18 +808,18 @@ export function Workspace({ children }: { children: ReactNode }) {
         </div>
       )}
       {isLocal && tokensPage ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Local workspace' title='Add Tokens' description='Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.' />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Local workspace' title='Add Tokens' description='Local mode does not use job tokens. To test subscriptions locally, run the app in SaaS mode with a workspace account and Stripe sandbox credentials.' />
         </main>
       ) : isLocal && path === '/settings' ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Local workspace' title='Settings' description='Local workspace connections are configured through the server environment.' />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Local workspace' title='Settings' description='Local workspace connections are configured through the server environment.' />
           <p className='field-help'>
             Signed in as {user.name} ({user.email})
           </p>
         </main>
       ) : invitePage ? (
-        <main className='account-page'>
+        <main className='app-page'>
           <h1>Join a workspace</h1>
           <p>Signed in as {user.email}. Accepting adds you to the invited team and switches your active workspace. Your own workspace stays available.</p>
           {invitation && (
@@ -848,7 +848,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         user.isPlatformAdmin ? (
           <TokenAdmin />
         ) : (
-          <main className='account-page'>
+          <main className='app-page'>
             <h1>Access denied</h1>
             <p>Platform administrator access is required.</p>
           </main>
@@ -857,14 +857,14 @@ export function Workspace({ children }: { children: ReactNode }) {
         user.isPlatformAdmin ? (
           <AccountMembersAdmin />
         ) : (
-          <main className='account-page'>
+          <main className='app-page'>
             <h1>Access denied</h1>
             <p>Platform administrator access is required.</p>
           </main>
         )
       ) : tokensPage ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to publish posts, rebuild posts, and generate AI descriptions.' />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to publish posts, rebuild posts, and generate AI descriptions.' />
           <TokenBalanceCard tokens={user.jobTokens} />
           <section className='panel account-panel'>
             <h2>Keep your tokens topped up</h2>
@@ -890,13 +890,13 @@ export function Workspace({ children }: { children: ReactNode }) {
           </section>
         </main>
       ) : teamPage ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Your workspace' title='Team' description={`People with access to ${user.workspaceName}.`} />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Your workspace' title='Team' description={`People with access to ${user.workspaceName}.`} />
           <TeamSettings role={user.role} workspaceId={user.workspaceId} />
         </main>
       ) : settingsPage ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Configuration' title='Settings' description='Review your saved integrations and test each connection from this page.' />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Configuration' title='Settings' description='Review your saved integrations and test each connection from this page.' />
           {message && <p className='notice' role='status'>{message}</p>}
           {!canManage && <p className='notice'>An owner or admin manages these configuration values.</p>}
           <div className='account-grid'>
@@ -939,8 +939,8 @@ export function Workspace({ children }: { children: ReactNode }) {
           </div>
         </main>
       ) : onboardingPage ? (
-        <main className='account-page'>
-          <PageHeader className='account-page-hero' eyebrow='Onboarding' title={onboardingStage === 1 ? 'Connect your WordPress website' : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'} description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test Jobs access.' : 'Invite teammates to share this workspace, or skip this step and start working.'} />
+        <main className='app-page'>
+          <PageHeader  eyebrow='Onboarding' title={onboardingStage === 1 ? 'Connect your WordPress website' : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'} description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test Jobs access.' : 'Invite teammates to share this workspace, or skip this step and start working.'} />
           {message && (
             <p className='notice' role='status'>
               {message}
@@ -959,7 +959,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           )}
         </main>
       ) : (
-        <div key={`${user.id}:${selected}`}>{!isLocal && !onboardingComplete && (path === '/jobs' || path.startsWith('/jobs/')) ? <main className='account-page'><h1>Complete setup</h1><p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/onboarding' onClick={()=>window.sessionStorage.setItem('onboarding-stage', websiteStepComplete ? '2' : '1')}>{websiteStepComplete ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
+        <div key={`${user.id}:${selected}`}>{!isLocal && !onboardingComplete && (path === '/jobs' || path.startsWith('/jobs/')) ? <main className='app-page'><h1>Complete setup</h1><p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p><Button component='a' href='/onboarding' onClick={()=>window.sessionStorage.setItem('onboarding-stage', websiteStepComplete ? '2' : '1')}>{websiteStepComplete ? 'Continue to ServiceTitan' : 'Continue onboarding'}</Button></main> : children}</div>
       )}
     </>
   );

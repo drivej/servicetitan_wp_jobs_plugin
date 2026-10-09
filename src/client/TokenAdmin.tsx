@@ -111,7 +111,7 @@ export function TokenAdmin() {
     }).catch((reason: Error) => { if (active) setError(reason.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [query, after, revision]);
-  return <main className='account-page'>
+  return <main className='app-page'>
     <p className='eyebrow'>Platform administration</p><h1>Token accounts</h1>
     <form className='account-actions' onSubmit={(event) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((v) => v + 1); }}>
       <label>Workspace or owner email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>

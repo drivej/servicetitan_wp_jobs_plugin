@@ -363,7 +363,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   }, [buildTask?.state, jobId]);
 
   return (
-    <main>
+    <main className='app-page'>
       <LoadingModal open={loading} label='Loading job details' />
       {tokenSpendDialog}
       <PageHeader
