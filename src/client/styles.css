@@ -91,6 +91,16 @@ END - REUSABLE CLASSES
 .app-shell.has-plugin-violator main {
   padding-bottom: 190px;
 }
+.app-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px 16px;
+  color: #7a867f;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: center;
+}
 .app-nav {
   display: flex;
   gap: 6px;
@@ -1158,6 +1168,9 @@ td strong {
   }
 }
 @media (max-width: 680px) {
+  .app-footer {
+    flex-wrap: wrap;
+  }
   main {
     width: min(100% - 20px, 1120px);
     padding-top: 36px;

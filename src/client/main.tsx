@@ -12,6 +12,7 @@ import { BillingPlans } from './BillingPlans';
 import { PageHeader } from './PageHeader';
 import './styles.css';
 import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
+import packageJson from '../../package.json';
 
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);
@@ -67,6 +68,10 @@ function AppShell({ children }: { children: ReactNode }) {
           <Button component="a" href="/wordpress-plugin" variant="contained">Open plugin setup</Button>
         </aside>
       )}
+      <footer className="app-footer">
+        <span>v{packageJson.version}</span>
+        <span>© {new Date().getFullYear()} Contento Interactive Group, LLC.</span>
+      </footer>
     </div>
     </ThemeProvider>
   );
