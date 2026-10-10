@@ -38,3 +38,31 @@ test('clears successful paid-operation keys when the response is consumed as tex
     Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
   }
 });
+
+test('attaches an idempotency key to WordPress publish status changes', async () => {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  let capturedKey = '';
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+    location: { origin: 'https://app.example' },
+    crypto: { subtle: crypto.subtle, randomUUID: () => 'publish-operation-1' },
+    sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    dispatchEvent: () => true,
+  } as unknown as Window });
+  globalThis.fetch = (async (_input, init) => {
+    capturedKey = new Headers(init?.headers).get('Idempotency-Key') || '';
+    return new Response('{"state":"exists"}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    const response = await apiFetch('/api/jobs/42/wordpress/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'publish' }),
+    });
+    await response.text();
+    assert.equal(capturedKey, 'publish-operation-1');
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+  }
+});

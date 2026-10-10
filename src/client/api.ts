@@ -15,7 +15,7 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };
 const paidOperationPath = (path: string, method: string): boolean => method.toUpperCase() === 'POST'
-  && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/regenerate)?)$/.test(new URL(path, window.location.origin).pathname);
+  && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/(?:regenerate|status))?)$/.test(new URL(path, window.location.origin).pathname);
 const paidOperationKey = async (path: string, init: RequestInit): Promise<{ key: string; storageKey: string }> => {
   const body = typeof init.body === 'string' ? init.body : '';
   const copyContractVersion = /\/jobs\/\d+\/ai-copy$/.test(new URL(path, window.location.origin).pathname) ? 'copy-v2' : 'operation-v1';
