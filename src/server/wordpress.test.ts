@@ -280,6 +280,30 @@ test('updates the status of a correlated WordPress post', async () => {
   assert.equal(status.seoState, 'outdated');
 });
 
+test('regenerates SEO copy for a draft without publishing it', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const mockFetch: typeof fetch = async (input, init) => {
+    requests.push({ url: String(input), ...(init ? { init } : {}) });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({ statuses: { '123456': {
+        state: 'exists', label: 'Draft', postId: 77, postStatus: 'draft', seoVersion: SEO_GENERATOR_VERSION - 1, seoModified: false,
+      } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      id: 77, slug: 'servicetitan-job-123456', status: 'draft', link: 'https://wordpress.example/jobs/servicetitan-job-123456',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const client = new WordPressClient(config, mockFetch);
+  const status = await client.regenerateJob(job, false, undefined, approvedCopy);
+
+  assert.equal(requests.length, 2);
+  const payload = JSON.parse(String(requests[1]!.init?.body)) as Record<string, unknown>;
+  assert.equal('status' in payload, false);
+  assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
+  assert.equal(status.postStatus, 'draft');
+  assert.equal(status.seoState, 'current');
+});
+
 test('preserves existing content when editing only title and excerpt on a current post', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const mockFetch: typeof fetch = async (input, init) => {

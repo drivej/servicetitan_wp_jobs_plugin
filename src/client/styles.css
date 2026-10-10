@@ -2022,9 +2022,22 @@ td strong {
   background: #2e649e;
   box-shadow: none;
 }
+.jobs-table .job-action-seo.MuiButton-root {
+  border-color: #186d4c;
+  background: #186d4c;
+  color: #fff;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.jobs-table .job-action-seo.MuiButton-root:hover {
+  border-color: #11593d;
+  background: #11593d;
+  box-shadow: none;
+}
 .jobs-table .build-deploy-button.Mui-disabled,
 .jobs-table .job-action-publish.Mui-disabled,
-.jobs-table .job-action-update.Mui-disabled {
+.jobs-table .job-action-update.Mui-disabled,
+.jobs-table .job-action-seo.Mui-disabled {
   opacity: .55;
 }
 .build-deploy-error { max-width: 260px; color: #a32626; font-size: 0.8rem; line-height: 1.4; }

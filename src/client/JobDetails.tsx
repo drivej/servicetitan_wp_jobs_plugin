@@ -420,9 +420,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
           </p>
           {wordpressStatus.postStatus === 'draft' && <p>You can also publish the current draft as-is. Publishing changes only its WordPress status; it does not regenerate SEO or spend a token.</p>}
         </div>
-        {wordpressStatus.postStatus === 'draft' && <Button type='button' variant='contained' className='primary token-cost' disabled={regenerating || publishing} aria-disabled={regenerating || publishing || tokensExhausted} onClick={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }}>
-          {regenerating ? 'Regenerating…' : `Regenerate SEO · ${TOKEN_ACTIONS.update.cost} token${TOKEN_ACTIONS.update.cost === 1 ? '' : 's'}`}
-        </Button>}
       </aside>}
 
 
