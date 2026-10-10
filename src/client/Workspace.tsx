@@ -51,10 +51,12 @@ interface OnboardingStatus { activeProduct: boolean; pluginReady: boolean; websi
 type ConnectionCheckKind = 'wordpress' | 'servicetitan' | 'plugin';
 interface ConnectionCheck { kind: ConnectionCheckKind; success: boolean; message: string; helpUrl?: string; }
 
-function workspaceRedirect(path: string, status: OnboardingStatus | undefined, isLocal: boolean, hasInvitation: boolean): string | undefined {
+function workspaceRedirect(path: string, status: OnboardingStatus | undefined, isLocal: boolean, hasInvitation: boolean, impersonating = false): string | undefined {
   if (isLocal || !status || hasInvitation) return undefined;
   // Jobs require a subscription; setup, billing, settings, and help remain accessible.
-  if (!status.activeProduct) return path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
+  // Platform administrators may inspect a customer's configured jobs while viewing as them.
+  // Paid mutations remain subject to the impersonated workspace's normal token checks.
+  if (!status.activeProduct && !impersonating) return path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
   const setupComplete = status.settingsReady || status.onboardingStep >= 3;
   if (!setupComplete && !['/onboarding', '/settings', '/help', '/wordpress-plugin', '/invite'].includes(path)) return '/onboarding';
   if (setupComplete && path === '/pricing') return '/';
@@ -395,7 +397,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const teamPage = path === '/team';
   const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/help' ? 'guide' : path === '/jobs' || path.startsWith('/jobs/') ? 'jobs' : undefined;
   const jobsHref = currentPage === 'jobs' ? `/jobs${window.location.search}` : '/jobs';
-  const redirectTarget = loaded && !signedOut ? workspaceRedirect(path, onboarding, session?.mode === 'local', Boolean(invitationToken)) : undefined;
+  const redirectTarget = loaded && !signedOut ? workspaceRedirect(path, onboarding, session?.mode === 'local', Boolean(invitationToken), Boolean(session?.impersonation)) : undefined;
   const redirectedTo = useRef<string | undefined>(undefined);
 
   useEffect(() => {
