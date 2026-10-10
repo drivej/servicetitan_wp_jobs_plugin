@@ -374,6 +374,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     && wordpressStatus.seoVersion !== undefined
     && wordpressStatus.currentSeoVersion !== undefined
     && wordpressStatus.seoVersion !== wordpressStatus.currentSeoVersion;
+  const seoRegenerationAvailable = Boolean(wordpressStatus && isSeoPromptOutOfSync(wordpressStatus, details?.summary.modifiedOn));
   const versionSyncLabel = wordpressStatusLoading || wordpressPluginStatusLoading
     ? 'Checking…'
     : wordpressStatus?.state !== 'exists'
@@ -408,6 +409,21 @@ export function JobDetails({ jobId }: { jobId: number }) {
           <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void publishWordPressPost()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
         </table>
       </div>}
+
+      {seoRegenerationAvailable && wordpressStatus?.state === 'exists' && <aside className='notice seo-out-of-sync' aria-labelledby='seo-out-of-sync-heading'>
+        <div>
+          <strong id='seo-out-of-sync-heading'>SEO copy is out of sync</strong>
+          <p>{seoVersionMismatch
+            ? `This post uses SEO generator v${wordpressStatus.seoVersion}; the current version is v${wordpressStatus.currentSeoVersion}.`
+            : 'The ServiceTitan job details have changed since this post was last updated.'}
+            {' '}Regenerating updates the post’s SEO copy and costs {TOKEN_ACTIONS.update.cost} token{TOKEN_ACTIONS.update.cost === 1 ? '' : 's'}.
+          </p>
+          {wordpressStatus.postStatus === 'draft' && <p>You can also publish the current draft as-is. Publishing changes only its WordPress status; it does not regenerate SEO or spend a token.</p>}
+        </div>
+        {wordpressStatus.postStatus === 'draft' && <Button type='button' variant='contained' className='primary token-cost' disabled={regenerating || publishing} aria-disabled={regenerating || publishing || tokensExhausted} onClick={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }}>
+          {regenerating ? 'Regenerating…' : `Regenerate SEO · ${TOKEN_ACTIONS.update.cost} token${TOKEN_ACTIONS.update.cost === 1 ? '' : 's'}`}
+        </Button>}
+      </aside>}
 
 
       {details && (

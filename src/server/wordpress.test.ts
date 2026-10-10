@@ -255,7 +255,7 @@ test('updates the status of a correlated WordPress post', async () => {
     requests.push({ url: String(input), ...(init ? { init } : {}) });
     if (requests.length === 1) {
       return new Response(JSON.stringify({ statuses: { '123456': {
-        state: 'exists', label: 'Draft', postId: 77, postStatus: 'draft', seoVersion: SEO_GENERATOR_VERSION, seoModified: false,
+        state: 'exists', label: 'Draft', postId: 77, postStatus: 'draft', seoVersion: SEO_GENERATOR_VERSION - 1, seoModified: false,
       } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify({
@@ -275,7 +275,9 @@ test('updates the status of a correlated WordPress post', async () => {
   assert.deepEqual(JSON.parse(String(requests[1]!.init?.body)), { status: 'publish' });
   assert.equal(status.postStatus, 'publish');
   assert.equal(status.postModifiedOn, '2026-09-11T10:15:00');
-  assert.equal(status.seoState, 'current');
+  assert.equal(status.seoVersion, SEO_GENERATOR_VERSION - 1);
+  assert.equal(status.currentSeoVersion, SEO_GENERATOR_VERSION);
+  assert.equal(status.seoState, 'outdated');
 });
 
 test('preserves existing content when editing only title and excerpt on a current post', async () => {

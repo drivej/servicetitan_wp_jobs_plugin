@@ -533,6 +533,27 @@ td strong {
 .details-sections > .notice {
   margin: 0;
 }
+.seo-out-of-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: #594519;
+  background: #fff6df;
+  border: 1px solid #ead59b;
+  text-align: left;
+}
+.seo-out-of-sync strong {
+  display: block;
+  margin-bottom: 5px;
+}
+.seo-out-of-sync p {
+  margin: 0;
+  line-height: 1.5;
+}
+.seo-out-of-sync p + p {
+  margin-top: 6px;
+}
 .details-sections > .results-header {
   padding: 0 30px;
 }
@@ -1168,6 +1189,10 @@ td strong {
   }
 }
 @media (max-width: 680px) {
+  .seo-out-of-sync {
+    align-items: stretch;
+    flex-direction: column;
+  }
   .app-footer {
     flex-wrap: wrap;
   }
