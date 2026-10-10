@@ -108,7 +108,7 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   );
 };
 
-const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean }) => {
+const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = false }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean; isLocal?: boolean }) => {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -175,7 +175,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false }: { user: U
             <a href='/wordpress-plugin' aria-current={window.location.pathname === '/wordpress-plugin' ? 'page' : undefined}>WordPress Plugin</a>
             <a href='/help' aria-current={window.location.pathname === '/help' || window.location.pathname.startsWith('/help/') ? 'page' : undefined}>Help &amp; guides</a>
           </nav>
-          {user.isPlatformAdmin && (
+          {user.isPlatformAdmin && !isLocal && (
             <nav className='account-menu-group' aria-label='Administration'>
               <a href='/admin/tokens' aria-current={window.location.pathname === '/admin/tokens' ? 'page' : undefined}>Token admin</a>
               <a href='/admin/members' aria-current={window.location.pathname === '/admin/members' ? 'page' : undefined}>Account members</a>
@@ -428,8 +428,8 @@ export function Workspace({ children }: { children: ReactNode }) {
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
   const tokensPage = path === '/add-tokens';
-  const adminPage = path === '/admin/tokens';
-  const membersAdminPage = path === '/admin/members';
+  const adminPage = !isLocal && path === '/admin/tokens';
+  const membersAdminPage = !isLocal && path === '/admin/members';
 
   const acceptInvite = async () => {
     setBusy(true);
@@ -727,7 +727,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
           <JobsButton href={jobsHref} path={path} />
-          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} />
+          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
         </div>
       </header>
 

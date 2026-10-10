@@ -99,7 +99,7 @@ export class ServiceTitanClient implements JobsProvider {
           return {
             ...job,
             attachments: [],
-            sourceCopyStatus: pageJobs[index]!.sourceCopyStatus || (wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available'),
+            sourceCopyStatus: pageJobs[index]!.sourceCopyStatus || (wordCount === 0 ? 'missing' : wordCount < 10 ? 'limited' : 'available'),
           };
         }),
         page: query.page,
@@ -362,7 +362,7 @@ export class ServiceTitanClient implements JobsProvider {
           jobTypeId: job.jobTypeId,
           jobStatus: job.jobStatus,
           ...(job.completedOn ? { completedOn: job.completedOn } : {}),
-          sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 20 ? 'limited' : 'available',
+          sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 10 ? 'limited' : 'available',
         });
         if (matchingJobs.length >= targetCount) break;
       }

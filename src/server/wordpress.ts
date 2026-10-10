@@ -4,6 +4,8 @@ import type { ZipCodeLookup, ZipCodePlace } from './zip-lookup.js';
 import { normalizeServiceName, serviceGuidance } from './job-seo.js';
 import { WordPressRequestError } from './wordpress-error.js';
 import type { GeneratedJobCopy } from '../shared/job-copy.js';
+import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version.js';
+export { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version.js';
 
 interface WordPressPost {
   id: number;
@@ -59,7 +61,6 @@ export interface WordPressProvider {
 
 type FetchImplementation = typeof fetch;
 export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.18.2';
-export const SEO_GENERATOR_VERSION = 7;
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;

@@ -117,6 +117,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [wordpressStatus, setWordpressStatus] = useState<WordPressStatus>();
   const [wordpressStatusLoading, setWordpressStatusLoading] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [isLocalMode, setIsLocalMode] = useState(false);
   const [rawResponse, setRawResponse] = useState<unknown>();
   const [rawResponseLoading, setRawResponseLoading] = useState(false);
   const [rawResponseError, setRawResponseError] = useState('');
@@ -128,8 +129,11 @@ export function JobDetails({ jobId }: { jobId: number }) {
   useEffect(() => {
     const controller = new AbortController();
     void accountFetch('/api/session', { headers: { Accept: 'application/json' }, signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ user?: { isPlatformAdmin?: boolean }; impersonation?: { actor?: { isPlatformAdmin?: boolean } } }> : undefined)
-      .then((session) => setIsPlatformAdmin(session?.user?.isPlatformAdmin === true || session?.impersonation?.actor?.isPlatformAdmin === true))
+      .then((response) => response.ok ? response.json() as Promise<{ mode?: string; user?: { isPlatformAdmin?: boolean }; impersonation?: { actor?: { isPlatformAdmin?: boolean } } }> : undefined)
+      .then((session) => {
+        setIsLocalMode(session?.mode === 'local');
+        setIsPlatformAdmin(session?.user?.isPlatformAdmin === true || session?.impersonation?.actor?.isPlatformAdmin === true);
+      })
       .catch(() => setIsPlatformAdmin(false));
     return () => controller.abort();
   }, []);
@@ -139,6 +143,13 @@ export function JobDetails({ jobId }: { jobId: number }) {
     setRawResponseLoading(true);
     setRawResponseError('');
     try {
+      if (isLocalMode) {
+        const response = await apiFetch(`/api/jobs/${jobId}`, { headers: { Accept: 'application/json' } });
+        const body = await readJson<JobDetailsResponse | { error?: string }>(response);
+        if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to load the raw ServiceTitan response.');
+        setRawResponse((body as JobDetailsResponse).job);
+        return;
+      }
       const response = await apiFetch(`/api/admin/service-titan/jobs/${jobId}/raw`, { headers: { Accept: 'application/json' } });
       const body = await readJson<{ data?: unknown; error?: string }>(response);
       if (!response.ok) throw new Error(body.error || 'Unable to load the raw ServiceTitan response.');
@@ -378,7 +389,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         <table className='jobs-table' aria-label='Job list row'>
           <colgroup><col className='readiness-column' /><col className='job-image-column' /><col className='job-name-column' /><col className='location-column' /><col className='wp-status-column' /><col className='actions-column' /></colgroup>
           <JobTableHeader disabled={!wordpressPluginReady || wordpressStatusLoading || publishing || regenerating || queueingBuild} onRefresh={() => void refreshWordPressStatus()} />
-          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 20 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void publishWordPressPost()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
+          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void publishWordPressPost()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
         </table>
       </div>}
 

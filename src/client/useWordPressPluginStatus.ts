@@ -1,5 +1,6 @@
 import { apiFetch } from './api';
 import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 
 export interface WordPressPluginStatus {
   state: 'current' | 'update_required' | 'unknown';
@@ -35,7 +36,7 @@ export function WordPressPluginStatusProvider({ children }: { children: ReactNod
       setStatus({
         state: 'unknown',
         requiredVersion: '1.18.2',
-        seoGeneratorVersion: 7,
+        seoGeneratorVersion: SEO_GENERATOR_VERSION,
         message: error instanceof Error ? error.message : 'Unable to check the WordPress plugin.',
       });
     } finally {

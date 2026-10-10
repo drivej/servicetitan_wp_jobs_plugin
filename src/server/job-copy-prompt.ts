@@ -1,5 +1,8 @@
 import type { JobCopySource } from '../shared/job-copy.js';
 
+// AI/developer instruction: if these prompt instructions change in a way that
+// affects generated post content, bump SEO_GENERATOR_VERSION in
+// ../shared/seo-prompt-version.ts to flag existing posts as out of sync.
 export const JOB_COPY_INSTRUCTIONS = [
   'Create a concise Recent Project post for a WordPress website using the supplied company details, ServiceTitan technician notes, project location, image metadata, and optional customer review.',
   'Write a descriptive title featuring the actual service performed and city/state when provided.',
@@ -9,6 +12,8 @@ export const JOB_COPY_INSTRUCTIONS = [
   'Naturally mention the company, service, and city. Avoid keyword stuffing, inflated language, unsupported best claims, and repetitive sales copy.',
   'Keep local relevance tied to the actual job location. Do not add unrelated landmarks or generic city descriptions.',
   'Distinguish confirmed project outcomes from general benefits. Do not invent improvements, products, timelines, prices, warranties, or other job details.',
+  'Omit unknowns silently. Never mention that details are missing, unavailable, undocumented, unspecified, or unclear; do not use disclaimers or negative commentary about what the records do not say.',
+  'Do not imply that work was completed or claim a cause, repair step, or outcome unless the supplied facts support it. When facts are sparse, write a shorter, positive, service-focused post using only confirmed information and leave unsupported details out.',
   'Image filenames are metadata only. Use images to support visible descriptions only; do not infer hidden damage, product specifications, or performance from photos.',
   'If a customer review is supplied, incorporate a relevant detail or brief exact quote. Never invent or embellish a testimonial.',
   'End with one brief, service-specific call to action.',

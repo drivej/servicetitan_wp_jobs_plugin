@@ -56,7 +56,9 @@ if (mode === 'local') app.get('/api/session', (_req, res) => {
     email: process.env.LOCAL_USER_EMAIL || 'local@example.test',
     avatarUrl: process.env.LOCAL_USER_AVATAR_URL || null,
     workspaceId: 'local', workspaceName: 'Local Workspace', role: 'owner', jobTokens: 3,
-    isPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN === 'true'
+    // Local development defaults to platform admin for support/debug tooling.
+    // Set LOCAL_USER_PLATFORM_ADMIN=false to exercise a non-admin local UI.
+    isPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN?.toLowerCase() !== 'false'
   } });
 });
 const port = config?.port || Number(process.env.PORT || '3000');
