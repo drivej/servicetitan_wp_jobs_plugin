@@ -1682,6 +1682,31 @@ td strong {
   margin: 0 0 8px;
   font-size: 1.15rem;
 }
+.superadmin-version-list {
+  display: grid;
+  gap: 0;
+  margin: 0 0 20px;
+  border-top: 1px solid #eadba9;
+}
+.superadmin-version-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eadba9;
+  font-size: 0.86rem;
+}
+.superadmin-version-list dt {
+  color: #705a20;
+}
+.superadmin-version-list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+.superadmin-version-state dd {
+  color: #8a5014;
+}
 .superadmin-debug-panel > p {
   margin: 0 0 12px;
   color: #705a20;

@@ -124,7 +124,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [rawResponseCopied, setRawResponseCopied] = useState(false);
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
-  const { ready: wordpressPluginReady } = useWordPressPluginStatus();
+  const { ready: wordpressPluginReady, status: wordpressPluginStatus, loading: wordpressPluginStatusLoading } = useWordPressPluginStatus();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -370,6 +370,22 @@ export function JobDetails({ jobId }: { jobId: number }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [buildTask?.state, jobId]);
 
+  const seoVersionMismatch = wordpressStatus?.state === 'exists'
+    && wordpressStatus.seoVersion !== undefined
+    && wordpressStatus.currentSeoVersion !== undefined
+    && wordpressStatus.seoVersion !== wordpressStatus.currentSeoVersion;
+  const versionSyncLabel = wordpressStatusLoading || wordpressPluginStatusLoading
+    ? 'Checking…'
+    : wordpressStatus?.state !== 'exists'
+      ? wordpressStatus?.state === 'not_found' ? 'No associated post' : 'Unavailable'
+      : wordpressStatus.seoVersion === undefined
+        ? 'SEO version unknown'
+        : !wordpressPluginStatus || wordpressPluginStatus.state === 'unknown'
+          ? 'Plugin status unavailable'
+          : seoVersionMismatch || wordpressPluginStatus?.state === 'update_required'
+            ? 'Out of sync'
+            : 'In sync';
+
   return (
     <main className='app-page'>
       <LoadingModal open={loading} label='Loading job details' />
@@ -471,6 +487,14 @@ export function JobDetails({ jobId }: { jobId: number }) {
       </div>
       {isPlatformAdmin && <section className='superadmin-debug-panel' aria-labelledby='superadmin-debug-heading'>
         <div className='superadmin-debug-banner'><strong>SUPER ADMIN CONTENT</strong><span>Visible to the signed-in platform administrator</span></div>
+        <h2 id='superadmin-versions-heading'>WordPress post versions</h2>
+        <dl className='superadmin-version-list' aria-labelledby='superadmin-versions-heading'>
+          <div><dt>SEO generator on this post</dt><dd>{wordpressStatus?.state === 'exists' ? wordpressStatus.seoVersion ?? 'Unknown / legacy post' : wordpressStatus?.state === 'not_found' ? 'No WordPress post' : 'Unavailable'}</dd></div>
+          <div><dt>Current SEO generator</dt><dd>{wordpressStatus?.currentSeoVersion ?? wordpressPluginStatus?.seoGeneratorVersion ?? 'Unavailable'}</dd></div>
+          <div><dt>Installed WordPress plugin</dt><dd>{wordpressPluginStatusLoading ? 'Checking…' : wordpressPluginStatus?.installedVersion ?? 'Unknown'}</dd></div>
+          <div><dt>Required WordPress plugin</dt><dd>{wordpressPluginStatus?.requiredVersion ?? 'Unavailable'}</dd></div>
+          <div className='superadmin-version-state'><dt>Sync status</dt><dd>{versionSyncLabel}</dd></div>
+        </dl>
         <h2 id='superadmin-debug-heading'>Raw ServiceTitan API data</h2>
         <p>Fetched directly from ServiceTitan when opened. This response may contain customer information.</p>
         <details className='raw-api-panel' onToggle={(event) => { if (event.currentTarget.open) void loadRawResponse(); }}>
