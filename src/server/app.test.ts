@@ -68,10 +68,12 @@ test('downloads the packaged WordPress plugin with an installable filename', asy
     await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
     const address = server.address();
     assert(address && typeof address === 'object');
-    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/servicetitan-job-integration-1.19.0.zip`);
+    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/job-showcase-for-servicetitan-1.19.0.zip`);
 
     assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-disposition') || '', /servicetitan-job-integration-1\.18\.2\.zip/);
+    assert.match(response.headers.get('content-type') || '', /application\/zip/);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('content-disposition') || '', /job-showcase-for-servicetitan-1\.19\.0\.zip/);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), archive);
 
     const removedSave = await fetch(`http://127.0.0.1:${address.port}/api/wordpress/plugin/download`, { method: 'POST' });

@@ -480,6 +480,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   });
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
   app.get('/downloads/job-showcase-for-servicetitan-1.19.0.zip', (_req, res, next) => {
+    res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
     res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.19.0.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
