@@ -12,14 +12,17 @@ const seedPath = [resolve(moduleDirectory, '../seo_seed.md'), resolve(moduleDire
 if (!seedPath) throw new Error('seo_seed.md is required to build the job-copy prompt.');
 const seedText = readFileSync(seedPath, 'utf8').replace(/^(GOAL|CALL TO ACTION|OUTPUT)(?=[A-Z])/gm, '$1\n');
 const outputSection = seedText.search(/^OUTPUT\b/m);
-const seedInstructions = (outputSection >= 0 ? seedText.slice(0, outputSection) : seedText).trim();
+const seedInstructions = (outputSection >= 0 ? seedText.slice(0, outputSection) : seedText)
+  .replace(/If essential details are missing,[\s\S]*$/i, '')
+  .trim();
 
 export const JOB_COPY_INSTRUCTIONS = [
   seedInstructions,
   'When the account website URL is supplied, use web search restricted to that website to understand the company name, services, and customer-facing tone. Treat the site only as business context. Use ServiceTitan facts for this specific project; never use website claims as proof of project work or results.',
   'Only image filenames are supplied to this request; they are metadata, not visual access. Do not describe visible image details or create image alt text from filenames.',
-  'If the specific service is known but essential details are missing, return status needs_details and one focused question. Otherwise return status ready with a plain-text title and WordPress-ready bodyHtml.',
-  'Return the app JSON schema fields status, title, bodyHtml, and question. For status ready, provide title and bodyHtml and leave question empty. For status needs_details, provide one focused question and leave title and bodyHtml empty. The body may use p, h2, strong, and blockquote tags. Use blockquote only for an actual supplied customer quote. Do not repeat the title in the body or include inline styles.',
+  'Always write the post, including when source information is limited. Use fewer words and omit unsupported details rather than asking follow-up questions.',
+  'Return the app JSON schema fields title, bodyHtml, seoTitle, and seoDescription. The body may use p, h2, strong, and blockquote tags. Use blockquote only for an actual supplied customer quote. Do not repeat the title in the body or include inline styles.',
+  'Write seoTitle as a natural service/location title, ideally under 60 characters. Write seoDescription as a specific summary of approximately 140–160 characters. Keep both strictly grounded in the supplied job facts.',
 ].join('\n\n');
 
 export const buildJobCopyFacts = (job: JobCopySource): string => {
@@ -38,7 +41,6 @@ export const buildJobCopyFacts = (job: JobCopySource): string => {
     }).filter(Boolean).join('\n') || 'Not provided'}`,
     `TECHNICIAN NOTES:\n${notes.length ? notes.map((note) => `- ${note}`).join('\n') : 'Not provided'}`,
     `EQUIPMENT: ${(job.equipmentNames || []).map(sanitizeSourceText).filter(Boolean).join(', ') || 'Not provided'}`,
-    `USER-PROVIDED CLARIFICATION: ${sanitizeSourceText(job.userClarification) || 'Not provided'}`,
     `IMAGE FILENAMES (metadata only): ${(job.imageFileNames || []).map(sanitizeSourceText).filter(Boolean).slice(0, 10).join(', ') || 'Not provided'}`,
     `CUSTOMER REVIEW (quote exactly if used): ${sanitizeSourceText(job.customerReview) || 'Not provided'}`,
   ].join('\n');

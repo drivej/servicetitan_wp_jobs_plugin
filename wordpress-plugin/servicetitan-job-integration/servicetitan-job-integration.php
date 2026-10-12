@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.19.2
+ * Version: 1.20.0
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.19.2');
+define('STJI_VERSION', '1.20.0');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -25,6 +25,9 @@ define('STJI_COMPLETED_ON_META', '_stji_completed_on');
 define('STJI_ZIP_ACF_FIELD_OPTION', 'stji_zip_acf_field_name');
 define('STJI_POST_TYPE_LABEL_OPTION', 'stji_post_type_label');
 define('STJI_JOB_CARD_MAX_WIDTH_OPTION', 'stji_job_card_max_width');
+define('STJI_SEO_PROVIDER_OPTION', 'stji_seo_provider');
+define('STJI_SEO_TITLE_META_KEY_OPTION', 'stji_seo_title_meta_key');
+define('STJI_SEO_DESCRIPTION_META_KEY_OPTION', 'stji_seo_description_meta_key');
 define('STJI_ZIP_ACF_FIELD_KEY', 'field_stji_zip_codes');
 define('STJI_ZIP_CITY_FIELD_KEY', 'field_stji_zip_city');
 define('STJI_ZIP_STATE_FIELD_KEY', 'field_stji_zip_state');
@@ -227,8 +230,68 @@ function stji_register_post_type_label_setting(): void
         printf('<input type="number" class="small-text" name="%1$s" value="%2$d" min="200" max="1200" step="1" /> px', esc_attr(STJI_JOB_CARD_MAX_WIDTH_OPTION), $width);
         echo '<p class="description">' . esc_html__('Sets the maximum width of each job card in the Recent Jobs grid. Defaults to 400px.', 'servicetitan-job-integration') . '</p>';
     }, 'stji_post_type_settings', 'stji_post_type_section');
+    $presets = stji_seo_meta_presets();
+    register_setting('stji_post_type_settings', STJI_SEO_PROVIDER_OPTION, array(
+        'type' => 'string',
+        'sanitize_callback' => static function ($value): string {
+            return in_array($value, array('yoast', 'rankmath', 'aioseo', 'seopress', 'custom'), true) ? $value : 'yoast';
+        },
+        'default' => 'yoast',
+    ));
+    register_setting('stji_post_type_settings', STJI_SEO_TITLE_META_KEY_OPTION, array('type' => 'string', 'sanitize_callback' => 'stji_sanitize_meta_key', 'default' => $presets['yoast']['title']));
+    register_setting('stji_post_type_settings', STJI_SEO_DESCRIPTION_META_KEY_OPTION, array('type' => 'string', 'sanitize_callback' => 'stji_sanitize_meta_key', 'default' => $presets['yoast']['description']));
+    add_settings_section('stji_seo_section', __('SEO metadata', 'servicetitan-job-integration'), '__return_false', 'stji_post_type_settings');
+    add_settings_field(STJI_SEO_PROVIDER_OPTION, __('SEO plugin preset', 'servicetitan-job-integration'), static function (): void {
+        $provider = (string) get_option(STJI_SEO_PROVIDER_OPTION, 'yoast');
+        echo '<select id="stji-seo-provider" name="' . esc_attr(STJI_SEO_PROVIDER_OPTION) . '">';
+        foreach (array('yoast' => 'Yoast SEO', 'rankmath' => 'Rank Math', 'aioseo' => 'All in One SEO', 'seopress' => 'SEOPress', 'custom' => 'Custom') as $value => $label) {
+            printf('<option value="%1$s"%2$s>%3$s</option>', esc_attr($value), selected($provider, $value, false), esc_html($label));
+        }
+        echo '</select><p class="description">' . esc_html__('Selecting a preset fills the meta keys below. The keys remain editable.', 'servicetitan-job-integration') . '</p>';
+        echo '<script>(function(){var s=document.getElementById("stji-seo-provider"),p=' . wp_json_encode(stji_seo_meta_presets()) . ';if(!s)return;s.addEventListener("change",function(){var v=p[this.value];if(v){document.getElementById("stji-seo-title-meta-key").value=v.title;document.getElementById("stji-seo-description-meta-key").value=v.description;}});})();</script>';
+    }, 'stji_post_type_settings', 'stji_seo_section');
+    add_settings_field(STJI_SEO_TITLE_META_KEY_OPTION, __('SEO title meta key', 'servicetitan-job-integration'), static function (): void {
+        printf('<input id="stji-seo-title-meta-key" type="text" class="regular-text" name="%1$s" value="%2$s" maxlength="191" />', esc_attr(STJI_SEO_TITLE_META_KEY_OPTION), esc_attr(stji_seo_title_meta_key()));
+    }, 'stji_post_type_settings', 'stji_seo_section');
+    add_settings_field(STJI_SEO_DESCRIPTION_META_KEY_OPTION, __('SEO description meta key', 'servicetitan-job-integration'), static function (): void {
+        printf('<input id="stji-seo-description-meta-key" type="text" class="regular-text" name="%1$s" value="%2$s" maxlength="191" />', esc_attr(STJI_SEO_DESCRIPTION_META_KEY_OPTION), esc_attr(stji_seo_description_meta_key()));
+        echo '<p class="description">' . esc_html__('The generated SEO title and description are stored as post metadata using these keys.', 'servicetitan-job-integration') . '</p>';
+    }, 'stji_post_type_settings', 'stji_seo_section');
 }
 add_action('admin_init', 'stji_register_post_type_label_setting');
+
+function stji_seo_meta_presets(): array
+{
+    return array(
+        'yoast' => array('title' => '_yoast_wpseo_title', 'description' => '_yoast_wpseo_metadesc'),
+        'rankmath' => array('title' => 'rank_math_title', 'description' => 'rank_math_description'),
+        'aioseo' => array('title' => '_aioseo_title', 'description' => '_aioseo_description'),
+        'seopress' => array('title' => '_seopress_titles_title', 'description' => '_seopress_titles_desc'),
+        'custom' => array('title' => '', 'description' => ''),
+    );
+}
+
+function stji_sanitize_meta_key($value): string
+{
+    $key = sanitize_text_field((string) $value);
+    return preg_match('/^[A-Za-z0-9_:-]{1,191}$/', $key) ? $key : '';
+}
+
+function stji_seo_title_meta_key(): string
+{
+    $presets = stji_seo_meta_presets();
+    $provider = (string) get_option(STJI_SEO_PROVIDER_OPTION, 'yoast');
+    $key = (string) get_option(STJI_SEO_TITLE_META_KEY_OPTION, $presets[$provider]['title'] ?? $presets['yoast']['title']);
+    return '' !== $key ? stji_sanitize_meta_key($key) : ($presets[$provider]['title'] ?? '');
+}
+
+function stji_seo_description_meta_key(): string
+{
+    $presets = stji_seo_meta_presets();
+    $provider = (string) get_option(STJI_SEO_PROVIDER_OPTION, 'yoast');
+    $key = (string) get_option(STJI_SEO_DESCRIPTION_META_KEY_OPTION, $presets[$provider]['description'] ?? $presets['yoast']['description']);
+    return '' !== $key ? stji_sanitize_meta_key($key) : ($presets[$provider]['description'] ?? '');
+}
 
 function stji_add_post_type_settings_page(): void
 {
@@ -412,6 +475,8 @@ function stji_register_zipcode_rest_field(): void
                 'properties'  => array(
                     'version'     => array('type' => 'integer'),
                     'jobId'       => array('type' => 'integer'),
+                    'seoTitle'    => array('type' => 'string'),
+                    'seoDescription' => array('type' => 'string'),
                     'generatedAt' => array('type' => 'string'),
                 ),
             ),
@@ -774,6 +839,8 @@ function stji_rest_bulk_statuses(WP_REST_Request $request)
             'link'       => is_string($link) ? $link : '',
             'postTitle'  => $post->post_title,
             'postExcerpt' => $post->post_excerpt,
+            'seoTitle' => (string) get_post_meta($post->ID, stji_seo_title_meta_key(), true),
+            'seoDescription' => (string) get_post_meta($post->ID, stji_seo_description_meta_key(), true),
             'postModifiedOn' => get_post_modified_time('c', false, $post),
             'seoVersion' => $seo_version,
             'seoModified' => '' !== $generated_hash && !hash_equals($generated_hash, stji_generated_content_hash($post)),
@@ -842,6 +909,8 @@ function stji_get_rest_generation(array $post): array
     return array(
         'version'     => $post_id ? absint(get_post_meta($post_id, STJI_SEO_VERSION_META, true)) : 0,
         'jobId'       => $post_id ? absint(get_post_meta($post_id, STJI_JOB_ID_META, true)) : 0,
+        'seoTitle'    => $post_id ? (string) get_post_meta($post_id, stji_seo_title_meta_key(), true) : '',
+        'seoDescription' => $post_id ? (string) get_post_meta($post_id, stji_seo_description_meta_key(), true) : '',
         'generatedAt' => $post_id ? (string) get_post_meta($post_id, STJI_GENERATED_AT_META, true) : '',
     );
 }
@@ -872,6 +941,12 @@ function stji_update_rest_generation($value, WP_Post $post)
 
     update_post_meta($post->ID, STJI_SEO_VERSION_META, $version);
     update_post_meta($post->ID, STJI_JOB_ID_META, $job_id);
+    if (isset($value['seoTitle']) && is_string($value['seoTitle'])) {
+        update_post_meta($post->ID, stji_seo_title_meta_key(), sanitize_text_field($value['seoTitle']));
+    }
+    if (isset($value['seoDescription']) && is_string($value['seoDescription'])) {
+        update_post_meta($post->ID, stji_seo_description_meta_key(), sanitize_text_field($value['seoDescription']));
+    }
     update_post_meta($post->ID, STJI_GENERATED_HASH_META, stji_generated_content_hash($stored_post));
     update_post_meta($post->ID, STJI_GENERATED_AT_META, gmdate('c'));
     return true;

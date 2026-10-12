@@ -6,6 +6,8 @@ export interface WordPressStatus {
   link?: string;
   postTitle?: string;
   postExcerpt?: string;
+  seoTitle?: string;
+  seoDescription?: string;
   postModifiedOn?: string;
   message?: string;
   seoVersion?: number;

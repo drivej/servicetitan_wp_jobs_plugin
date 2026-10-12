@@ -14,6 +14,8 @@ interface WordPressPost {
   link?: string;
   modified_gmt?: string;
   modified?: string;
+  seoTitle?: string;
+  seoDescription?: string;
 }
 
 interface WordPressErrorBody {
@@ -28,6 +30,8 @@ export interface WordPressPostStatus {
   link?: string;
   postTitle?: string;
   postExcerpt?: string;
+  seoTitle?: string;
+  seoDescription?: string;
   postModifiedOn?: string;
   message?: string;
   seoVersion?: number;
@@ -60,7 +64,7 @@ export interface WordPressProvider {
 }
 
 type FetchImplementation = typeof fetch;
-export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.19.2';
+export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.20.0';
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;
@@ -468,6 +472,8 @@ const postToStatus = (post: WordPressPost): WordPressPostStatus => ({
   postId: post.id,
   postStatus: post.status,
   ...(post.link ? { link: post.link } : {}),
+  ...(post.seoTitle ? { seoTitle: post.seoTitle } : {}),
+  ...(post.seoDescription ? { seoDescription: post.seoDescription } : {}),
   ...(post.modified_gmt || post.modified ? { postModifiedOn: post.modified_gmt || post.modified } : {}),
 });
 
@@ -499,15 +505,18 @@ const generatedPostFields = (job: JobListItem, approvedCopy?: ApprovedPostCopy):
   title?: string;
   content?: string;
   excerpt?: string;
-  stji_generation: { version: number; jobId: number };
+  stji_generation: { version: number; jobId: number; seoTitle: string; seoDescription: string };
   stji_zipcode?: string;
 } => {
   const zipcode = normalizeZipcode(job.location.zip);
   return {
     title: approvedCopy?.title || `${normalizeServiceName(job.jobName)} in ${formatCityState(job)}`,
-  content: approvedCopy?.bodyHtml ? buildAiPostContent(approvedCopy.bodyHtml) : buildPostContent(job),
+    content: approvedCopy?.bodyHtml ? buildAiPostContent(approvedCopy.bodyHtml) : buildPostContent(job),
     excerpt: approvedCopy?.bodyHtml ? stripHtml(approvedCopy.bodyHtml).slice(0, 320) : buildPostExcerpt(job),
-    stji_generation: { version: SEO_GENERATOR_VERSION, jobId: job.id },
+    stji_generation: { version: SEO_GENERATOR_VERSION, jobId: job.id,
+      seoTitle: approvedCopy?.seoTitle || `${normalizeServiceName(job.jobName)} in ${formatCityState(job)}`,
+      seoDescription: approvedCopy?.seoDescription || stripHtml(approvedCopy?.bodyHtml || buildPostExcerpt(job)).slice(0, 320),
+    },
     ...(zipcode ? { stji_zipcode: zipcode } : {}),
   };
 };

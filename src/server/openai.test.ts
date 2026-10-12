@@ -18,6 +18,8 @@ test('generates structured job copy with the Responses API', async () => {
           text: JSON.stringify({
             title: 'Water Heater Service in Torrance, CA',
             bodyHtml,
+            seoTitle: 'Water Heater Service in Torrance, CA',
+            seoDescription: 'Water heater service in Torrance addressed a homeowner hot water concern with technician work documented in the service record.',
           }),
         }],
       }],
@@ -39,6 +41,8 @@ test('generates structured job copy with the Responses API', async () => {
   assert.deepEqual(generated, {
     title: 'Water Heater Service in Torrance, CA',
     bodyHtml,
+    seoTitle: 'Water Heater Service in Torrance, CA',
+    seoDescription: 'Water heater service in Torrance addressed a homeowner hot water concern with technician work documented in the service record.',
   });
   assert.equal(requestBody?.model, 'test-model');
   assert.equal(requestBody?.store, false);

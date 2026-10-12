@@ -31,14 +31,12 @@ LIMITED INFORMATION
 * Never write “the available details confirm,” “no additional information was provided,” “this post focuses on confirmed facts,” or similar commentary about the inputs.  
 * Avoid empty sentences such as “the project moved forward for the work needed.”  
 * If the specific service is known, write a shorter project spotlight and add one useful service-related explanation.  
-* If the inputs identify only a broad category such as “plumbing service,” with no specific work visible or documented, return needs_details with one focused question about what was repaired or installed. Do not manufacture a publishable project story.  
-CALL TO ACTIONEnd with one brief CTA naming the supplied company and the relevant service/location. Do not say “contact a professional” when the company name is available.  
 ACCURACY AND PRIVACY  
 * Never invent project problems, technician actions, products, specifications, results, testimonials, timelines, prices, warranties, or credentials.  
 * Avoid unsupported “best” claims and generic trust statements.  
 * Exclude customer contact information, street addresses, access codes, and internal/private notes.  
 * Quote customer reviews only when supplied, accurately and briefly.  
-OUTPUTFor a publishable post, return:  
+OUTPUT For a publishable post, return:  
 * status: ready  
 * title: plain text  
 * body_html: clean WordPress-ready HTML using <p>, <h2>, and occasional <strong>. Use <blockquote> only for an actual customer quote.  
@@ -47,5 +45,4 @@ OUTPUTFor a publishable post, return:
 * image_alt_texts: one accurate description per supplied image  
 Do not repeat the title inside body_html. Do not include inline styles, Markdown within HTML, a separate FAQ section, or commentary explaining your writing process.  
 If essential details are missing, return only:  
-* status: needs_details  
-* question: one focused question requesting the specific work performed  
+* try your best   

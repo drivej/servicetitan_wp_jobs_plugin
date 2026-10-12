@@ -30,7 +30,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 366;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
-const WORDPRESS_PLUGIN_FILENAME = 'job-showcase-for-servicetitan-1.19.2.zip';
+const WORDPRESS_PLUGIN_FILENAME = 'job-showcase-for-servicetitan-1.20.0.zip';
 const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPRESS_PLUGIN_FILENAME);
 
 export const createApp = ({
@@ -56,7 +56,7 @@ export const createApp = ({
   });
   app.get([
     '/downloads/servicetitan-job-integration.zip',
-    '/downloads/job-showcase-for-servicetitan-1.19.2.zip',
+    '/downloads/job-showcase-for-servicetitan-1.20.0.zip',
     '/downloads/servicetitan-job-integration-1.11.1.zip',
     '/downloads/servicetitan-job-integration-1.11.0.zip',
     '/downloads/servicetitan-job-integration-1.10.0.zip',
@@ -179,7 +179,6 @@ export const createApp = ({
         let approvedCopy: ApprovedPostCopy;
         try {
           const generated = await copyGenerator.generate(promptSource);
-          if (generated.status === 'needs_details') throw new OpenAIRequestError(generated.question || 'More project details are needed before updating this post.', 422);
           approvedCopy = parseApprovedPostCopy(formatJobCopy(generated), true)!;
         }
         catch (error) { throw new TokenOperationSafeFailure(error); }
@@ -326,14 +325,18 @@ export const parseApprovedPostCopy = (value: unknown, required: boolean): Approv
     return undefined;
   }
   if (typeof value !== 'string') throw new ValidationError('AI-generated copy must contain a title and HTML body.');
-  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]+)$/i);
-  if (!match) throw new ValidationError('Start with TITLE: followed by BODY: and the WordPress-ready HTML.');
+  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
+  if (!match) throw new ValidationError('Provide TITLE, BODY, SEO TITLE, and SEO DESCRIPTION sections.');
   const title = match[1]!.trim();
   const bodyHtml = match[2]!.trim();
   if (title.length < 5 || title.length > 160) throw new ValidationError('AI-generated title must be between 5 and 160 characters.');
   if (!isWordPressBodyHtml(bodyHtml)) throw new ValidationError('The body must use p tags and optional h2, strong, or blockquote tags.');
   if (/<(?:script|style|img|a|h[13456]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) throw new ValidationError('The body contains unsupported HTML.');
-  return { title, bodyHtml };
+  const seoTitle = typeof match[3] === 'string' ? match[3].trim() : '';
+  const seoDescription = typeof match[4] === 'string' ? match[4].trim() : '';
+  if (seoTitle.length < 5 || seoTitle.length > 160) throw new ValidationError('SEO title must be between 5 and 160 characters.');
+  if (seoDescription.length < 40 || seoDescription.length > 320) throw new ValidationError('SEO description must be between 40 and 320 characters.');
+  return { title, bodyHtml, seoTitle, seoDescription };
 };
 
 const parseJobIds = (value: unknown): number[] => {

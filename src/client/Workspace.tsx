@@ -1125,8 +1125,8 @@ export function Workspace({ children }: { children: ReactNode }) {
                     <h2>Install the plugin and connect WordPress</h2>
                     <p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p>
                     <div className='onboarding-plugin-download'>
-                      <Button component='a' variant='contained' size='large' className='onboarding-download-button' startIcon={<DownloadRoundedIcon />} href='/downloads/job-showcase-for-servicetitan-1.19.2.zip' download>
-                        Download WordPress plugin 1.19.2
+                      <Button component='a' variant='contained' size='large' className='onboarding-download-button' startIcon={<DownloadRoundedIcon />} href='/downloads/job-showcase-for-servicetitan-1.20.0.zip' download>
+                        Download WordPress plugin 1.20.0
                       </Button>
                       <p>
                         Upload this ZIP in WordPress under <strong>Plugins → Add New Plugin → Upload Plugin</strong>, then install and activate it. <a href='/wordpress-plugin'>Full installation instructions</a>

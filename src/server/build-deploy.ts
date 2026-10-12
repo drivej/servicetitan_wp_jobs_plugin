@@ -41,7 +41,6 @@ export async function buildAndDeploy(jobId: number, providers: BuildProviders, o
     let copy;
     try {
       const generated = await copyGenerator.generate(promptSource);
-      if (generated.status === 'needs_details') throw new Error(generated.question || 'More project details are needed before building this post.');
       copy = parseApprovedPostCopy(formatJobCopy(generated), true)!;
     }
     catch (error) { throw new TokenOperationSafeFailure(error); }

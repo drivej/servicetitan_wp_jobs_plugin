@@ -13,28 +13,31 @@ export interface JobCopySource {
 }
 
 export interface GeneratedJobCopy {
-  status?: 'ready' | 'needs_details';
   title: string;
   bodyHtml: string;
-  question?: string;
+  seoTitle: string;
+  seoDescription: string;
 }
 
-export const formatJobCopy = ({ title, bodyHtml }: GeneratedJobCopy): string =>
-  `TITLE: ${title.trim()}\nBODY:\n${bodyHtml.trim()}`;
+export const formatJobCopy = ({ title, bodyHtml, seoTitle, seoDescription }: GeneratedJobCopy): string =>
+  `TITLE: ${title.trim()}\nBODY:\n${bodyHtml.trim()}\nSEO TITLE: ${seoTitle.trim()}\nSEO DESCRIPTION: ${seoDescription.trim()}`;
 
 export const hasCompleteJobBody = (copy: unknown): copy is GeneratedJobCopy => {
   if (!copy || typeof copy !== 'object') return false;
   const record = copy as Record<string, unknown>;
   return typeof record.title === 'string'
-    && record.status !== 'needs_details'
     && record.title.trim().length > 0
     && typeof record.bodyHtml === 'string'
-    && isWordPressBodyHtml(record.bodyHtml);
+    && isWordPressBodyHtml(record.bodyHtml)
+    && typeof record.seoTitle === 'string'
+    && record.seoTitle.trim().length >= 5
+    && typeof record.seoDescription === 'string'
+    && record.seoDescription.trim().length >= 40;
 };
 
 export const hasFormattedJobBody = (value: string): boolean => {
   if (typeof value !== 'string') return false;
-  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]+)$/i);
+  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
   return Boolean(match && isWordPressBodyHtml(match[2]!.trim()));
 };
 

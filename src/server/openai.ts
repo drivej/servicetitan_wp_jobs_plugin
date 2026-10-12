@@ -36,12 +36,12 @@ export class OpenAIJobCopyGenerator implements JobCopyGenerator {
             schema: {
               type: 'object',
               properties: {
-                status: { type: 'string', enum: ['ready', 'needs_details'] },
                 title: { type: 'string', description: 'Plain text post title.' },
                 bodyHtml: { type: 'string', description: 'WordPress-ready HTML using p and optional h2/strong; blockquote only for an exact supplied review.' },
-                question: { type: 'string', description: 'One focused question when essential project details are missing; empty when status is ready.' },
+                seoTitle: { type: 'string', description: 'Natural SEO title for the post, ideally under 60 characters.' },
+                seoDescription: { type: 'string', description: 'Specific SEO description, approximately 140 to 160 characters.' },
               },
-              required: ['status', 'title', 'bodyHtml', 'question'], additionalProperties: false,
+              required: ['title', 'bodyHtml', 'seoTitle', 'seoDescription'], additionalProperties: false,
             },
           } },
         }),
@@ -76,21 +76,18 @@ export class DisabledJobCopyGenerator implements JobCopyGenerator {
 const validateGeneratedCopy = (value: unknown): GeneratedJobCopy => {
   if (!value || typeof value !== 'object') throw new OpenAIRequestError('OpenAI returned copy in an unexpected format.', 502);
   const record = value as Record<string, unknown>;
-  const status = record.status === 'needs_details' ? 'needs_details' : 'ready';
-  if (status === 'needs_details') {
-    const question = typeof record.question === 'string' ? record.question.replace(/\s+/g, ' ').trim() : '';
-    if (question.length < 10 || question.length > 500) throw new OpenAIRequestError('OpenAI returned an invalid follow-up question.', 502);
-    return { status, title: '', bodyHtml: '', question };
-  }
   const title = typeof record.title === 'string' ? record.title.replace(/\s+/g, ' ').trim() : '';
   const bodyHtml = typeof record.bodyHtml === 'string' ? record.bodyHtml.trim() : '';
-  if (title.length < 5 || title.length > 160 || !isWordPressBodyHtml(bodyHtml)) {
+  const seoTitle = typeof record.seoTitle === 'string' ? record.seoTitle.replace(/\s+/g, ' ').trim() : '';
+  const seoDescription = typeof record.seoDescription === 'string' ? record.seoDescription.replace(/\s+/g, ' ').trim() : '';
+  if (title.length < 5 || title.length > 160 || seoTitle.length < 5 || seoTitle.length > 160
+    || seoDescription.length < 40 || seoDescription.length > 320 || !isWordPressBodyHtml(bodyHtml)) {
     throw new OpenAIRequestError('OpenAI generated incomplete or invalid project copy. Try again.', 502);
   }
   if (/<(?:script|style|img|a|h[13456]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) {
     throw new OpenAIRequestError('OpenAI generated unsupported HTML. Try again.', 502);
   }
-  return { status, title, bodyHtml, question: '' };
+  return { title, bodyHtml, seoTitle, seoDescription };
 };
 
 const companyWebsiteDomain = (value: string | undefined): string | undefined => {

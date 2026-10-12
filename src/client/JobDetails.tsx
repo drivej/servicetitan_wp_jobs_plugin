@@ -124,8 +124,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [rawResponseCopied, setRawResponseCopied] = useState(false);
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
-  const [copyQuestion, setCopyQuestion] = useState('');
-  const [copyClarification, setCopyClarification] = useState('');
   const { ready: wordpressPluginReady, status: wordpressPluginStatus, loading: wordpressPluginStatusLoading } = useWordPressPluginStatus();
 
   useEffect(() => {
@@ -231,7 +229,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
   useEffect(() => {
     if (wordpressStatus?.state !== 'exists' || aiCopyEdited) return;
     if (wordpressStatus.postTitle === undefined && wordpressStatus.postExcerpt === undefined) return;
-    setAiCopy(formatJobCopy({ title: wordpressStatus.postTitle || '', bodyHtml: `<p>${wordpressStatus.postExcerpt || ''}</p><p></p><p></p>` }));
+    setAiCopy(formatJobCopy({ title: wordpressStatus.postTitle || '', bodyHtml: `<p>${wordpressStatus.postExcerpt || 'Existing post content is not loaded here.'} This content can be replaced by generating a fresh post.</p>`, seoTitle: wordpressStatus.seoTitle || wordpressStatus.postTitle || '', seoDescription: wordpressStatus.seoDescription || wordpressStatus.postExcerpt || '' }));
   }, [aiCopyEdited, wordpressStatus]);
   const toggleImage = (attachmentId: string) => {
     setSelectedIds([attachmentId]);
@@ -244,19 +242,12 @@ export function JobDetails({ jobId }: { jobId: number }) {
     try {
       const response = await apiFetch(`/api/jobs/${jobId}/ai-copy`, {
         method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify(copyClarification.trim() ? { clarification: copyClarification.trim() } : {}),
+        headers: { Accept: 'application/json' },
       });
       if (response.status === 402) return;
       const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Unable to generate copy.');
-      if (body.status === 'needs_details') {
-        setCopyQuestion(body.question || 'More project details are needed before copy can be generated.');
-        return;
-      }
       if (!hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
-      setCopyQuestion('');
-      setCopyClarification('');
       setAiCopyEdited(true);
       setAiCopy(formatJobCopy(body));
     } catch (requestError) {
@@ -477,20 +468,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 {generatingCopy ? 'Generating…' : 'Generate Copy'}
               </Button>
             </p>
-            {copyQuestion && <div className='notice' role='status'>
-              <strong>One more project detail is needed</strong>
-              <p>{copyQuestion}</p>
-              <TextField
-                variant='outlined'
-                size='small'
-                fullWidth
-                label='Project clarification'
-                value={copyClarification}
-                onChange={(event) => setCopyClarification(event.target.value)}
-                slotProps={{ htmlInput: { maxLength: 1000 } }}
-                helperText='This answer is used for this generation request and is not saved to the app.'
-              />
-            </div>}
             <label className='ai-output'>
               <span>AI-generated post copy</span>
               <TextField
@@ -501,7 +478,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 aria-label='AI-generated post copy'
                 rows={16}
                 slotProps={{ htmlInput: { maxLength: 6000 } }}
-                placeholder={'TITLE: Service Performed in City, ST\nBODY:\n<p>Opening paragraph describing the work and location.</p>\n<p>Original problem or project goal.</p>\n<p>Documented work and result.</p>'}
+                placeholder={'TITLE: Service Performed in City, ST\nBODY:\n<p>Project copy…</p>\nSEO TITLE: Service Performed in City, ST\nSEO DESCRIPTION: A concise description of the documented work and location.'}
                 value={aiCopy}
                 onChange={(event) => {
                   setAiCopyEdited(true);
@@ -512,7 +489,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 <span>
                   {wordpressStatus?.state === 'exists'
                     ? 'The current title and excerpt are loaded from WordPress. Update generates fresh copy with the latest AI prompt before sending it to WordPress.'
-                    : 'Build creates the initial draft and generates its copy automatically. Use TITLE: and BODY: with WordPress-ready paragraph HTML when preparing an SEO update.'}
+                    : 'Build creates the initial draft and generates its copy automatically. Include TITLE, BODY, SEO TITLE, and SEO DESCRIPTION when preparing copy manually.'}
                 </span>
                 <span>{aiCopy.length}/6000</span>
               </span>
