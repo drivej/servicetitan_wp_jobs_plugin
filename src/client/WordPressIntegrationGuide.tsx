@@ -120,7 +120,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
               <li>Install and activate <strong>Advanced Custom Fields</strong> if it is not already active.</li>
               <li>Open the app’s <a href="/wordpress-plugin">WordPress plugin tab</a> and download the plugin ZIP. Do not extract it.</li>
               <li>In WordPress, open <strong>Plugins → Add New Plugin → Upload Plugin</strong>.</li>
-              <li>Select <code>job-showcase-for-servicetitan-1.19.0.zip</code>, then choose <strong>Install Now</strong>.</li>
+              <li>Select <code>job-showcase-for-servicetitan-1.19.1.zip</code>, then choose <strong>Install Now</strong>.</li>
               <li>Activate <strong>Job Showcase for ServiceTitan</strong>.</li>
             </ol>
             <p>Activation requires Advanced Custom Fields and creates the ServiceTitan Jobs post type, REST endpoint, shared ZIP ACF fields, ZIP-code taxonomy, and page shortcode automatically. For an update, upload the newer ZIP and choose <strong>Replace current with uploaded</strong>.</p>
@@ -193,7 +193,7 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
             <p>Advanced Custom Fields is required. The plugin creates a shared multi-select ZIP taxonomy field named <code>my_zip_codes</code> by default on Posts, Pages, and ServiceTitan jobs. Manage the shared records under <strong>ServiceTitan Jobs → ZIP Codes</strong>. Single job pages display an approximate map plus linked <strong>Project Area</strong> and <strong>Completed</strong> metadata. Assign one or more ZIP terms to a city page to make it eligible as the Project Area destination.</p>
 
             <h3>Page ZIPs and parent inheritance</h3>
-            <p>When <code>zipcodes</code> is omitted or blank, the shortcode reads the current page’s <code>my_zip_codes</code> metadata (or your configured ACF field name). It merges ZIPs from the page and every ancestor, removing duplicates. To set a parent, use the page editor’s <strong>Parent</strong> setting and save the page.</p>
+            <p>When <code>zipcodes</code> is omitted or blank, the shortcode reads the current page’s <code>my_zip_codes</code> metadata (or your configured ACF field name). Existing ACF Text and Text Area fields are also supported: separate ZIPs with commas, spaces, newlines, or semicolons. You do not need to rename or remove an existing text field. It merges ZIPs from the page and every ancestor, removing duplicates. To set a parent, use the page editor’s <strong>Parent</strong> setting and save the page.</p>
             <p>For example, a page with ZIP 07001 and a parent with ZIPs 07001 and 07002 shows jobs matching 07001 or 07002 once each. Set <code>inherit_zipcodes="false"</code> to use only the current page’s ZIPs. Explicit <code>zipcodes</code> always overrides the page and ancestor ZIPs.</p>
             <div className="guide-note"><strong>No ZIPs:</strong> If no valid ZIPs resolve, the shortcode displays nothing. Select ZIPs on the page or an ancestor, or enter them explicitly in the shortcode.</div>
             <h3>Shortcode options</h3>

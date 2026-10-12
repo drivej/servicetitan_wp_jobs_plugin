@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.19.0
+ * Version: 1.19.1
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.19.0');
+define('STJI_VERSION', '1.19.1');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -391,6 +391,15 @@ function stji_find_acf_field_by_name(string $field_name): ?array
 }
 
 /**
+ * Whether the configured ACF field stores literal ZIP text rather than term IDs.
+ */
+function stji_zip_acf_field_is_text(): bool
+{
+    $field = stji_find_acf_field_by_name(stji_zip_acf_field_name());
+    return $field && in_array($field['type'] ?? '', array('text', 'textarea'), true);
+}
+
+/**
  * Use an existing compatible field key, or the plugin's stable local key.
  */
 function stji_zip_acf_field_key(): string
@@ -509,12 +518,12 @@ function stji_acf_field_compatibility_notice(): void
         return;
     }
     $field = stji_find_acf_field_by_name(stji_zip_acf_field_name());
-    if (!$field || ('taxonomy' === ($field['type'] ?? '') && 'st_job_zipcode' === ($field['taxonomy'] ?? ''))) {
+    if (!$field || stji_zip_acf_field_is_text() || ('taxonomy' === ($field['type'] ?? '') && 'st_job_zipcode' === ($field['taxonomy'] ?? ''))) {
         return;
     }
     echo '<div class="notice notice-error"><p>'
         . esc_html(sprintf(
-            __('The ACF field “%s” already exists but is not a ZIP Codes taxonomy field. Rename or remove it before using ServiceTitan ZIP relationships.', 'servicetitan-job-integration'),
+            __('The ACF field “%s” uses an unsupported field type. Use a Text or Text Area field containing ZIP codes, a ZIP Codes taxonomy field, or configure a different ZIP field name in the app.', 'servicetitan-job-integration'),
             stji_zip_acf_field_name()
         ))
         . '</p></div>';
@@ -979,7 +988,18 @@ function stji_normalize_coordinate($value, float $minimum, float $maximum): ?flo
 function stji_store_zip_acf_value(int $post_id, array $term_ids): void
 {
     $field_name = stji_zip_acf_field_name();
-    update_post_meta($post_id, $field_name, array_values(array_unique(array_map('intval', $term_ids))));
+    $value = array_values(array_unique(array_map('intval', $term_ids)));
+    if (stji_zip_acf_field_is_text()) {
+        $zipcodes = array();
+        foreach ($value as $term_id) {
+            $term = get_term($term_id, 'st_job_zipcode');
+            if ($term instanceof WP_Term) {
+                $zipcodes = array_merge($zipcodes, stji_parse_zipcodes($term->name));
+            }
+        }
+        $value = implode(', ', array_unique($zipcodes));
+    }
+    update_post_meta($post_id, $field_name, $value);
     update_post_meta($post_id, '_' . $field_name, stji_zip_acf_field_key());
 }
 
@@ -1013,7 +1033,9 @@ function stji_get_page_zipcodes(int $post_id, bool $inherit = true): array
     foreach (array_unique($post_ids) as $page_id) {
         $values = get_post_meta((int) $page_id, stji_zip_acf_field_name(), true);
         // ACF taxonomy fields store an array of term IDs; text fields store ZIPs.
-        if (is_array($values)) {
+        if (stji_zip_acf_field_is_text()) {
+            $zipcodes = array_merge($zipcodes, stji_parse_zipcodes($values));
+        } elseif (is_array($values)) {
             foreach ($values as $value) {
                 if (!is_scalar($value) || !ctype_digit((string) $value)) {
                     continue;
@@ -1323,7 +1345,9 @@ function stji_migrate_zip_relationships(): void
         $term_ids = wp_get_object_terms((int) $post_id, 'st_job_zipcode', array('fields' => 'ids'));
         $term_ids = is_wp_error($term_ids) ? array() : array_map('intval', $term_ids);
         $legacy_values = get_post_meta((int) $post_id, $field_name, true);
-        $legacy_values = is_array($legacy_values) ? $legacy_values : array($legacy_values);
+        $legacy_values = stji_zip_acf_field_is_text()
+            ? stji_parse_zipcodes($legacy_values)
+            : (is_array($legacy_values) ? $legacy_values : array($legacy_values));
         foreach ($legacy_values as $legacy_value) {
             $zipcode = stji_normalize_zipcode((string) $legacy_value);
             if ('' === $zipcode) {
@@ -1340,7 +1364,9 @@ function stji_migrate_zip_relationships(): void
         $term_ids = array_values(array_unique($term_ids));
         if (!empty($term_ids)) {
             wp_set_object_terms((int) $post_id, $term_ids, 'st_job_zipcode', false);
-            stji_store_zip_acf_value((int) $post_id, $term_ids);
+            if (!stji_zip_acf_field_is_text()) {
+                stji_store_zip_acf_value((int) $post_id, $term_ids);
+            }
         }
     }
 
@@ -1502,10 +1528,13 @@ function stji_render_empty_jobs(): string
  */
 function stji_parse_zipcodes($values): array
 {
-    $values = is_array($values) ? $values : explode(',', (string) $values);
+    $values = is_array($values) ? $values : preg_split('/[\s,;]+/', trim((string) $values));
     $zipcodes = array();
 
     foreach ($values as $value) {
+        if (!is_scalar($value)) {
+            continue;
+        }
         $zipcode = stji_normalize_zipcode((string) $value);
         if ('' !== $zipcode) {
             $zipcodes[] = $zipcode;

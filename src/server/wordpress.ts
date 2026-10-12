@@ -60,7 +60,7 @@ export interface WordPressProvider {
 }
 
 type FetchImplementation = typeof fetch;
-export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.19.0';
+export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.19.1';
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;

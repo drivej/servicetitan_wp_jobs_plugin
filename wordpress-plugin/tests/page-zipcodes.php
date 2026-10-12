@@ -9,6 +9,9 @@ function register_activation_hook(...$args) {}
 function register_deactivation_hook(...$args) {}
 function sanitize_key($value) { return $value; }
 function sanitize_text_field($value) { return trim($value); }
+function acf_get_field_groups() { return [ ['key' => 'test'] ]; }
+function acf_get_fields($group) { return $GLOBALS['acf_fields'] ?? []; }
+function update_post_meta($id, $key, $value) { $GLOBALS['meta'][$id][$key] = $value; }
 function get_option($name, $default = false) { return $default; }
 function get_post_ancestors($id) { return [20, 30]; }
 function get_post_meta($id, $key, $single) { return $GLOBALS['meta'][$id] ?? ''; }
@@ -48,4 +51,13 @@ check(isset($GLOBALS['query']), false);
 $GLOBALS['meta'] = [20 => ['1']];
 check(stji_render_jobs_shortcode(['inherit_zipcodes' => 'false']), '');
 check(isset($GLOBALS['query']), false);
+$GLOBALS['acf_fields'] = [['name' => 'my_zip_codes', 'key' => 'field_existing', 'type' => 'textarea']];
+$GLOBALS['meta'] = [10 => "07001, 07002\n07003;07001", 20 => '07004'];
+check(stji_get_page_zipcodes(10), ['07001', '07002', '07003', '07004']);
+ob_start();
+stji_acf_field_compatibility_notice();
+check(ob_get_clean(), '');
+stji_store_zip_acf_value(40, [1, 2]);
+check($GLOBALS['meta'][40]['my_zip_codes'], '07001, 07002');
+check($GLOBALS['meta'][40]['_my_zip_codes'], 'field_existing');
 echo "Page ZIP shortcode checks passed.\n";

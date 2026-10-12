@@ -7,7 +7,7 @@ import { ZipArchive } from 'archiver';
 
 const sourceDirectory = resolve('wordpress-plugin/servicetitan-job-integration');
 const outputDirectory = resolve('dist/downloads');
-const outputFile = join(outputDirectory, 'job-showcase-for-servicetitan-1.19.0.zip');
+const outputFile = join(outputDirectory, 'job-showcase-for-servicetitan-1.19.1.zip');
 
 await mkdir(outputDirectory, { recursive: true });
 
