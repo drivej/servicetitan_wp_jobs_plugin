@@ -2041,3 +2041,25 @@ td strong {
   opacity: .55;
 }
 .build-deploy-error { max-width: 260px; color: #a32626; font-size: 0.8rem; line-height: 1.4; }
+
+.onboarding-plugin-download {
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid #b8d8c8;
+  border-radius: 12px;
+  background: #eef7f2;
+}
+.onboarding-plugin-download .onboarding-download-button {
+  min-height: 56px;
+  padding: 14px 24px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-transform: none;
+}
+.onboarding-plugin-download p { margin: 16px 0 0; }
+.onboarding-password-instructions { margin: 24px 0; }
+.onboarding-password-instructions li + li { margin-top: 8px; }
+@media (max-width: 600px) {
+  .onboarding-plugin-download { padding: 16px; }
+  .onboarding-plugin-download .onboarding-download-button { width: 100%; }
+}
