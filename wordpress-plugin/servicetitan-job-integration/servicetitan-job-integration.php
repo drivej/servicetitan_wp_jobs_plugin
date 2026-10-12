@@ -391,12 +391,12 @@ function stji_find_acf_field_by_name(string $field_name): ?array
 }
 
 /**
- * Whether the configured ACF field stores literal ZIP text rather than term IDs.
+ * Whether the configured ACF field stores literal ZIP values rather than taxonomy term IDs.
  */
-function stji_zip_acf_field_is_text(): bool
+function stji_zip_acf_field_uses_zip_values(): bool
 {
     $field = stji_find_acf_field_by_name(stji_zip_acf_field_name());
-    return $field && in_array($field['type'] ?? '', array('text', 'textarea'), true);
+    return $field && in_array($field['type'] ?? '', array('text', 'textarea', 'select', 'checkbox'), true);
 }
 
 /**
@@ -518,12 +518,12 @@ function stji_acf_field_compatibility_notice(): void
         return;
     }
     $field = stji_find_acf_field_by_name(stji_zip_acf_field_name());
-    if (!$field || stji_zip_acf_field_is_text() || ('taxonomy' === ($field['type'] ?? '') && 'st_job_zipcode' === ($field['taxonomy'] ?? ''))) {
+    if (!$field || stji_zip_acf_field_uses_zip_values() || ('taxonomy' === ($field['type'] ?? '') && 'st_job_zipcode' === ($field['taxonomy'] ?? ''))) {
         return;
     }
     echo '<div class="notice notice-error"><p>'
         . esc_html(sprintf(
-            __('The ACF field “%s” uses an unsupported field type. Use a Text or Text Area field containing ZIP codes, a ZIP Codes taxonomy field, or configure a different ZIP field name in the app.', 'servicetitan-job-integration'),
+            __('The ACF field “%s” uses an unsupported field type. Use a Text, Text Area, Select, or Checkbox field containing ZIP codes, a ZIP Codes taxonomy field, or configure a different ZIP field name in the app.', 'servicetitan-job-integration'),
             stji_zip_acf_field_name()
         ))
         . '</p></div>';
@@ -989,7 +989,7 @@ function stji_store_zip_acf_value(int $post_id, array $term_ids): void
 {
     $field_name = stji_zip_acf_field_name();
     $value = array_values(array_unique(array_map('intval', $term_ids)));
-    if (stji_zip_acf_field_is_text()) {
+    if (stji_zip_acf_field_uses_zip_values()) {
         $zipcodes = array();
         foreach ($value as $term_id) {
             $term = get_term($term_id, 'st_job_zipcode');
@@ -997,7 +997,15 @@ function stji_store_zip_acf_value(int $post_id, array $term_ids): void
                 $zipcodes = array_merge($zipcodes, stji_parse_zipcodes($term->name));
             }
         }
-        $value = implode(', ', array_unique($zipcodes));
+        $zipcodes = array_values(array_unique($zipcodes));
+        $field = stji_find_acf_field_by_name($field_name);
+        if ('checkbox' === $field['type'] || ('select' === $field['type'] && !empty($field['multiple']))) {
+            $value = $zipcodes;
+        } elseif ('select' === $field['type']) {
+            $value = $zipcodes[0] ?? '';
+        } else {
+            $value = implode(', ', $zipcodes);
+        }
     }
     update_post_meta($post_id, $field_name, $value);
     update_post_meta($post_id, '_' . $field_name, stji_zip_acf_field_key());
@@ -1033,7 +1041,7 @@ function stji_get_page_zipcodes(int $post_id, bool $inherit = true): array
     foreach (array_unique($post_ids) as $page_id) {
         $values = get_post_meta((int) $page_id, stji_zip_acf_field_name(), true);
         // ACF taxonomy fields store an array of term IDs; text fields store ZIPs.
-        if (stji_zip_acf_field_is_text()) {
+        if (stji_zip_acf_field_uses_zip_values()) {
             $zipcodes = array_merge($zipcodes, stji_parse_zipcodes($values));
         } elseif (is_array($values)) {
             foreach ($values as $value) {
@@ -1345,7 +1353,7 @@ function stji_migrate_zip_relationships(): void
         $term_ids = wp_get_object_terms((int) $post_id, 'st_job_zipcode', array('fields' => 'ids'));
         $term_ids = is_wp_error($term_ids) ? array() : array_map('intval', $term_ids);
         $legacy_values = get_post_meta((int) $post_id, $field_name, true);
-        $legacy_values = stji_zip_acf_field_is_text()
+        $legacy_values = stji_zip_acf_field_uses_zip_values()
             ? stji_parse_zipcodes($legacy_values)
             : (is_array($legacy_values) ? $legacy_values : array($legacy_values));
         foreach ($legacy_values as $legacy_value) {
@@ -1364,7 +1372,7 @@ function stji_migrate_zip_relationships(): void
         $term_ids = array_values(array_unique($term_ids));
         if (!empty($term_ids)) {
             wp_set_object_terms((int) $post_id, $term_ids, 'st_job_zipcode', false);
-            if (!stji_zip_acf_field_is_text()) {
+            if (!stji_zip_acf_field_uses_zip_values()) {
                 stji_store_zip_acf_value((int) $post_id, $term_ids);
             }
         }

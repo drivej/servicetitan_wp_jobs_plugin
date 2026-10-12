@@ -104,7 +104,7 @@ available for recovery.
 
 When a job is pushed, its ZIP code is assigned to the plugin's
 `st_job_zipcode` taxonomy. Add `[servicetitan_jobs]` to a WordPress page to show
-published jobs with pagination. Blank or omitted `zipcodes` uses the page’s `my_zip_codes` ACF field (or the configured field name), merging and deduplicating ZIPs from all ancestor pages. Existing ACF Text and Text Area fields are supported with ZIPs separated by commas, whitespace, or semicolons. Set `inherit_zipcodes="false"` to use only the current page. Explicit `zipcodes` overrides page ZIPs. If no valid ZIPs are found, the shortcode renders nothing. ZIP filtering has no
+published jobs with pagination. Blank or omitted `zipcodes` uses the page’s `my_zip_codes` ACF field (or the configured field name), merging and deduplicating ZIPs from all ancestor pages. Existing ACF Text, Text Area, Select, and Checkbox fields are supported with ZIPs separated by commas, whitespace, or semicolons. Set `inherit_zipcodes="false"` to use only the current page. Explicit `zipcodes` overrides page ZIPs. If no valid ZIPs are found, the shortcode renders nothing. ZIP filtering has no
 visitor-facing ZIP controls are rendered. Configure it with
 `zipcodes="07001,07002"`, `offset="1"`, `limit="10"`, and `page_size="2"`.
 `posts_per_page` remains available as a backward-compatible alias when

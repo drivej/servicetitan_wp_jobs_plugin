@@ -60,4 +60,20 @@ check(ob_get_clean(), '');
 stji_store_zip_acf_value(40, [1, 2]);
 check($GLOBALS['meta'][40]['my_zip_codes'], '07001, 07002');
 check($GLOBALS['meta'][40]['_my_zip_codes'], 'field_existing');
+foreach (['checkbox', 'select'] as $type) {
+    $GLOBALS['acf_fields'] = [['name' => 'my_zip_codes', 'key' => 'field_existing', 'type' => $type, 'multiple' => 1]];
+    // Five-digit numeric strings are ZIPs, not term IDs.
+    $GLOBALS['meta'] = [10 => ['07001', '07002'], 20 => ['07002', '07003']];
+    check(stji_get_page_zipcodes(10), ['07001', '07002', '07003']);
+    ob_start();
+    stji_acf_field_compatibility_notice();
+    check(ob_get_clean(), '');
+    stji_store_zip_acf_value(40, [1, 2]);
+    check($GLOBALS['meta'][40]['my_zip_codes'], ['07001', '07002']);
+}
+$GLOBALS['acf_fields'][0]['multiple'] = 0;
+$GLOBALS['meta'] = [10 => '07001'];
+check(stji_get_page_zipcodes(10, false), ['07001']);
+stji_store_zip_acf_value(40, [1]);
+check($GLOBALS['meta'][40]['my_zip_codes'], '07001');
 echo "Page ZIP shortcode checks passed.\n";
