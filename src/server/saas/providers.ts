@@ -40,7 +40,7 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
     authUrl: 'https://auth.servicetitan.io/connect/token',
   });
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
-  return { serviceTitan: {
+  return { companyWebsiteUrl: website.url, serviceTitan: {
     getJobs: (query) => serviceTitan.getJobs(query),
     getJobImageCandidates: (id) => serviceTitan.getJobImageCandidates(id),
     getJob: async (id) => (await getJobDetails(id)).summary,

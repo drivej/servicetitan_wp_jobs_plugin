@@ -20,6 +20,7 @@ interface CreateAppOptions {
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
   copyGenerator?: JobCopyGenerator;
+  companyWebsiteUrl?: string;
   staticDirectory?: string;
   wordpressPluginArchivePath?: string;
   apiPrefix?: string;
@@ -36,6 +37,7 @@ export const createApp = ({
   serviceTitan,
   wordpress,
   copyGenerator = new DisabledJobCopyGenerator(),
+  companyWebsiteUrl,
   staticDirectory,
   wordpressPluginArchivePath = WORDPRESS_PLUGIN_ARCHIVE,
   apiPrefix = '/api',
@@ -113,6 +115,7 @@ export const createApp = ({
       const promptSource = { ...details.summary,
         technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
         imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+        ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
       };
       response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), details.summary.id, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId: details.summary.id })));
     } catch (error) { next(error); }
@@ -166,11 +169,16 @@ export const createApp = ({
       const promptSource = { ...details.summary,
         technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
         imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+        ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
       };
       response.set('Cache-Control', 'no-store');
       response.json(await spendJobToken('update', async () => {
         let approvedCopy: ApprovedPostCopy;
-        try { approvedCopy = parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(promptSource)), true)!; }
+        try {
+          const generated = await copyGenerator.generate(promptSource);
+          if (generated.status === 'needs_details') throw new OpenAIRequestError(generated.question || 'More project details are needed before updating this post.', 422);
+          approvedCopy = parseApprovedPostCopy(formatJobCopy(generated), true)!;
+        }
         catch (error) { throw new TokenOperationSafeFailure(error); }
         return wordpress.regenerateJob(details.summary, force, image, approvedCopy);
       }, jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'update', jobId, force, attachmentId })));
@@ -302,8 +310,8 @@ export const parseApprovedPostCopy = (value: unknown, required: boolean): Approv
   const title = match[1]!.trim();
   const bodyHtml = match[2]!.trim();
   if (title.length < 5 || title.length > 160) throw new ValidationError('AI-generated title must be between 5 and 160 characters.');
-  if (!isWordPressBodyHtml(bodyHtml)) throw new ValidationError('The body must contain 3–5 short paragraphs using p tags and optional blockquote.');
-  if (/<(?:script|style|img|a|h[1-6]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) throw new ValidationError('The body contains unsupported HTML.');
+  if (!isWordPressBodyHtml(bodyHtml)) throw new ValidationError('The body must use p tags and optional h2, strong, or blockquote tags.');
+  if (/<(?:script|style|img|a|h[13456]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) throw new ValidationError('The body contains unsupported HTML.');
   return { title, bodyHtml };
 };
 

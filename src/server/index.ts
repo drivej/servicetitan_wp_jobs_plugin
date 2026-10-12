@@ -32,7 +32,16 @@ const staticOptions = isProduction ? { staticDirectory: resolve(process.cwd(), '
 const store = saasConfig && db ? new AccountStore(db, saasConfig.vault) : undefined;
 const queue = db ? new PostgresBuildQueueStore(db) : new FileBuildQueueStore(resolve(process.env.BUILD_QUEUE_FILE || '.data/build-deploy.json'));
 const localScope = { userId: 'local', workspaceId: 'local', websiteId: 'local' };
+const localWordPressSiteUrl = (collectionUrl: string): string => {
+  const url = new URL(collectionUrl);
+  const restIndex = url.pathname.indexOf('/wp-json/');
+  url.pathname = restIndex >= 0 ? url.pathname.slice(0, restIndex) || '/' : '/';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+};
 const localProviders = config ? {
+  ...(config.wordpress ? { companyWebsiteUrl: localWordPressSiteUrl(config.wordpress.collectionUrl) } : {}),
   serviceTitan: new ServiceTitanClient(config.serviceTitan),
   wordpress: config.wordpress ? new WordPressClient(config.wordpress, fetch, new ZippopotamClient(config.zipLookup)) : new DisabledWordPressClient(),
   copyGenerator,

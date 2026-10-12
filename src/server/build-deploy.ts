@@ -10,6 +10,7 @@ export interface BuildProviders {
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
   copyGenerator: JobCopyGenerator;
+  companyWebsiteUrl?: string;
   spendJobToken?: <T>(action: string, operation: () => Promise<T>, jobId?: number, operationId?: string, fingerprint?: string) => Promise<T>;
 }
 
@@ -32,8 +33,17 @@ export async function buildAndDeploy(jobId: number, providers: BuildProviders, o
   }
   if (!image) throw new Error('This job has no available image. Add a working image and try again.');
   return spendJobToken('build', async () => {
+    const promptSource = { ...details.summary,
+      technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
+      imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+      ...(providers.companyWebsiteUrl ? { companyWebsiteUrl: providers.companyWebsiteUrl } : {}),
+    };
     let copy;
-    try { copy = parseApprovedPostCopy(formatJobCopy(await copyGenerator.generate(details.summary)), true)!; }
+    try {
+      const generated = await copyGenerator.generate(promptSource);
+      if (generated.status === 'needs_details') throw new Error(generated.question || 'More project details are needed before building this post.');
+      copy = parseApprovedPostCopy(formatJobCopy(generated), true)!;
+    }
     catch (error) { throw new TokenOperationSafeFailure(error); }
     return wordpress.pushJob(details.summary, [image!], 'draft', copy);
   }, jobId, `${operationScopeId}-build`, JSON.stringify({ operationScopeId, stage: 'build', jobId, attachmentId: image.id }));

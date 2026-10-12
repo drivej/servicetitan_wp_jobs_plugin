@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { copyFile, mkdir } from 'node:fs/promises';
 
 await build({
   entryPoints: ['src/server/index.ts', 'src/server/migrate.ts', 'src/server/check-database.ts'],
@@ -13,3 +14,5 @@ await build({
     js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },
 });
+await mkdir('dist', { recursive: true });
+await copyFile('seo_seed.md', 'dist/seo_seed.md');

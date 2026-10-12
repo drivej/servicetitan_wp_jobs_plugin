@@ -2,6 +2,7 @@ import type { OpenAIConfig } from './config.js';
 import { OpenAIRequestError } from './openai-error.js';
 import { isWordPressBodyHtml, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy.js';
 import { buildJobCopyFacts, JOB_COPY_INSTRUCTIONS } from './job-copy-prompt.js';
+import ipaddr from 'ipaddr.js';
 
 export interface JobCopyGenerator { generate(job: JobCopySource): Promise<GeneratedJobCopy>; }
 interface OpenAIResponse {
@@ -27,15 +28,20 @@ export class OpenAIJobCopyGenerator implements JobCopyGenerator {
           ...(/^gpt-6(?:[.-]|$)/i.test(this.config.model) ? { reasoning: { effort: 'none' } } : {}),
           instructions: `${JOB_COPY_INSTRUCTIONS}\nReturn the result using the supplied JSON schema.`,
           input: buildJobCopyFacts(job),
+          ...(companyWebsiteDomain(job.companyWebsiteUrl) ? {
+            tools: [{ type: 'web_search', search_context_size: 'low', filters: { allowed_domains: [companyWebsiteDomain(job.companyWebsiteUrl)!] } }],
+          } : {}),
           text: { format: {
             type: 'json_schema', name: 'recent_project_post', strict: true,
             schema: {
               type: 'object',
               properties: {
+                status: { type: 'string', enum: ['ready', 'needs_details'] },
                 title: { type: 'string', description: 'Plain text post title.' },
-                bodyHtml: { type: 'string', description: 'WordPress-ready HTML with 3–5 short p paragraphs and optional blockquote for an exact supplied review.' },
+                bodyHtml: { type: 'string', description: 'WordPress-ready HTML using p and optional h2/strong; blockquote only for an exact supplied review.' },
+                question: { type: 'string', description: 'One focused question when essential project details are missing; empty when status is ready.' },
               },
-              required: ['title', 'bodyHtml'], additionalProperties: false,
+              required: ['status', 'title', 'bodyHtml', 'question'], additionalProperties: false,
             },
           } },
         }),
@@ -70,15 +76,33 @@ export class DisabledJobCopyGenerator implements JobCopyGenerator {
 const validateGeneratedCopy = (value: unknown): GeneratedJobCopy => {
   if (!value || typeof value !== 'object') throw new OpenAIRequestError('OpenAI returned copy in an unexpected format.', 502);
   const record = value as Record<string, unknown>;
+  const status = record.status === 'needs_details' ? 'needs_details' : 'ready';
+  if (status === 'needs_details') {
+    const question = typeof record.question === 'string' ? record.question.replace(/\s+/g, ' ').trim() : '';
+    if (question.length < 10 || question.length > 500) throw new OpenAIRequestError('OpenAI returned an invalid follow-up question.', 502);
+    return { status, title: '', bodyHtml: '', question };
+  }
   const title = typeof record.title === 'string' ? record.title.replace(/\s+/g, ' ').trim() : '';
   const bodyHtml = typeof record.bodyHtml === 'string' ? record.bodyHtml.trim() : '';
   if (title.length < 5 || title.length > 160 || !isWordPressBodyHtml(bodyHtml)) {
     throw new OpenAIRequestError('OpenAI generated incomplete or invalid project copy. Try again.', 502);
   }
-  if (/<(?:script|style|img|a|h[1-6]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) {
+  if (/<(?:script|style|img|a|h[13456]|ul|ol|li|div|span)\b|\son\w+\s*=|style\s*=|javascript:/i.test(bodyHtml)) {
     throw new OpenAIRequestError('OpenAI generated unsupported HTML. Try again.', 502);
   }
-  return { title, bodyHtml };
+  return { status, title, bodyHtml, question: '' };
+};
+
+const companyWebsiteDomain = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    const isIpAddress = ipaddr.isValid(hostname);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password
+      || isIpAddress || !hostname.includes('.') || hostname === 'localhost' || hostname.endsWith('.local') || hostname.endsWith('.test')) return undefined;
+    return hostname;
+  } catch { return undefined; }
 };
 
 const openAIError = async (response: Response): Promise<OpenAIRequestError> => {

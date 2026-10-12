@@ -513,6 +513,8 @@ const generatedPostFields = (job: JobListItem, approvedCopy?: ApprovedPostCopy):
 };
 
 const buildAiPostContent = (bodyHtml: string): string => bodyHtml
+  .replace(/<h2>/gi, '<!-- wp:heading -->\n<h2>')
+  .replace(/<\/h2>/gi, '</h2>\n<!-- /wp:heading -->')
   .replace(/<p>/gi, '<!-- wp:paragraph -->\n<p>')
   .replace(/<\/p>/gi, '</p>\n<!-- /wp:paragraph -->')
   .replace(/<blockquote>/gi, '<!-- wp:quote -->\n<blockquote>')
