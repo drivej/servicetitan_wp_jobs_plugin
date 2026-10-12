@@ -23,6 +23,8 @@ define('STJI_JOB_ID_META', '_stji_job_id');
 define('STJI_SOURCE_ATTACHMENT_ID_META', '_stji_source_attachment_id');
 define('STJI_COMPLETED_ON_META', '_stji_completed_on');
 define('STJI_ZIP_ACF_FIELD_OPTION', 'stji_zip_acf_field_name');
+define('STJI_POST_TYPE_LABEL_OPTION', 'stji_post_type_label');
+define('STJI_JOB_CARD_MAX_WIDTH_OPTION', 'stji_job_card_max_width');
 define('STJI_ZIP_ACF_FIELD_KEY', 'field_stji_zip_codes');
 define('STJI_ZIP_CITY_FIELD_KEY', 'field_stji_zip_city');
 define('STJI_ZIP_STATE_FIELD_KEY', 'field_stji_zip_state');
@@ -115,6 +117,12 @@ function stji_post_type(): string
     return (string) apply_filters('stji_post_type', 'st_job');
 }
 
+function stji_post_type_label(): string
+{
+    $label = sanitize_text_field((string) get_option(STJI_POST_TYPE_LABEL_OPTION, 'Recent Jobs'));
+    return '' !== $label ? $label : 'Recent Jobs';
+}
+
 /**
  * Return every post type that can share ZIP-code terms through ACF.
  *
@@ -155,21 +163,24 @@ function stji_register_job_post_type(): void
         return;
     }
 
+    $plural_label = stji_post_type_label();
+    $singular_label = 1 === preg_match('/s$/i', $plural_label) ? substr($plural_label, 0, -1) : $plural_label;
+
     register_post_type(
         $post_type,
         array(
             'labels' => array(
-                'name'               => __('ServiceTitan Jobs', 'servicetitan-job-integration'),
-                'singular_name'      => __('ServiceTitan Job', 'servicetitan-job-integration'),
-                'menu_name'          => __('ServiceTitan Jobs', 'servicetitan-job-integration'),
+                'name'               => $plural_label,
+                'singular_name'      => $singular_label,
+                'menu_name'          => $plural_label,
                 'add_new'            => __('Add Job', 'servicetitan-job-integration'),
-                'add_new_item'       => __('Add ServiceTitan Job', 'servicetitan-job-integration'),
-                'edit_item'          => __('Edit ServiceTitan Job', 'servicetitan-job-integration'),
-                'new_item'           => __('New ServiceTitan Job', 'servicetitan-job-integration'),
-                'view_item'          => __('View ServiceTitan Job', 'servicetitan-job-integration'),
-                'search_items'       => __('Search ServiceTitan Jobs', 'servicetitan-job-integration'),
-                'not_found'          => __('No ServiceTitan jobs found.', 'servicetitan-job-integration'),
-                'not_found_in_trash' => __('No ServiceTitan jobs found in Trash.', 'servicetitan-job-integration'),
+                'add_new_item'       => sprintf(__('Add %s', 'servicetitan-job-integration'), $singular_label),
+                'edit_item'          => sprintf(__('Edit %s', 'servicetitan-job-integration'), $singular_label),
+                'new_item'           => sprintf(__('New %s', 'servicetitan-job-integration'), $singular_label),
+                'view_item'          => sprintf(__('View %s', 'servicetitan-job-integration'), $singular_label),
+                'search_items'       => sprintf(__('Search %s', 'servicetitan-job-integration'), $plural_label),
+                'not_found'          => sprintf(__('No %s found.', 'servicetitan-job-integration'), strtolower($plural_label)),
+                'not_found_in_trash' => sprintf(__('No %s found in Trash.', 'servicetitan-job-integration'), strtolower($plural_label)),
             ),
             'public'              => true,
             'publicly_queryable'  => true,
@@ -188,6 +199,54 @@ function stji_register_job_post_type(): void
     );
 }
 add_action('init', 'stji_register_job_post_type', 15);
+
+function stji_register_post_type_label_setting(): void
+{
+    register_setting('stji_post_type_settings', STJI_POST_TYPE_LABEL_OPTION, array(
+        'type' => 'string',
+        'sanitize_callback' => static function ($value): string {
+            $label = sanitize_text_field((string) $value);
+            return '' !== $label ? $label : 'Recent Jobs';
+        },
+        'default' => 'Recent Jobs',
+    ));
+    add_settings_section('stji_post_type_section', __('Job post type', 'servicetitan-job-integration'), '__return_false', 'stji_post_type_settings');
+    add_settings_field(STJI_POST_TYPE_LABEL_OPTION, __('Post type label', 'servicetitan-job-integration'), static function (): void {
+        printf('<input type="text" class="regular-text" name="%1$s" value="%2$s" maxlength="80" />', esc_attr(STJI_POST_TYPE_LABEL_OPTION), esc_attr(stji_post_type_label()));
+        echo '<p class="description">' . esc_html__('This label appears in the WordPress admin menu and job editor. The post type key and REST API route do not change.', 'servicetitan-job-integration') . '</p>';
+    }, 'stji_post_type_settings', 'stji_post_type_section');
+    register_setting('stji_post_type_settings', STJI_JOB_CARD_MAX_WIDTH_OPTION, array(
+        'type' => 'integer',
+        'sanitize_callback' => static function ($value): int {
+            return min(1200, max(200, absint($value)));
+        },
+        'default' => 400,
+    ));
+    add_settings_field(STJI_JOB_CARD_MAX_WIDTH_OPTION, __('Job card maximum width (px)', 'servicetitan-job-integration'), static function (): void {
+        $width = min(1200, max(200, absint(get_option(STJI_JOB_CARD_MAX_WIDTH_OPTION, 400))));
+        printf('<input type="number" class="small-text" name="%1$s" value="%2$d" min="200" max="1200" step="1" /> px', esc_attr(STJI_JOB_CARD_MAX_WIDTH_OPTION), $width);
+        echo '<p class="description">' . esc_html__('Sets the maximum width of each job card in the Recent Jobs grid. Defaults to 400px.', 'servicetitan-job-integration') . '</p>';
+    }, 'stji_post_type_settings', 'stji_post_type_section');
+}
+add_action('admin_init', 'stji_register_post_type_label_setting');
+
+function stji_add_post_type_settings_page(): void
+{
+    add_options_page(__('Recent Jobs Settings', 'servicetitan-job-integration'), __('Recent Jobs', 'servicetitan-job-integration'), 'manage_options', 'stji-post-type-settings', 'stji_render_post_type_settings_page');
+}
+add_action('admin_menu', 'stji_add_post_type_settings_page');
+
+function stji_render_post_type_settings_page(): void
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    echo '<div class="wrap"><h1>' . esc_html__('Recent Jobs Settings', 'servicetitan-job-integration') . '</h1><form action="options.php" method="post">';
+    settings_fields('stji_post_type_settings');
+    do_settings_sections('stji_post_type_settings');
+    submit_button();
+    echo '</form></div>';
+}
 
 /**
  * Register ZIP codes as an indexed taxonomy for job filtering.
@@ -1148,9 +1207,11 @@ function stji_render_jobs_shortcode(array $attributes = array()): string
         STJI_VERSION
     );
 
+    $card_max_width = min(1200, max(200, absint(get_option(STJI_JOB_CARD_MAX_WIDTH_OPTION, 400))));
+
     ob_start();
     ?>
-    <section class="stji-jobs" aria-label="<?php esc_attr_e('Service jobs', 'servicetitan-job-integration'); ?>">
+    <section class="stji-jobs" style="--stji-job-card-max-width: <?php echo esc_attr((string) $card_max_width); ?>px" aria-label="<?php esc_attr_e('Service jobs', 'servicetitan-job-integration'); ?>">
         <div class="stji-jobs__results" aria-live="polite">
             <?php while ($jobs->have_posts()) : $jobs->the_post(); ?>
                 <?php $job_image_id = stji_get_job_image_id(get_the_ID()); ?>
@@ -1163,6 +1224,7 @@ function stji_render_jobs_shortcode(array $attributes = array()): string
                         <?php endif; ?>
                         <h3 class="stji-job__title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h3>
                         <div class="stji-job__excerpt"><?php the_excerpt(); ?></div>
+                        <a class="stji-job__read-more" href="<?php the_permalink(); ?>" title="<?php echo esc_attr(get_the_title()); ?>"><?php esc_html_e('Read more…', 'servicetitan-job-integration'); ?></a>
                     </div>
                 </article>
             <?php endwhile; ?>
