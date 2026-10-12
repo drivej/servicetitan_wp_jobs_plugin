@@ -124,6 +124,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [rawResponseCopied, setRawResponseCopied] = useState(false);
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
+  const [copyQuestion, setCopyQuestion] = useState('');
+  const [copyClarification, setCopyClarification] = useState('');
   const { ready: wordpressPluginReady, status: wordpressPluginStatus, loading: wordpressPluginStatusLoading } = useWordPressPluginStatus();
 
   useEffect(() => {
@@ -242,13 +244,19 @@ export function JobDetails({ jobId }: { jobId: number }) {
     try {
       const response = await apiFetch(`/api/jobs/${jobId}/ai-copy`, {
         method: 'POST',
-        headers: { Accept: 'application/json' }
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(copyClarification.trim() ? { clarification: copyClarification.trim() } : {}),
       });
       if (response.status === 402) return;
       const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Unable to generate copy.');
-      if (body.status === 'needs_details') throw new Error(body.question || 'More project details are needed before copy can be generated.');
+      if (body.status === 'needs_details') {
+        setCopyQuestion(body.question || 'More project details are needed before copy can be generated.');
+        return;
+      }
       if (!hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
+      setCopyQuestion('');
+      setCopyClarification('');
       setAiCopyEdited(true);
       setAiCopy(formatJobCopy(body));
     } catch (requestError) {
@@ -469,6 +477,20 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 {generatingCopy ? 'Generating…' : 'Generate Copy'}
               </Button>
             </p>
+            {copyQuestion && <div className='notice' role='status'>
+              <strong>One more project detail is needed</strong>
+              <p>{copyQuestion}</p>
+              <TextField
+                variant='outlined'
+                size='small'
+                fullWidth
+                label='Project clarification'
+                value={copyClarification}
+                onChange={(event) => setCopyClarification(event.target.value)}
+                slotProps={{ htmlInput: { maxLength: 1000 } }}
+                helperText='This answer is used for this generation request and is not saved to the app.'
+              />
+            </div>}
             <label className='ai-output'>
               <span>AI-generated post copy</span>
               <TextField

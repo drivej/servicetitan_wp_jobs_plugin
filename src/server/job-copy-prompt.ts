@@ -31,8 +31,14 @@ export const buildJobCopyFacts = (job: JobCopySource): string => {
     `SERVICE: ${sanitizeSourceText(job.jobName) || 'Not provided'}`,
     `PROJECT LOCATION: ${sanitizeSourceText(location) || 'Not provided'}`,
     `JOB SUMMARY: ${sanitizeSourceText(job.summaryText) || 'Not provided'}`,
+    `ADDITIONAL STRUCTURED JOB DETAILS:\n${Object.entries(job.jobDetails || {}).map(([key, value]) => {
+      const safeKey = sanitizeSourceText(key);
+      const safeValue = typeof value === 'object' && value !== null ? '[structured data]' : sanitizeSourceText(String(value ?? ''));
+      return safeValue ? `${safeKey}: ${safeValue}` : '';
+    }).filter(Boolean).join('\n') || 'Not provided'}`,
     `TECHNICIAN NOTES:\n${notes.length ? notes.map((note) => `- ${note}`).join('\n') : 'Not provided'}`,
     `EQUIPMENT: ${(job.equipmentNames || []).map(sanitizeSourceText).filter(Boolean).join(', ') || 'Not provided'}`,
+    `USER-PROVIDED CLARIFICATION: ${sanitizeSourceText(job.userClarification) || 'Not provided'}`,
     `IMAGE FILENAMES (metadata only): ${(job.imageFileNames || []).map(sanitizeSourceText).filter(Boolean).slice(0, 10).join(', ') || 'Not provided'}`,
     `CUSTOMER REVIEW (quote exactly if used): ${sanitizeSourceText(job.customerReview) || 'Not provided'}`,
   ].join('\n');

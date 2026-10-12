@@ -112,9 +112,12 @@ export const createApp = ({
     try {
       const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
       response.set('Cache-Control', 'no-store');
+      const clarification = parseCopyClarification(request.body?.clarification);
       const promptSource = { ...details.summary,
         technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
         imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+        jobDetails: safeStructuredJobDetails(details.job),
+        ...(clarification ? { userClarification: clarification } : {}),
         ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
       };
       response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), details.summary.id, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId: details.summary.id })));
@@ -264,6 +267,24 @@ const parseJobId = (value: unknown): number => {
   const jobId = Number(value);
   if (!Number.isSafeInteger(jobId) || jobId < 1) throw new ValidationError('jobId must be a positive integer.');
   return jobId;
+};
+
+const parseCopyClarification = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.trim().length < 3 || value.trim().length > 1_000) {
+    throw new ValidationError('Project clarification must be between 3 and 1,000 characters.');
+  }
+  return value.trim();
+};
+
+const safeStructuredJobDetails = (job: Record<string, unknown>): Record<string, string | number | boolean | null> => {
+  const allowed = ['jobTypeId', 'jobStatus', 'completedOn', 'modifiedOn', 'businessUnitId', 'priority', 'campaignId', 'tagTypeIds'];
+  return Object.fromEntries(allowed.flatMap((key) => {
+    const value = job[key];
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return [[key, value] as const];
+    if (Array.isArray(value) && value.every((item) => typeof item === 'string' || typeof item === 'number')) return [[key, value.join(', ')] as const];
+    return [];
+  }));
 };
 
 const parseAttachmentId = (value: unknown): string => {

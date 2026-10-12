@@ -7,6 +7,8 @@ export interface JobCopySource {
   companyName?: string;
   customerReview?: string;
   companyWebsiteUrl?: string;
+  jobDetails?: Record<string, string | number | boolean | null | undefined>;
+  userClarification?: string;
   location: { address?: string; city: string; state: string; zip: string };
 }
 
