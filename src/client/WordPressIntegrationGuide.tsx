@@ -120,7 +120,7 @@ export function WordPressIntegrationGuide({ topic }: { topic?: string } = {}) {
               <li>Install and activate <strong>Advanced Custom Fields</strong> if it is not already active.</li>
               <li>Open the app’s <a href="/wordpress-plugin">WordPress plugin tab</a> and download the plugin ZIP. Do not extract it.</li>
               <li>In WordPress, open <strong>Plugins → Add New Plugin → Upload Plugin</strong>.</li>
-              <li>Select <code>job-showcase-for-servicetitan-1.18.2.zip</code>, then choose <strong>Install Now</strong>.</li>
+              <li>Select <code>job-showcase-for-servicetitan-1.19.0.zip</code>, then choose <strong>Install Now</strong>.</li>
               <li>Activate <strong>Job Showcase for ServiceTitan</strong>.</li>
             </ol>
             <p>Activation requires Advanced Custom Fields and creates the ServiceTitan Jobs post type, REST endpoint, shared ZIP ACF fields, ZIP-code taxonomy, and page shortcode automatically. For an update, upload the newer ZIP and choose <strong>Replace current with uploaded</strong>.</p>
@@ -183,22 +183,28 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
             <p className="guide-step">Step 5</p>
             <h2>Create a jobs page</h2>
             <ol>
-              <li>In WordPress, open <strong>Pages → Add New Page</strong>.</li>
-              <li>Add a Shortcode block.</li>
+              <li>In WordPress, open <strong>Pages</strong> and edit an existing page or select <strong>Add New Page</strong>.</li>
+              <li>In the <strong>Service Area ZIP Codes</strong> field group, select the page’s <strong>ZIP Codes</strong>. You can also select ZIPs on its parent pages.</li>
+              <li>Select the <strong>+</strong> block inserter, search for <strong>Shortcode</strong>, and add that block. In the Classic Editor, paste the shortcode into the page content.</li>
               <li>Enter <code>[servicetitan_jobs]</code>.</li>
-              <li>Publish the page.</li>
+              <li>Select <strong>Publish</strong> or <strong>Update</strong>, then view the page on your site.</li>
             </ol>
-            <p>The page displays published job posts as cards containing the featured image, title, and excerpt. ZIP filtering is configured only in the shortcode; visitors never see or change ZIP-code controls. A job matching any ZIP code listed in the shortcode is displayed.</p>
-            <p>Advanced Custom Fields is required. The plugin creates a shared multi-select ZIP taxonomy field named <code>my_zip_codes</code> by default on Posts, Pages, and ServiceTitan jobs. Manage the shared records under <strong>Posts → ZIP Codes</strong> or <strong>ServiceTitan Jobs → ZIP Codes</strong>. Single job pages display an approximate map plus linked <strong>Project Area</strong> and <strong>Completed</strong> metadata. Assign one or more ZIP terms to a city page to make it eligible as the Project Area destination.</p>
+            <p>The page displays published job posts as cards containing the featured image, title, and excerpt. A job matching any resolved ZIP code is displayed. Visitors never see or change ZIP-code controls.</p>
+            <p>Advanced Custom Fields is required. The plugin creates a shared multi-select ZIP taxonomy field named <code>my_zip_codes</code> by default on Posts, Pages, and ServiceTitan jobs. Manage the shared records under <strong>ServiceTitan Jobs → ZIP Codes</strong>. Single job pages display an approximate map plus linked <strong>Project Area</strong> and <strong>Completed</strong> metadata. Assign one or more ZIP terms to a city page to make it eligible as the Project Area destination.</p>
 
+            <h3>Page ZIPs and parent inheritance</h3>
+            <p>When <code>zipcodes</code> is omitted or blank, the shortcode reads the current page’s <code>my_zip_codes</code> metadata (or your configured ACF field name). It merges ZIPs from the page and every ancestor, removing duplicates. To set a parent, use the page editor’s <strong>Parent</strong> setting and save the page.</p>
+            <p>For example, a page with ZIP 07001 and a parent with ZIPs 07001 and 07002 shows jobs matching 07001 or 07002 once each. Set <code>inherit_zipcodes="false"</code> to use only the current page’s ZIPs. Explicit <code>zipcodes</code> always overrides the page and ancestor ZIPs.</p>
+            <div className="guide-note"><strong>No ZIPs:</strong> If no valid ZIPs resolve, the shortcode displays nothing. Select ZIPs on the page or an ancestor, or enter them explicitly in the shortcode.</div>
             <h3>Shortcode options</h3>
             <div className="code-examples">
-              <div><span>All published jobs, 20 per page</span><code>[servicetitan_jobs]</code></div>
+              <div><span>Page and ancestor ZIPs, 20 jobs per page</span><code>[servicetitan_jobs]</code></div>
               <div><span>Configure several ZIP codes</span><code>[servicetitan_jobs zipcodes="78701,78702,78703"]</code></div>
               <div><span>Skip one, cap results at ten, and show two per page</span><code>[servicetitan_jobs zipcodes="07001,07002" offset="1" limit="10" page_size="2"]</code></div>
-              <div><span>Show jobs from a fixed ZIP-code list</span><code>[servicetitan_jobs zipcodes="78701,78702"]</code></div>
+              <div><span>Current page ZIPs only</span><code>[servicetitan_jobs inherit_zipcodes="false"]</code></div>
+              <div><span>Blank ZIPs also use page and ancestor ZIPs</span><code>[servicetitan_jobs zipcodes="" page_size="12"]</code></div>
             </div>
-            <p><code>offset</code> skips jobs once at the beginning, <code>limit</code> caps the total results across all pages, and <code>page_size</code> controls how many jobs appear on each page. The older <code>posts_per_page</code> option is still supported when <code>page_size</code> is omitted.</p>
+            <p><code>offset</code> skips jobs once at the beginning, <code>limit</code> caps the total results across all pages, and <code>page_size</code> controls how many jobs appear on each page. Defaults are <code>offset="0"</code>, <code>limit="0"</code> (no total cap), and 20 jobs per page. Page size is limited to 1–100. The older <code>posts_per_page</code> option is still supported when <code>page_size</code> is omitted. Pagination links appear when matching results span multiple pages.</p>
             <div className="guide-note"><strong>Visibility:</strong> Draft and private jobs do not appear in the shortcode. Change the row selector to <strong>Published</strong>, publish them in WordPress, or set <code>WORDPRESS_POST_STATUS=publish</code> for future pushes.</div>
           </section>
 
@@ -215,7 +221,7 @@ ZIP_LOOKUP_API_URL=https://api.zippopotam.us`}</code></pre>
               <details><summary>“Sorry, you are not allowed to create posts as this user.”</summary><p>Confirm the companion plugin is active and the integration user can edit and publish <code>st_job</code> posts. Refresh the app status after correcting permissions.</p></details>
               <details><summary>“Incompatible Archive” during plugin upload</summary><p>Restart the ServiceTitan Jobs app, download the current ZIP again, and upload it without extracting or recompressing it. Delete older copies from the browser’s Downloads folder to avoid selecting the wrong file.</p></details>
               <details><summary>The WordPress status stays “Unknown”</summary><p>Verify the site URL, username, Application Password, HTTPS certificate, and REST base. The collection URL should resemble <code>https://www.example.com/wp-json/wp/v2/st-jobs</code>.</p></details>
-              <details><summary>A pushed job does not appear on the jobs page</summary><p>Confirm the post is published. If it is an older post, assign a ZIP Codes term manually. Also check whether the page shortcode includes that job’s ZIP code.</p></details>
+              <details><summary>A pushed job does not appear on the jobs page</summary><p>Confirm the post is published. If it is an older post, assign a ZIP Codes term manually. Check that the job’s ZIP matches the explicit shortcode ZIPs or the page’s ZIPs, including ancestors when inheritance is enabled. If no valid ZIPs resolve, nothing is displayed.</p></details>
               <details><summary>The Push button is disabled</summary><p>Select the row’s refresh icon first. Push is enabled only after WordPress confirms the correlated post does not already exist.</p></details>
             </div>
           </section>

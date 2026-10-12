@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.18.2
+ * Version: 1.19.0
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.18.2');
+define('STJI_VERSION', '1.19.0');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -993,6 +993,45 @@ function stji_normalize_zipcode(string $value): string
 }
 
 /**
+ * Resolve the page's configured ACF ZIP term IDs, including all ancestors.
+ * Legacy comma-separated ZIP text is also supported.
+ *
+ * @return array<int, string>
+ */
+function stji_get_page_zipcodes(int $post_id, bool $inherit = true): array
+{
+    if ($post_id <= 0) {
+        return array();
+    }
+
+    $post_ids = array($post_id);
+    if ($inherit) {
+        $post_ids = array_merge($post_ids, get_post_ancestors($post_id));
+    }
+
+    $zipcodes = array();
+    foreach (array_unique($post_ids) as $page_id) {
+        $values = get_post_meta((int) $page_id, stji_zip_acf_field_name(), true);
+        // ACF taxonomy fields store an array of term IDs; text fields store ZIPs.
+        if (is_array($values)) {
+            foreach ($values as $value) {
+                if (!is_scalar($value) || !ctype_digit((string) $value)) {
+                    continue;
+                }
+                $term = get_term((int) $value, 'st_job_zipcode');
+                if ($term instanceof WP_Term) {
+                    $zipcodes = array_merge($zipcodes, stji_parse_zipcodes($term->name));
+                }
+            }
+        } elseif (is_scalar($values)) {
+            $zipcodes = array_merge($zipcodes, stji_parse_zipcodes((string) $values));
+        }
+    }
+
+    return array_values(array_unique($zipcodes));
+}
+
+/**
  * Render a shortcode-configured list of published ServiceTitan jobs.
  *
  * Usage: [servicetitan_jobs] or
@@ -1005,6 +1044,7 @@ function stji_render_jobs_shortcode(array $attributes = array()): string
     $attributes = shortcode_atts(
         array(
             'zipcodes'       => '',
+            'inherit_zipcodes' => 'true',
             'posts_per_page' => 20,
             'page_size'      => '',
             'offset'         => 0,
@@ -1015,6 +1055,16 @@ function stji_render_jobs_shortcode(array $attributes = array()): string
     );
 
     $zipcodes = stji_parse_zipcodes((string) $attributes['zipcodes']);
+    if ('' === trim((string) $attributes['zipcodes'])) {
+        $zipcodes = stji_get_page_zipcodes(
+            (int) get_the_ID(),
+            filter_var($attributes['inherit_zipcodes'], FILTER_VALIDATE_BOOLEAN)
+        );
+    }
+    if (empty($zipcodes)) {
+        return '';
+    }
+
     $legacy_page_size = min(100, max(1, absint($attributes['posts_per_page'])));
     $page_size = '' === trim((string) $attributes['page_size'])
         ? $legacy_page_size

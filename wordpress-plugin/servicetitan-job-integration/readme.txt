@@ -4,7 +4,7 @@ Tags: servicetitan, rest-api, custom-post-type
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.18.2
+Stable tag: 1.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,12 +20,15 @@ Advanced Custom Fields is required. The plugin registers a shared, multi-select
 ZIP taxonomy field on Posts, Pages, and ServiceTitan job posts. Each ZIP term
 stores city and state metadata, and missing terms are created when jobs are published.
 Add `[servicetitan_jobs]` to a page to show published jobs and pagination. ZIP
-codes are configured in the shortcode and are never shown as visitor-facing
-filter controls.
+codes come from the page’s configured ACF field (default: my_zip_codes) when
+zipcodes is blank or omitted. ZIPs from all ancestor pages are merged and
+deduplicated by default. Set inherit_zipcodes="false" to use only the current
+page. Explicit zipcodes overrides page ZIPs. If no valid ZIPs are found, the shortcode renders nothing. ZIPs are never shown as visitor-facing filter controls.
 
 Shortcode options:
 
 * `[servicetitan_jobs]`
+* `[servicetitan_jobs inherit_zipcodes="false"]`
 * `[servicetitan_jobs zipcodes="78701,78702"]`
 * `[servicetitan_jobs zipcodes="07001,07002" offset="1" limit="10" page_size="2"]`
 * `[servicetitan_jobs posts_per_page="12"]`
@@ -49,6 +52,10 @@ filter. Add custom post types to the shared ZIP selector with the
 stji_zip_post_types filter.
 
 == Changelog ==
+
+= 1.19.0 =
+* Use page ZIP metadata when shortcode ZIPs are blank, with deduplicated ancestor inheritance and an inherit_zipcodes toggle.
+* Render nothing when no valid ZIP codes resolve.
 
 = 1.18.2 =
 * Return each post's updated timestamp in bulk status responses.

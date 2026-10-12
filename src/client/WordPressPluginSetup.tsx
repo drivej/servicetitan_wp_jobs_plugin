@@ -4,7 +4,7 @@ import { isSaaSWorkspace } from './api';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { PageHeader } from './PageHeader';
 
-const pluginFilename = 'job-showcase-for-servicetitan-1.18.2.zip';
+const pluginFilename = 'job-showcase-for-servicetitan-1.19.0.zip';
 const pluginDownload = `/downloads/${pluginFilename}`;
 
 export function WordPressPluginSetup() {
@@ -32,10 +32,16 @@ export function WordPressPluginSetup() {
 
         <div className="plugin-install-actions">
           <Button component="a" variant="contained" className="download-button account-primary-link" href={pluginDownload} download={pluginFilename}>
-            <DownloadIcon /> Download version 1.18.2
+            <DownloadIcon /> Download version 1.19.0
           </Button>
           <Button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</Button>
         </div>
+      </section>
+
+      <section className="panel plugin-instructions">
+        <h2>Display jobs on a WordPress page</h2>
+        <p>Add <code>[servicetitan_jobs]</code> in a Shortcode block and select the page’s ZIP Codes. Parent ZIPs are inherited by default.</p>
+        <p><a href="/help#job-page">Shortcode instructions, ZIP inheritance, and all options</a></p>
       </section>
 
       <section className="panel plugin-instructions">

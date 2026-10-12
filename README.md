@@ -80,8 +80,8 @@ The companion plugin registers the `st_job` post type and exposes it through the
 
 The independently deployable PHP source lives in
 `wordpress-plugin/servicetitan-job-integration`. Run `npm run build:plugin` to
-package it as `dist/downloads/job-showcase-for-servicetitan-1.18.2.zip`. The app serves
-that archive at `/downloads/job-showcase-for-servicetitan-1.18.2.zip` (with the
+package it as `dist/downloads/job-showcase-for-servicetitan-1.19.0.zip`. The app serves
+that archive at `/downloads/job-showcase-for-servicetitan-1.19.0.zip` (with the
 unversioned URL retained as a compatibility alias).
 
 The plugin registers the `st_job` post type when it does not already exist and
@@ -104,7 +104,7 @@ available for recovery.
 
 When a job is pushed, its ZIP code is assigned to the plugin's
 `st_job_zipcode` taxonomy. Add `[servicetitan_jobs]` to a WordPress page to show
-published jobs with pagination. ZIP filtering is fixed by the shortcode and no
+published jobs with pagination. Blank or omitted `zipcodes` uses the page’s `my_zip_codes` ACF field (or the configured field name), merging and deduplicating ZIPs from all ancestor pages. Set `inherit_zipcodes="false"` to use only the current page. Explicit `zipcodes` overrides page ZIPs. If no valid ZIPs are found, the shortcode renders nothing. ZIP filtering has no
 visitor-facing ZIP controls are rendered. Configure it with
 `zipcodes="07001,07002"`, `offset="1"`, `limit="10"`, and `page_size="2"`.
 `posts_per_page` remains available as a backward-compatible alias when
