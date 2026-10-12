@@ -6,6 +6,7 @@
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
+ * Update URI: https://servicetitanwpjobsplugin-4unqy.sevalla.app/
  * Author: ServiceTitan Jobs
  * License: GPL-2.0-or-later
  * Text Domain: servicetitan-job-integration
@@ -28,6 +29,50 @@ define('STJI_JOB_CARD_MAX_WIDTH_OPTION', 'stji_job_card_max_width');
 define('STJI_SEO_PROVIDER_OPTION', 'stji_seo_provider');
 define('STJI_SEO_TITLE_META_KEY_OPTION', 'stji_seo_title_meta_key');
 define('STJI_SEO_DESCRIPTION_META_KEY_OPTION', 'stji_seo_description_meta_key');
+define('STJI_UPDATE_SERVER', 'https://servicetitanwpjobsplugin-4unqy.sevalla.app');
+define('STJI_UPDATE_CHECK_URL', STJI_UPDATE_SERVER . '/wp-plugin/update-check');
+define('STJI_PLUGIN_BASENAME', 'servicetitan-job-integration/servicetitan-job-integration.php');
+
+/** Add the app-hosted release to WordPress core's normal plugin updater. */
+function stji_plugin_update_check($transient)
+{
+    if (!is_object($transient) || empty($transient->checked)) {
+        return $transient;
+    }
+
+    $response = wp_remote_get(STJI_UPDATE_CHECK_URL, array(
+        'timeout' => 5,
+        'headers' => array('Accept' => 'application/json'),
+    ));
+    if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
+        return $transient;
+    }
+
+    $release = json_decode((string) wp_remote_retrieve_body($response));
+    if (!is_object($release) || empty($release->version) || empty($release->package)
+        || !preg_match('/^\d+\.\d+\.\d+$/', (string) $release->version)
+        || 0 !== strpos((string) $release->package, STJI_UPDATE_SERVER . '/downloads/')) {
+        return $transient;
+    }
+
+    if (version_compare(STJI_VERSION, (string) $release->version, '<')) {
+        $transient->response[STJI_PLUGIN_BASENAME] = (object) array(
+            'slug' => 'servicetitan-job-integration',
+            'plugin' => STJI_PLUGIN_BASENAME,
+            'new_version' => (string) $release->version,
+            'url' => esc_url_raw((string) ($release->homepage ?? STJI_UPDATE_SERVER)),
+            'package' => esc_url_raw((string) $release->package),
+            'tested' => sanitize_text_field((string) ($release->tested ?? '')),
+            'requires' => sanitize_text_field((string) ($release->requires ?? '')),
+            'requires_php' => sanitize_text_field((string) ($release->requires_php ?? '')),
+        );
+    } else {
+        unset($transient->response[STJI_PLUGIN_BASENAME]);
+    }
+
+    return $transient;
+}
+add_filter('pre_set_site_transient_update_plugins', 'stji_plugin_update_check');
 define('STJI_ZIP_ACF_FIELD_KEY', 'field_stji_zip_codes');
 define('STJI_ZIP_CITY_FIELD_KEY', 'field_stji_zip_city');
 define('STJI_ZIP_STATE_FIELD_KEY', 'field_stji_zip_state');

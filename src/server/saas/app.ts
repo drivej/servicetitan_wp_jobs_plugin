@@ -43,6 +43,20 @@ function websiteSchemaIssue(error: unknown): { code: string; table?: string; col
 
 export function createSaaSApp({ config, store, google, websiteApp, staticDirectory, billing = config.billing ? new BillingService(store.db, config.billing, config.origin) : undefined }: Options) {
   const app = express();
+  app.get('/wp-plugin/update-check', (_req, res) => {
+    res.set({ 'Cache-Control': 'public, max-age=300', 'Content-Type': 'application/json' });
+    res.json({
+      name: 'Job Showcase for ServiceTitan',
+      slug: 'servicetitan-job-integration',
+      version: '1.20.0',
+      requires: '6.5',
+      tested: '6.8',
+      requires_php: '7.4',
+      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.0.zip`,
+      homepage: config.origin,
+      sections: { description: 'Publishes recent project posts from ServiceTitan to WordPress.' },
+    });
+  });
   const tokenAccounts = new TokenAccounts(store.db);
   const platformMembers = new PlatformMembers(store.db);
   const sessionName = sessionCookieName(config.secureCookies);
