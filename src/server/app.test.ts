@@ -53,7 +53,7 @@ test('downloads the packaged WordPress plugin with an installable filename', asy
       getJobImage: async () => { throw new Error('not used'); },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.1', installedVersion: '1.19.1', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.2', installedVersion: '1.19.2', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'not_found', label: 'None' }),
       pushJob: async () => { throw new Error('not used'); },
@@ -68,12 +68,12 @@ test('downloads the packaged WordPress plugin with an installable filename', asy
     await new Promise<void>((resolveListen) => server.once('listening', resolveListen));
     const address = server.address();
     assert(address && typeof address === 'object');
-    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/job-showcase-for-servicetitan-1.19.1.zip`);
+    const response = await fetch(`http://127.0.0.1:${address.port}/downloads/job-showcase-for-servicetitan-1.19.2.zip`);
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') || '', /application\/zip/);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.match(response.headers.get('content-disposition') || '', /job-showcase-for-servicetitan-1\.19\.1\.zip/);
+    assert.match(response.headers.get('content-disposition') || '', /job-showcase-for-servicetitan-1\.19\.2\.zip/);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), archive);
 
     const removedSave = await fetch(`http://127.0.0.1:${address.port}/api/wordpress/plugin/download`, { method: 'POST' });
@@ -111,7 +111,7 @@ test('passes an optional replacement image through the regeneration route', asyn
       },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.1', installedVersion: '1.19.1', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.2', installedVersion: '1.19.2', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'exists', label: 'Published', postId: 77 }),
       pushJob: async () => { throw new Error('not used'); },
@@ -170,7 +170,7 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
       getJobImage: async () => { throw new Error('not used'); },
     },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.1', installedVersion: '1.19.1', seoGeneratorVersion: 5 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.2', installedVersion: '1.19.2', seoGeneratorVersion: 5 }),
       getStatuses: async () => ({}),
       getStatus: async () => ({ state: 'not_found', label: 'None' }),
       pushJob: async () => { throw new Error('not used'); },

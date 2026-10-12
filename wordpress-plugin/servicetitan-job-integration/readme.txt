@@ -4,7 +4,7 @@ Tags: servicetitan, rest-api, custom-post-type
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.19.1
+Stable tag: 1.19.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -52,6 +52,9 @@ filter. Add custom post types to the shared ZIP selector with the
 stji_zip_post_types filter.
 
 == Changelog ==
+
+= 1.19.2 =
+* Package the verified Select and Checkbox ZIP-field support under a distinct update version.
 
 = 1.19.1 =
 * Support existing Text and Text Area ZIP fields without converting their metadata to term IDs.
