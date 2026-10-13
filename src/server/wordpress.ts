@@ -64,7 +64,7 @@ export interface WordPressProvider {
 }
 
 type FetchImplementation = typeof fetch;
-export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.20.1';
+export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.20.2';
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;
@@ -215,7 +215,7 @@ export class WordPressClient implements WordPressProvider {
       body: JSON.stringify({
         ...generatedPostFields(job, approvedCopy),
         ...await this.locationPostFields(job),
-        slug: serviceTitanJobSlug(job.id),
+        slug: seoJobSlug(approvedCopy.seoTitle || approvedCopy.title, job.id),
         status,
       }),
     });
@@ -375,17 +375,9 @@ export class WordPressClient implements WordPressProvider {
   }
 
   private async lookupStatus(serviceTitanJobId: number): Promise<WordPressPostStatus> {
-    const url = new URL(this.config.collectionUrl);
-    url.searchParams.set('slug', serviceTitanJobSlug(serviceTitanJobId));
-    url.searchParams.set('status', 'any');
-    url.searchParams.set('context', 'edit');
-    url.searchParams.set('per_page', '1');
-    url.searchParams.set('_fields', 'id,slug,status,link,modified_gmt');
-
-    const response = await this.request(url.toString());
-    const posts = await parseJson<WordPressPost[]>(response);
-    const post = posts[0];
-    return post ? postToStatus(post) : { state: 'not_found', label: 'None' };
+    const status = await this.getStatus(serviceTitanJobId);
+    if (status.state === 'unknown') throw new WordPressRequestError(status.message || 'Unable to verify the existing WordPress post.', 502);
+    return status;
   }
 
   private async request(url: string, init: RequestInit = {}): Promise<Response> {
@@ -462,6 +454,13 @@ export class DisabledWordPressClient implements WordPressProvider {
     throw new WordPressRequestError('WordPress is not configured on the server.', 503);
   }
 }
+
+export const seoJobSlug = (seoTitle: string, jobId: number): string => {
+  const title = seoTitle.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, 150).replace(/-+$/g, '');
+  return `${title || 'job'}-${jobId}`;
+};
 
 export const serviceTitanJobSlug = (serviceTitanJobId: number): string =>
   `servicetitan-job-${serviceTitanJobId}`;

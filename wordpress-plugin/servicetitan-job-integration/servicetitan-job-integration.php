@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.20.1
+ * Version: 1.20.2
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.20.1');
+define('STJI_VERSION', '1.20.2');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -856,11 +856,23 @@ function stji_rest_bulk_statuses(WP_REST_Request $request)
         )
     );
 
-    foreach ($posts_query->posts as $post) {
-        if (!isset($job_id_by_slug[$post->post_name])) {
-            continue;
+    // Job identity is stored separately from the public, SEO-based permalink.
+    // Retain the slug lookup above for older posts without generation metadata.
+    $metadata_query = new WP_Query(array(
+        'post_type' => stji_post_type(),
+        'post_status' => get_post_stati(array(), 'names'),
+        'meta_query' => array(array('key' => STJI_JOB_ID_META, 'value' => $job_ids, 'compare' => 'IN', 'type' => 'NUMERIC')),
+        'posts_per_page' => count($job_ids),
+        'no_found_rows' => true,
+        'update_post_meta_cache' => true,
+        'update_post_term_cache' => false,
+    ));
+    foreach (array_merge($posts_query->posts, $metadata_query->posts) as $post) {
+        $job_id = absint(get_post_meta($post->ID, STJI_JOB_ID_META, true));
+        if (!in_array($job_id, $job_ids, true)) {
+            $job_id = isset($job_id_by_slug[$post->post_name]) ? $job_id_by_slug[$post->post_name] : 0;
         }
-        $job_id = $job_id_by_slug[$post->post_name];
+        if (!$job_id) continue;
         $status_object = get_post_status_object($post->post_status);
         $link = get_permalink($post);
         $seo_version = absint(get_post_meta($post->ID, STJI_SEO_VERSION_META, true));

@@ -116,17 +116,16 @@ same metadata row displays the ServiceTitan completion date when available.
 
 ### ServiceTitan ↔ WordPress correlation
 
-Every ServiceTitan job maps to the deterministic WordPress slug:
+New WordPress posts use a slugified SEO title followed by the ServiceTitan job ID, for example:
 
 ```text
-servicetitan-job-{SERVICE_TITAN_JOB_ID}
+water-damage-service-in-austin-tx-42370117
 ```
 
-The refresh action performs an authenticated lookup by that slug across all WordPress post statuses. A row starts as **Unknown**, so Push is disabled. A successful lookup that finds no post changes the status to **None** and enables Push. If a post exists—or the lookup fails and remains unknown—Push stays disabled. The server repeats the lookup immediately before POSTing and returns HTTP 409 if the post already exists.
+The companion plugin matches posts using stored ServiceTitan job-ID metadata, with the legacy `servicetitan-job-{ID}` slug as a fallback. Existing post URLs are preserved during regeneration. The server checks this identity before creating a post to prevent duplicates.
 
 **Refresh page statuses** sends the visible page's ServiceTitan IDs in one app
-request. Companion plugin 1.4.0 resolves all corresponding WordPress slugs with
-one `WP_Query` and returns found and missing statuses together.
+request. Companion plugin 1.20.2 resolves stored job IDs and legacy slugs and returns found and missing statuses together.
 
 ## Build and run
 

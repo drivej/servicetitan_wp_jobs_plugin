@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import type { WordPressConfig } from './config.js';
 import type { JobImage, JobListItem } from './service-titan.js';
-import { SEO_GENERATOR_VERSION, WordPressClient, serviceTitanJobSlug } from './wordpress.js';
+import { SEO_GENERATOR_VERSION, WordPressClient, serviceTitanJobSlug, seoJobSlug } from './wordpress.js';
 
 const config: WordPressConfig = {
   collectionUrl: 'https://wordpress.example/wp-json/wp/v2/st_job',
@@ -34,7 +34,10 @@ const approvedCopy = {
   bodyHtml: '<p>An Austin homeowner needed help with a documented hot-water performance issue.</p><p>The technician evaluated the reported concern involving the water heater.</p><p>The documented repair addressed the hot-water issue for this Austin property.</p>',
 };
 
-test('uses a stable ServiceTitan ID slug for correlation', () => {
+test('slugifies SEO titles and retains legacy slug support', () => {
+  assert.equal(seoJobSlug('Water Damage Service in Austin, TX!', job.id), 'water-damage-service-in-austin-tx-123456');
+  assert.equal(seoJobSlug('Réparation & Repair', job.id), 'reparation-repair-123456');
+  assert.equal(seoJobSlug('!!!', job.id), 'job-123456');
   assert.equal(serviceTitanJobSlug(job.id), 'servicetitan-job-123456');
 });
 
@@ -55,7 +58,7 @@ test('reports a missing WordPress post with the current SEO version', async () =
 test('detects the installed companion plugin version', async () => {
   const mockFetch: typeof fetch = async (input) => {
     assert.equal(String(input), 'https://wordpress.example/wp-json/servicetitan-job-integration/v1/status');
-    return new Response(JSON.stringify({ version: '1.19.2' }), {
+    return new Response(JSON.stringify({ version: '1.20.2' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -64,8 +67,8 @@ test('detects the installed companion plugin version', async () => {
 
   assert.deepEqual(await client.getPluginStatus(), {
     state: 'current',
-    requiredVersion: '1.19.2',
-    installedVersion: '1.19.2',
+    requiredVersion: '1.20.2',
+    installedVersion: '1.20.2',
     seoGeneratorVersion: SEO_GENERATOR_VERSION,
   });
 });
@@ -75,7 +78,7 @@ test('syncs the configured ACF field and backfills missing ZIP location metadata
   const mockFetch: typeof fetch = async (input, init) => {
     requests.push({ url: String(input), ...(init ? { init } : {}) });
     if (requests.length === 1) {
-      return new Response(JSON.stringify({ version: '1.19.2' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ version: '1.20.2' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (requests.length === 2) {
       return new Response(JSON.stringify({ zipcodes: [
@@ -120,7 +123,7 @@ test('requires an update when the companion plugin status route is missing', asy
   const status = await client.getPluginStatus();
 
   assert.equal(status.state, 'update_required');
-  assert.equal(status.requiredVersion, '1.19.2');
+  assert.equal(status.requiredVersion, '1.20.2');
 });
 
 test('loads multiple correlated post statuses in one plugin request', async () => {
@@ -183,9 +186,10 @@ test('uses the selected status and sets the selected image as featured', async (
   assert.equal(requests.length, 4);
   assert.equal(requests[1]!.init?.method, 'POST');
   const payload = JSON.parse(String(requests[1]!.init?.body)) as Record<string, string>;
-  assert.equal(payload.slug, 'servicetitan-job-123456');
+  assert.equal(payload.slug, 'water-heater-repair-in-austin-tx-123456');
   assert.equal(payload.status, 'publish');
-  assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
+  assert.equal((payload.stji_generation as unknown as { version: number }).version, SEO_GENERATOR_VERSION);
+  assert.equal((payload.stji_generation as unknown as { jobId: number }).jobId, job.id);
   assert.equal(payload.title, 'Water Heater Repair in Austin, TX');
   assert.match(payload.content!, /hot-water performance issue/);
   assert.match(payload.content!, /The technician evaluated the reported concern/);
@@ -236,11 +240,7 @@ test('requires exactly one selected image', async () => {
 });
 
 test('refuses to push when the correlated post already exists', async () => {
-  const mockFetch: typeof fetch = async () => new Response(JSON.stringify([{
-    id: 77,
-    slug: 'servicetitan-job-123456',
-    status: 'publish',
-  }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const mockFetch: typeof fetch = async () => new Response(JSON.stringify({ statuses: { [job.id]: { state: 'exists', postId: 77, label: 'Published', postStatus: 'publish' } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   const client = new WordPressClient(config, mockFetch);
 
   await assert.rejects(() => client.pushJob(job, [image], 'draft', approvedCopy), (error: unknown) => {
@@ -299,7 +299,8 @@ test('regenerates SEO copy for a draft without publishing it', async () => {
   assert.equal(requests.length, 2);
   const payload = JSON.parse(String(requests[1]!.init?.body)) as Record<string, unknown>;
   assert.equal('status' in payload, false);
-  assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
+  assert.equal((payload.stji_generation as unknown as { version: number }).version, SEO_GENERATOR_VERSION);
+  assert.equal((payload.stji_generation as unknown as { jobId: number }).jobId, job.id);
   assert.equal(status.postStatus, 'draft');
   assert.equal(status.seoState, 'current');
 });
@@ -329,7 +330,8 @@ test('preserves existing content when editing only title and excerpt on a curren
   assert.equal(payload.title, titleAndExcerpt.title);
   assert.notEqual(payload.excerpt, '');
   assert.equal('content' in payload, false);
-  assert.deepEqual(payload.stji_generation, { version: SEO_GENERATOR_VERSION, jobId: job.id });
+  assert.equal((payload.stji_generation as unknown as { version: number }).version, SEO_GENERATOR_VERSION);
+  assert.equal((payload.stji_generation as unknown as { jobId: number }).jobId, job.id);
   assert.equal(status.seoState, 'current');
 });
 
