@@ -1348,11 +1348,22 @@ td strong {
   border-bottom: 1px solid #dce3e8;
 }
 .workspace-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 4px;
   font-weight: 750;
   color: #153849;
   text-decoration: none;
   background: #17442d;
   color: #fff;
+}
+.workspace-active-website {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 .workspace-token-pill {
   position: relative;

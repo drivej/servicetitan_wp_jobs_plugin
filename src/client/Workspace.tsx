@@ -95,10 +95,14 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
-const BrandBanner = () => {
+const BrandBanner = ({ website }: { website?: Website | undefined }) => {
   return (
     <a className='workspace-brand p-3' href='/'>
-      Job Showcase for ServiceTitan
+      <span>Job Showcase for ServiceTitan</span>
+      {website && <span className='workspace-active-website' title={website.url}>
+        <span aria-hidden='true'> · </span>
+        <span>{website.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+      </span>}
     </a>
   );
 };
@@ -810,7 +814,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         </aside>
       )}
       <header className='workspace-bar'>
-        <BrandBanner />
+        <BrandBanner website={settingsWebsite} />
         <div className='workspace-menu-row d-flex gap-2 p-2 align-end'>
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
