@@ -462,9 +462,6 @@ export const seoJobSlug = (seoTitle: string, jobId: number): string => {
   return `${title || 'job'}-${jobId}`;
 };
 
-export const serviceTitanJobSlug = (serviceTitanJobId: number): string =>
-  `servicetitan-job-${serviceTitanJobId}`;
-
 const postToStatus = (post: WordPressPost): WordPressPostStatus => ({
   state: 'exists',
   label: humanizeStatus(post.status),

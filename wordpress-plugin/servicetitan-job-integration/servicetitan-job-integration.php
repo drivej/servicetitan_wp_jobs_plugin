@@ -833,31 +833,15 @@ function stji_rest_bulk_statuses(WP_REST_Request $request)
         $job_ids[] = $job_id;
     }
 
-    $job_id_by_slug = array();
     $statuses = array();
     foreach ($job_ids as $job_id) {
-        $slug = 'servicetitan-job-' . $job_id;
-        $job_id_by_slug[$slug] = $job_id;
         $statuses[(string) $job_id] = array(
             'state' => 'not_found',
             'label' => __('None', 'servicetitan-job-integration'),
         );
     }
 
-    $posts_query = new WP_Query(
-        array(
-            'post_type'              => stji_post_type(),
-            'post_status'            => get_post_stati(array(), 'names'),
-            'post_name__in'          => array_keys($job_id_by_slug),
-            'posts_per_page'         => count($job_ids),
-            'no_found_rows'           => true,
-            'update_post_meta_cache' => true,
-            'update_post_term_cache' => false,
-        )
-    );
-
-    // Job identity is stored separately from the public, SEO-based permalink.
-    // Retain the slug lookup above for older posts without generation metadata.
+    // Match only stored ServiceTitan job IDs; public permalinks are independent.
     $metadata_query = new WP_Query(array(
         'post_type' => stji_post_type(),
         'post_status' => get_post_stati(array(), 'names'),
@@ -867,12 +851,9 @@ function stji_rest_bulk_statuses(WP_REST_Request $request)
         'update_post_meta_cache' => true,
         'update_post_term_cache' => false,
     ));
-    foreach (array_merge($posts_query->posts, $metadata_query->posts) as $post) {
+    foreach ($metadata_query->posts as $post) {
         $job_id = absint(get_post_meta($post->ID, STJI_JOB_ID_META, true));
-        if (!in_array($job_id, $job_ids, true)) {
-            $job_id = isset($job_id_by_slug[$post->post_name]) ? $job_id_by_slug[$post->post_name] : 0;
-        }
-        if (!$job_id) continue;
+        if (!in_array($job_id, $job_ids, true)) continue;
         $status_object = get_post_status_object($post->post_status);
         $link = get_permalink($post);
         $seo_version = absint(get_post_meta($post->ID, STJI_SEO_VERSION_META, true));

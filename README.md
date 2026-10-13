@@ -122,10 +122,10 @@ New WordPress posts use a slugified SEO title followed by the ServiceTitan job I
 water-damage-service-in-austin-tx-42370117
 ```
 
-The companion plugin matches posts using stored ServiceTitan job-ID metadata, with the legacy `servicetitan-job-{ID}` slug as a fallback. Existing post URLs are preserved during regeneration. The server checks this identity before creating a post to prevent duplicates.
+The companion plugin matches posts only using stored ServiceTitan job-ID metadata. Existing post URLs are preserved during regeneration. The server checks this identity before creating a post to prevent duplicates.
 
 **Refresh page statuses** sends the visible page's ServiceTitan IDs in one app
-request. Companion plugin 1.20.2 resolves stored job IDs and legacy slugs and returns found and missing statuses together.
+request. Companion plugin 1.20.2 resolves stored job IDs and returns found and missing statuses together.
 
 ## Build and run
 

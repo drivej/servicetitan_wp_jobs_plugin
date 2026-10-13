@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import type { WordPressConfig } from './config.js';
 import type { JobImage, JobListItem } from './service-titan.js';
-import { SEO_GENERATOR_VERSION, WordPressClient, serviceTitanJobSlug, seoJobSlug } from './wordpress.js';
+import { SEO_GENERATOR_VERSION, WordPressClient, seoJobSlug } from './wordpress.js';
 
 const config: WordPressConfig = {
   collectionUrl: 'https://wordpress.example/wp-json/wp/v2/st_job',
@@ -34,11 +34,10 @@ const approvedCopy = {
   bodyHtml: '<p>An Austin homeowner needed help with a documented hot-water performance issue.</p><p>The technician evaluated the reported concern involving the water heater.</p><p>The documented repair addressed the hot-water issue for this Austin property.</p>',
 };
 
-test('slugifies SEO titles and retains legacy slug support', () => {
+test('slugifies SEO titles with a unique job ID suffix', () => {
   assert.equal(seoJobSlug('Water Damage Service in Austin, TX!', job.id), 'water-damage-service-in-austin-tx-123456');
   assert.equal(seoJobSlug('Réparation & Repair', job.id), 'reparation-repair-123456');
   assert.equal(seoJobSlug('!!!', job.id), 'job-123456');
-  assert.equal(serviceTitanJobSlug(job.id), 'servicetitan-job-123456');
 });
 
 test('reports a missing WordPress post with the current SEO version', async () => {

@@ -54,7 +54,7 @@ stji_zip_post_types filter.
 == Changelog ==
 
 = 1.20.2 =
-* Match jobs using stored job-ID metadata so new posts can use SEO-title permalinks, with legacy slug fallback.
+* Match jobs using stored job-ID metadata so new posts can use SEO-title permalinks, without slug-based matching.
 
 = 1.20.1 =
 * Use WordPress's Update URI API so current installations expose the auto-update toggle.
