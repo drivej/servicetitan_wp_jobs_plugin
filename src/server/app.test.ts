@@ -3,8 +3,68 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import express from 'express';
+import { buildJobCopyFacts, JOB_COPY_INSTRUCTIONS } from './job-copy-prompt.js';
 
 import { createApp, parseApprovedPostCopy, parseJobsQuery } from './app.js';
+
+test('prompt preview requires the platform actor and matches generation without spending tokens', async () => {
+  let reads = 0;
+  let generations = 0;
+  let spent = 0;
+  let generatedFacts = '';
+  const routes = createApp({
+    serviceTitan: {
+      getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
+      getJob: async () => { throw new Error('unused'); },
+      getJobImage: async () => { throw new Error('unused'); },
+      getJobDetails: async (id) => {
+        reads++;
+        return {
+          job: { id, jobNumber: '42', locationId: 1, jobTypeId: 2, jobStatus: 'Completed' },
+          summary: { id, jobNumber: '42', jobName: 'Leak repair', status: 'Completed', tagNames: ['Water Heater'], location: { city: 'Austin', state: 'TX', zip: '78701' } },
+          attachments: [{ id: '1', fileName: 'repair.jpg', contentType: 'image/jpeg' }],
+          history: [{ id: '1', source: 'note', type: 'Note', date: '', content: 'Repaired a leaking pipe.', promptEligible: true }],
+        };
+      },
+    },
+    wordpress: {} as Parameters<typeof createApp>[0]['wordpress'],
+    companyWebsiteUrl: 'https://example.com',
+    copyGenerator: { generate: async (source) => {
+      generations++;
+      generatedFacts = buildJobCopyFacts(source);
+      return { title: 'Repair', bodyHtml: '<p>A documented repair in Austin addressed the leaking pipe.</p>', seoTitle: 'Leak repair in Austin', seoDescription: 'A documented plumbing repair in Austin addressed a leaking pipe in the home.' };
+    } },
+    spendJobToken: async (_action, operation) => { spent++; return operation(); },
+  });
+  const app = express();
+  app.use((req, res, next) => {
+    res.locals.actor = { isPlatformAdmin: req.get('X-Test-Actor') === 'admin' };
+    res.locals.user = { isPlatformAdmin: true };
+    next();
+  });
+  app.use(routes);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address() as { port: number };
+  const url = `http://127.0.0.1:${address.port}/api/jobs/42`;
+  try {
+    assert.equal((await fetch(`${url}/prompt-preview`)).status, 403);
+    assert.equal(reads, 0);
+    const response = await fetch(`${url}/prompt-preview`, { headers: { 'X-Test-Actor': 'admin' } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+    const preview = await response.json() as { prompt: string };
+    assert.match(preview.prompt, /Water Heater/);
+    assert.equal(generations, 0);
+    assert.equal(spent, 0);
+    const generated = await fetch(`${url}/ai-copy`, { method: 'POST' });
+    assert.equal(generated.status, 200);
+    assert.equal(preview.prompt, `${JOB_COPY_INSTRUCTIONS}\nReturn the result using the supplied JSON schema.\n\n${generatedFacts}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 test('converts an inclusive date range into ServiceTitan UTC boundaries', () => {
   assert.deepEqual(

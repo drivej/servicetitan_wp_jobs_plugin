@@ -55,6 +55,7 @@ const worker = new BuildQueueWorker(queue, async (task) => {
 const app = saasConfig && store
   ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue), ...staticOptions })
   : createApp({ ...localProviders!, ...staticOptions,
+      localPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN?.toLowerCase() !== 'false',
       buildQueue: { enqueue: (jobId) => queue.enqueue(localScope, jobId), list: (jobIds) => queue.list(localScope, jobIds) },
     });
 worker.start();

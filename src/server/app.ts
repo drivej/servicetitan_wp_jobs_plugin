@@ -11,11 +11,14 @@ import { ServiceTitanRequestError } from './service-titan-error.js';
 import type { ApprovedPostCopy, WordPressProvider, WordPressWritableStatus } from './wordpress.js';
 import { WordPressRequestError } from './wordpress-error.js';
 import { TokenOperationSafeFailure } from './token-operation.js';
+import { buildJobCopyFacts, JOB_COPY_INSTRUCTIONS } from './job-copy-prompt.js';
+import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version.js';
 
 import type { BuildTask } from '../shared/build-queue.js';
 import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
+  localPlatformAdmin?: boolean;
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -34,6 +37,7 @@ const WORDPRESS_PLUGIN_FILENAME = 'job-showcase-for-servicetitan-1.20.1.zip';
 const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPRESS_PLUGIN_FILENAME);
 
 export const createApp = ({
+  localPlatformAdmin = false,
   serviceTitan,
   wordpress,
   copyGenerator = new DisabledJobCopyGenerator(),
@@ -47,6 +51,28 @@ export const createApp = ({
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
+  const copySource = async (jobId: number, clarification?: string) => {
+    const details = await serviceTitan.getJobDetails(jobId);
+    return { ...details.summary,
+      technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
+      imageFileNames: details.attachments.map((attachment) => attachment.fileName),
+      jobDetails: safeStructuredJobDetails(details.job),
+      ...(clarification ? { userClarification: clarification } : {}),
+      ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
+    };
+  };
+  app.get(`${apiPrefix}/jobs/:jobId/prompt-preview`, async (request, response, next) => {
+    try {
+      if (!localPlatformAdmin && response.locals.actor?.isPlatformAdmin !== true) {
+        throw new HttpError('Platform administrator access required.', 403);
+      }
+      response.set('Cache-Control', 'private, no-store');
+      const source = await copySource(parseJobId(request.params.jobId));
+      const instructions = `${JOB_COPY_INSTRUCTIONS}\nReturn the result using the supplied JSON schema.`;
+      const input = buildJobCopyFacts(source);
+      response.json({ prompt: `${instructions}\n\n${input}`, version: SEO_GENERATOR_VERSION });
+    } catch (error) { next(error); }
+  });
   app.get(`${apiPrefix}/health`, (_request, response) => { response.json({ status: 'ok' }); });
   app.get(`${apiPrefix}/wordpress/plugin`, async (_request, response, next) => {
     try {
@@ -110,17 +136,11 @@ export const createApp = ({
   });
   app.post(`${apiPrefix}/jobs/:jobId/ai-copy`, async (request, response, next) => {
     try {
-      const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
+      const jobId = parseJobId(request.params.jobId);
       response.set('Cache-Control', 'no-store');
       const clarification = parseCopyClarification(request.body?.clarification);
-      const promptSource = { ...details.summary,
-        technicianNotes: details.history.filter((item) => item.promptEligible).map((item) => item.content),
-        imageFileNames: details.attachments.map((attachment) => attachment.fileName),
-        jobDetails: safeStructuredJobDetails(details.job),
-        ...(clarification ? { userClarification: clarification } : {}),
-        ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
-      };
-      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), details.summary.id, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId: details.summary.id })));
+      const promptSource = await copySource(jobId, clarification);
+      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId })));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {

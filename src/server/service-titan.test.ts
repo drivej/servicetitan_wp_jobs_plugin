@@ -99,7 +99,7 @@ test('lists jobs without downloading images and securely downloads verified job 
   const api = {
     defaults: { timeout: 0 },
     post: async () => ({ data: { access_token: 'token', expires_in: 3600 } }),
-    get: async (url: string) => {
+    get: async (url: string, options?: { params?: Record<string, unknown> }) => {
       requestedUrls.push(url);
       if (url.endsWith('/jobs')) return { data: {
         page: 1,
@@ -122,7 +122,16 @@ test('lists jobs without downloading images and securely downloads verified job 
         hasMore: false,
         data: [{ text: 'Replaced the damaged line and verified normal operation.', createdOn: '2026-08-03T11:00:00Z', modifiedOn: '2026-08-03T11:00:00Z', isPinned: false }],
       } };
-      if (url.endsWith('/jobs/2')) return { data: { id: 2, jobNumber: 'J-2', locationId: 11, jobTypeId: 21, jobStatus: 'Completed', summary: 'Repaired leaking pipe.', equipmentIds: [31] } };
+      if (url.endsWith('/jobs/2')) return { data: { id: 2, jobNumber: 'J-2', locationId: 11, jobTypeId: 21, jobStatus: 'Completed', summary: 'Repaired leaking pipe.', equipmentIds: [31], tagTypeIds: [41, 42, 41, 999] } };
+      if (url.endsWith('/tag-types')) {
+        assert.equal(options?.params?.ids, '41,42,999');
+        assert.equal(options?.params?.active, 'Any');
+        if (options?.params?.page === 2) return { data: { data: [{ id: 42, name: 'Leak Repair', active: false }], hasMore: false } };
+        return { data: { data: [
+        { id: 41, name: 'Water Heater' },
+        { id: 43, name: 'Unrelated tag' },
+      ], hasMore: true } };
+      }
       if (url.endsWith('/jobs/attachment/image-2')) return {
         data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
         headers: { 'content-type': 'image/jpeg' },
@@ -166,6 +175,7 @@ test('lists jobs without downloading images and securely downloads verified job 
     'Replaced the damaged line and verified normal operation.',
   ]);
   assert.deepEqual(details.summary.equipmentNames, ['Bradford White Water Heater']);
+  assert.deepEqual(details.summary.tagNames, ['Water Heater', 'Leak Repair']);
   assert.equal(details.summary.summaryText, 'Repaired leaking pipe.');
   assert.equal(details.summary.location.address, '123 Main St, Suite 2, Two, TX, 75002');
   const image = await client.getJobImage(2, 'image-2');

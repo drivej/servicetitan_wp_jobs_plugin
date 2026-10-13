@@ -122,6 +122,10 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [rawResponseLoading, setRawResponseLoading] = useState(false);
   const [rawResponseError, setRawResponseError] = useState('');
   const [rawResponseCopied, setRawResponseCopied] = useState(false);
+  const [promptPreview, setPromptPreview] = useState('');
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState('');
+  const [promptCopied, setPromptCopied] = useState(false);
   const [aiCopy, setAiCopy] = useState('');
   const [aiCopyEdited, setAiCopyEdited] = useState(false);
   const { ready: wordpressPluginReady, status: wordpressPluginStatus, loading: wordpressPluginStatusLoading } = useWordPressPluginStatus();
@@ -137,6 +141,21 @@ export function JobDetails({ jobId }: { jobId: number }) {
       .catch(() => setIsPlatformAdmin(false));
     return () => controller.abort();
   }, []);
+
+  const loadPromptPreview = async () => {
+    setPromptLoading(true);
+    setPromptError('');
+    setPromptPreview('');
+    setPromptCopied(false);
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/prompt-preview`, { headers: { Accept: 'application/json' } });
+      const body = await readJson<{ prompt?: string; error?: string }>(response);
+      if (!response.ok || !body.prompt) throw new Error(body.error || 'Unable to build the prompt.');
+      setPromptPreview(body.prompt);
+    } catch (requestError) {
+      setPromptError(requestError instanceof Error ? requestError.message : 'Unable to build the prompt.');
+    } finally { setPromptLoading(false); }
+  };
 
   const loadRawResponse = async () => {
     if (rawResponse !== undefined || rawResponseLoading) return;
@@ -500,6 +519,15 @@ export function JobDetails({ jobId }: { jobId: number }) {
       </div>
       {isPlatformAdmin && <section className='superadmin-debug-panel' aria-labelledby='superadmin-debug-heading'>
         <div className='superadmin-debug-banner'><strong>SUPER ADMIN CONTENT</strong><span>Visible to the signed-in platform administrator</span></div>
+        <h2 id='prompt-preview-heading'>Job copy prompt</h2>
+        <p>Build the prompt from current ServiceTitan job data, including assigned tags. Previewing uses no job tokens and does not generate copy.</p>
+        <Button variant='outlined' disabled={promptLoading} onClick={() => void loadPromptPreview()}>{promptLoading ? 'Building prompt…' : promptPreview ? 'Refresh prompt' : 'Generate prompt'}</Button>
+        {promptLoading && <p role='status'>Loading current job context…</p>}
+        {promptError && <p className='notice error' role='alert'>{promptError}</p>}
+        {promptPreview && <>
+          <div className='raw-api-actions'><Button size='small' onClick={() => void navigator.clipboard.writeText(promptPreview).then(() => setPromptCopied(true)).catch(() => setPromptError('Unable to copy the prompt. Select the text below to copy it manually.'))}>{promptCopied ? 'Copied' : 'Copy prompt'}</Button></div>
+          <pre className='raw-api-json' aria-labelledby='prompt-preview-heading'><code>{promptPreview}</code></pre>
+        </>}
         <h2 id='superadmin-versions-heading'>WordPress post versions</h2>
         <dl className='superadmin-version-list' aria-labelledby='superadmin-versions-heading'>
           <div><dt>SEO generator on this post</dt><dd>{wordpressStatus?.state === 'exists' ? wordpressStatus.seoVersion ?? 'Unknown / legacy post' : wordpressStatus?.state === 'not_found' ? 'No WordPress post' : 'Unavailable'}</dd></div>

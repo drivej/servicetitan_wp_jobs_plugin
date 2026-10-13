@@ -16,7 +16,7 @@ The user-facing setup documentation is available in the running app at
 Requires Node.js 22 or newer.
 
 1. Copy `.env.example` to `.env` and enter credentials from the same ServiceTitan environment.
-2. Ensure the ServiceTitan app has read access to **Jobs**, **Job Types**, and **Locations**.
+2. Ensure the ServiceTitan app has read access to **Jobs**, **Job Types**, **Locations**, and **Settings → Tag Types**. Assigned job tags are resolved to names and included as classification context when generating project copy.
 3. Configure a WordPress user with permission to create the custom post type and generate an Application Password under **Users → Profile**.
 4. Install and run:
 

@@ -3,6 +3,7 @@ export interface JobCopySource {
   summaryText?: string;
   technicianNotes?: string[];
   equipmentNames?: string[];
+  tagNames?: string[];
   imageFileNames?: string[];
   companyName?: string;
   customerReview?: string;

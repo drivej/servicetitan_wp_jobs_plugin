@@ -10,6 +10,7 @@ interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
 interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; modifiedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
 interface ServiceTitanJobType { id: number; name: string; }
+interface ServiceTitanTagType { id: number; name: string; }
 interface ServiceTitanLocation { id: number; address?: { street?: string; unit?: string; city?: string; state?: string; zip?: string; }; }
 interface ServiceTitanInstalledEquipment { id: number; name?: string | null; }
 interface ServiceTitanHistoryEntry { id?: string | number; eventType?: string; date?: string; memo?: string; }
@@ -40,6 +41,7 @@ export interface JobListItem {
   summaryText?: string;
   seoDetails?: { issue?: string; action?: string; };
   equipmentNames?: string[];
+  tagNames?: string[];
   attachments?: JobAttachment[];
   sourceCopyStatus?: 'missing' | 'limited' | 'available';
 }
@@ -449,12 +451,16 @@ export class ServiceTitanClient implements JobsProvider {
   ): Promise<JobListItem[]> {
     const locationIds = unique(jobs.map((job) => job.locationId));
     const jobTypeIds = unique(jobs.map((job) => job.jobTypeId));
-    const [locations, jobTypes] = await Promise.all([
+    const tagIds = unique(jobs.flatMap((job) => Array.isArray(job.tagTypeIds)
+      ? job.tagTypeIds.filter((id): id is number => Number.isSafeInteger(id) && id > 0) : []));
+    const [locations, jobTypes, tagTypes] = await Promise.all([
       this.getByIds<ServiceTitanLocation>(`${this.config.apiBaseUrl}/crm/v2/${tenantPath}/locations`, locationIds, headers, { active: 'Any' }),
       this.getByIds<ServiceTitanJobType>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/job-types`, jobTypeIds, headers, { active: 'Any' }),
+      this.getTagTypes(tagIds, headers, tenantPath),
     ]);
     const locationById = new Map(locations.map((location) => [location.id, location]));
     const jobTypeById = new Map(jobTypes.map((jobType) => [jobType.id, jobType]));
+    const tagById = new Map(tagTypes.map((tag) => [tag.id, tag.name]));
 
     return jobs.map((job) => {
       const address = locationById.get(job.locationId)?.address;
@@ -463,6 +469,8 @@ export class ServiceTitanClient implements JobsProvider {
         jobNumber: job.jobNumber,
         jobName: jobTypeById.get(job.jobTypeId)?.name || `Job ${job.jobNumber}`,
         status: job.jobStatus,
+        tagNames: unique(Array.isArray(job.tagTypeIds) ? job.tagTypeIds : [])
+          .map((id) => tagById.get(id)).filter((name): name is string => Boolean(name)),
         ...(job.completedOn ? { completedOn: job.completedOn } : {}),
         ...(job.modifiedOn ? { modifiedOn: job.modifiedOn } : {}),
         location: {
@@ -473,6 +481,25 @@ export class ServiceTitanClient implements JobsProvider {
         },
       };
     });
+  }
+
+  private async getTagTypes(ids: number[], headers: Record<string, string>, tenantPath: string): Promise<ServiceTitanTagType[]> {
+    if (ids.length === 0) return [];
+    const tags: ServiceTitanTagType[] = [];
+    for (let offset = 0; offset < ids.length; offset += 50) {
+      let page = 1;
+      let hasMore: boolean;
+      do {
+        const response = await this.api.get<PaginatedResponse<ServiceTitanTagType>>(
+          `${this.config.apiBaseUrl}/settings/v2/${tenantPath}/tag-types`,
+          { headers, params: { ids: ids.slice(offset, offset + 50).join(','), active: 'Any', page, pageSize: 50 } },
+        );
+        tags.push(...response.data.data);
+        hasMore = response.data.hasMore;
+        page++;
+      } while (hasMore);
+    }
+    return tags.filter((tag) => ids.includes(tag.id));
   }
 
   private async getByIds<T>(url: string, ids: number[], headers: Record<string, string>, extraParams: Record<string, string>): Promise<T[]> {
