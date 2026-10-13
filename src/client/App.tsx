@@ -1,6 +1,7 @@
 import { Alert, Button, Pagination, Paper, TextField } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
+import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { apiFetch, wordpressStatusStorage } from './api';
 
@@ -154,10 +155,6 @@ export function App() {
   };
 
   const requestWordpress = async (jobId: number) => {
-    if (!wordpressPluginReady) {
-      setActionError({ title: 'WordPress plugin update required', message: 'Install the required companion plugin from the WordPress plugin tab before using WordPress actions.' });
-      return;
-    }
     setWordpressBusy(jobId, true);
     setActionError(undefined);
     setWordpressStatuses((current) => ({
@@ -272,7 +269,7 @@ export function App() {
   };
 
   const refreshWordpressStatuses = async (jobIds: number[], options: { showBulkProgress: boolean; reportError: boolean }) => {
-    if (!wordpressPluginReady || jobIds.length === 0) return;
+    if (jobIds.length === 0) return;
 
     if (options.showBulkProgress) setBulkRefreshing(true);
     if (options.reportError) setActionError(undefined);
@@ -321,15 +318,15 @@ export function App() {
     const jobIds = result?.data.map((job) => job.id) || [];
     if (jobIds.length === 0) return;
 
-    const cached = readCachedWordPressStatuses(jobIds, wordpressStatusStorage(), Date.now(), wordpressPluginStatus?.seoGeneratorVersion);
+    const cached = readCachedWordPressStatuses(jobIds, wordpressStatusStorage(), Date.now(), SEO_GENERATOR_VERSION);
     if (Object.keys(cached.statuses).length > 0) {
       setWordpressStatuses((current) => ({ ...current, ...cached.statuses }));
     }
 
-    if (wordpressPluginReady && cached.missingJobIds.length > 0) {
-      void refreshWordpressStatuses(cached.missingJobIds, { showBulkProgress: false, reportError: false });
+    if (cached.missingJobIds.length > 0) {
+      void refreshWordpressStatuses(cached.missingJobIds, { showBulkProgress: false, reportError: true });
     }
-  }, [result, wordpressPluginReady, wordpressPluginStatus?.seoGeneratorVersion]);
+  }, [result]);
 
   return (
     <main className='app-page'>
@@ -425,7 +422,7 @@ export function App() {
                 <col className='wp-status-column' />
                 <col className='actions-column' />
               </colgroup>
-              <JobTableHeader refreshing={bulkRefreshing} disabled={!wordpressPluginReady || loading || bulkRefreshing || busyWordpressJobs.size > 0} onRefresh={() => void refreshPageWordpressStatuses()} />
+              <JobTableHeader refreshing={bulkRefreshing} disabled={loading || bulkRefreshing || busyWordpressJobs.size > 0} onRefresh={() => void refreshPageWordpressStatuses()} />
               <tbody>
                 {result.data.map((job) => (
                   <JobTableRow
