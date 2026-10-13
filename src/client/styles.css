@@ -520,7 +520,8 @@ td strong {
 }
 .job-row-metadata {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   gap: 2px 12px;
   margin-top: 4px;
   color: #526572;

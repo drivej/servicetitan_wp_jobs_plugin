@@ -104,8 +104,8 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     <td className='job-name-cell' data-label='Job'>
       <div className='job-name' title={job.jobName}>{job.jobName}</div>
       <div className='job-row-metadata'>
-        <span>Completed: {formatJobDate(job.completedOn)}</span>
-        <span>Job ID: {job.id}</span>
+        <span>{formatJobDate(job.completedOn)}</span>
+        <span>#{job.id}</span>
       </div>
       {sourceCopyMessage && <span className={`source-copy-status source-${job.sourceCopyStatus || 'concern'}`} title='Basic summary check: missing, fewer than 10 words, or at least 10 words. Review the source before generating copy.'>{sourceCopyMessage}</span>}
     </td>
