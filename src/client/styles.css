@@ -1505,6 +1505,12 @@ td strong {
   padding: 0;
   margin: var(--space-4) 0;
 }
+.account-group { margin: var(--space-4) 0 var(--space-5); padding: var(--space-4); border: 1px solid #e4ebef; border-radius: 10px; background: #fff; }
+.account-group-header { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid #e4ebef; }
+.account-group-header h2 { margin: 0; font-size: 1.1rem; }
+.account-group-header small { color: #576e7a; overflow-wrap: anywhere; }
+.account-member-row { margin-left: 22px; padding-left: 14px !important; border-left: 2px solid #dbe5e9; }
+.account-admin-row strong { color: #173c49; }
 .account-resource-list li {
   display: flex;
   align-items: center;

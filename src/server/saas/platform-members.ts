@@ -43,21 +43,32 @@ export class PlatformMembers {
     const cursor = after ? uuid(after) : null;
     return this.db.transaction(actorId, async (sql) => {
       await this.requireAdmin(sql, actorId);
-      const rows = (await sql.query(`SELECT id,name,email,disabled_at,
-        EXISTS(SELECT 1 FROM platform_administrators WHERE user_id=users.id) AS is_platform_admin FROM users
-        WHERE ($1::uuid IS NULL OR id>$1) AND (strpos(lower(name),lower($2))>0 OR strpos(lower(email),lower($2))>0)
-        ORDER BY id LIMIT 51`, [cursor, search])).rows;
+      const rows = (await sql.query(`SELECT w.id,w.name FROM workspaces w
+        WHERE ($1::uuid IS NULL OR w.id>$1)
+          AND ($2='' OR EXISTS (
+            SELECT 1 FROM workspace_memberships sm JOIN users su ON su.id=sm.user_id
+            WHERE sm.workspace_id=w.id AND (strpos(lower(su.name),lower($2))>0 OR strpos(lower(su.email),lower($2))>0)
+          ))
+        ORDER BY w.id LIMIT 51`, [cursor, search])).rows;
       const page = rows.slice(0, 50);
-      const ids = page.map((row) => String(row.id));
-      const memberships = ids.length ? (await sql.query(`SELECT m.user_id,m.role,w.id AS workspace_id,w.name AS workspace_name
-        FROM workspace_memberships m JOIN workspaces w ON w.id=m.workspace_id
-        WHERE m.user_id=ANY($1::uuid[]) ORDER BY w.name,w.id`, [ids])).rows : [];
-      return { members: page.map((row) => ({
-        id: String(row.id), name: String(row.name), email: String(row.email), disabled: row.disabled_at !== null,
-        isPlatformAdmin: row.is_platform_admin === true,
-        roles: memberships.filter((membership) => membership.user_id === row.id).map((membership) => ({
-          workspaceId: String(membership.workspace_id), workspaceName: String(membership.workspace_name), role: String(membership.role)
-        }))
+      const workspaceIds = page.map((row) => String(row.id));
+      const memberships = workspaceIds.length ? (await sql.query(`SELECT m.user_id,m.role,m.workspace_id,u.name,u.email,u.disabled_at,
+          EXISTS(SELECT 1 FROM platform_administrators WHERE user_id=u.id) AS is_platform_admin
+        FROM workspace_memberships m JOIN users u ON u.id=m.user_id
+        WHERE m.workspace_id=ANY($1::uuid[])
+        ORDER BY m.workspace_id,CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,lower(u.email)`, [workspaceIds])).rows : [];
+      const websites = workspaceIds.length ? (await sql.query(`SELECT workspace_id,name,url FROM websites
+        WHERE workspace_id=ANY($1::uuid[]) ORDER BY name,url`, [workspaceIds])).rows : [];
+      return { accounts: page.map((row) => ({
+        workspaceId: String(row.id), name: String(row.name),
+        websites: websites.filter((website) => website.workspace_id === row.id).map((website) => ({
+          name: String(website.name), url: String(website.url),
+        })),
+        members: memberships.filter((member) => member.workspace_id === row.id).map((member) => ({
+          id: String(member.user_id), name: String(member.name), email: String(member.email),
+          disabled: member.disabled_at !== null, isPlatformAdmin: member.is_platform_admin === true,
+          role: String(member.role),
+        })),
       })), nextCursor: rows.length > 50 ? String(page[49]!.id) : null };
     });
   }
