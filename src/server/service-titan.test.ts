@@ -178,6 +178,24 @@ test('lists jobs without downloading images and securely downloads verified job 
   assert.deepEqual(details.summary.tagNames, ['Water Heater', 'Leak Repair']);
   assert.equal(details.summary.summaryText, 'Repaired leaking pipe.');
   assert.equal(details.summary.location.address, '123 Main St, Suite 2, Two, TX, 75002');
+  const raw = await client.getRawJob(2) as { jobId: number; responses: Array<{ endpoint: string; params?: Record<string, unknown>; body: unknown }> };
+  assert.equal(raw.jobId, 2);
+  assert.deepEqual(raw.responses.map((item) => item.endpoint).sort(), [
+    '/jpm/v2/tenant/tenant-id/jobs/2',
+    '/jpm/v2/tenant/tenant-id/jobs/2/history',
+    '/jpm/v2/tenant/tenant-id/jobs/2/notes',
+    '/forms/v2/tenant/tenant-id/jobs/2/attachments',
+    '/crm/v2/tenant/tenant-id/locations',
+    '/jpm/v2/tenant/tenant-id/job-types',
+    '/settings/v2/tenant/tenant-id/tag-types',
+    '/settings/v2/tenant/tenant-id/tag-types',
+    '/equipmentsystems/v2/tenant/tenant-id/installed-equipment',
+  ].sort());
+  assert.deepEqual(raw.responses.find((item) => item.endpoint.endsWith('/attachments'))?.body, {
+    data: [{ id: 'image-2', fileName: 'completed.jpg', contentType: 'image/jpeg' }],
+  }, 'raw inspection bypasses the attachment cache and preserves response envelopes');
+  assert.equal(raw.responses.filter((item) => item.endpoint.endsWith('/tag-types')).length, 2, 'captures every tag page');
+  assert.doesNotMatch(JSON.stringify(raw), /app-key|Bearer|access_token|client-secret/);
   const image = await client.getJobImage(2, 'image-2');
   assert.equal(image.contentType, 'image/jpeg');
   assert.equal(image.bytes.byteLength, 4);

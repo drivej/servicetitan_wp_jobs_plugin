@@ -1,4 +1,5 @@
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { ServiceTitanConfig } from './config.js';
 import { extractSafeSeoDetails } from './job-seo.js';
@@ -51,6 +52,7 @@ export interface JobContentHistoryItem { id: string; source: 'history' | 'note';
 export interface JobDetails { job: ServiceTitanJob; summary: JobListItem; attachments: JobAttachment[]; history: JobContentHistoryItem[]; }
 export interface JobImage { id: string; fileName: string; contentType: string; bytes: Uint8Array; }
 export interface JobsProvider {
+  getRawJob?(jobId: number): Promise<unknown>;
   getJobs(query: JobsQuery): Promise<JobsResult>;
   getJobImageCandidates?(jobId: number): Promise<JobAttachment[]>;
   getJob(jobId: number): Promise<JobListItem>;
@@ -73,6 +75,7 @@ const zipLocationsCache = new Map<string, { expiresAt: number; request: Promise<
 
 export class ServiceTitanClient implements JobsProvider {
   private readonly api: AxiosInstance;
+  private readonly rawResponses = new AsyncLocalStorage<Array<{ endpoint: string; params?: unknown; status?: number; body: unknown }>>();
   private accessToken?: { value: string; expiresAt: number };
   private tokenRequest: Promise<string> | undefined;
   private readonly attachmentCache = new Map<number, { expiresAt: number; request: Promise<ServiceTitanAttachment[]> }>();
@@ -119,7 +122,7 @@ export class ServiceTitanClient implements JobsProvider {
     try {
       const token = await this.getAccessToken();
       const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
-      await this.api.get(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs`, {
+      await this.get(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs`, {
         headers: { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey },
         params: { page: 1, pageSize: 1 },
       });
@@ -143,17 +146,24 @@ export class ServiceTitanClient implements JobsProvider {
     return (await this.getJobDetails(jobId)).summary;
   }
 
+  /** Capture the response bodies from the same read pipeline used for job content. */
   async getRawJob(jobId: number): Promise<unknown> {
-    try {
-      const token = await this.getAccessToken();
-      const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
-      const response = await this.api.get<unknown>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey },
-      });
-      return response.data;
-    } catch (error) {
-      throw this.toRequestError(error);
-    }
+    const responses: Array<{ endpoint: string; params?: unknown; status?: number; body: unknown }> = [];
+    return this.rawResponses.run(responses, async () => {
+      await this.getJobDetails(jobId);
+      return { jobId, responses };
+    });
+  }
+
+  private async get<T = unknown>(url: string, options: AxiosRequestConfig = {}) {
+    const response = await this.api.get<T>(url, options);
+    this.rawResponses.getStore()?.push({
+      endpoint: new URL(url).pathname,
+      ...(options.params ? { params: options.params } : {}),
+      status: response.status,
+      body: response.data,
+    });
+    return response;
   }
 
   async getJobDetails(jobId: number): Promise<JobDetails> {
@@ -162,9 +172,9 @@ export class ServiceTitanClient implements JobsProvider {
       const headers = { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey };
       const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
       const [response, attachmentRecords, historyResponse, notes] = await Promise.all([
-        this.api.get<ServiceTitanJob>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}`, { headers }),
+        this.get<ServiceTitanJob>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}`, { headers }),
         this.getAttachments(jobId, headers, tenantPath),
-        this.api.get<{ history?: ServiceTitanHistoryEntry[] }>(
+        this.get<{ history?: ServiceTitanHistoryEntry[] }>(
           `${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}/history`,
           { headers },
         ),
@@ -200,7 +210,7 @@ export class ServiceTitanClient implements JobsProvider {
       const attachments = await this.getAttachments(jobId, headers, tenantPath);
       const attachment = attachments.find((candidate) => attachmentId(candidate) === attachmentIdValue && isImageAttachment(candidate));
       if (!attachment) throw new ServiceTitanRequestError('The selected job image was not found.', 404);
-      const response = await this.api.get<ArrayBuffer>(
+      const response = await this.get<ArrayBuffer>(
         `${this.config.apiBaseUrl}/forms/v2/${tenantPath}/jobs/attachment/${encodeURIComponent(attachmentIdValue)}`,
         { headers, responseType: 'arraybuffer', timeout: 90_000,
           validateStatus: (status) => (status >= 200 && status < 300) || status === 302 },
@@ -280,7 +290,7 @@ export class ServiceTitanClient implements JobsProvider {
   ): Promise<Set<number>> {
     const cacheKey = `${this.config.apiBaseUrl}:${this.config.tenantId}:${this.config.clientId}:${zip}`;
     const cached = zipLocationsCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return cached.request;
+    if (!this.rawResponses.getStore() && cached && cached.expiresAt > Date.now()) return cached.request;
     for (const [key, value] of zipLocationsCache) {
       if (value.expiresAt <= Date.now()) zipLocationsCache.delete(key);
     }
@@ -309,7 +319,7 @@ export class ServiceTitanClient implements JobsProvider {
 
     while (hasMore) {
       if (page > ZIP_SCAN_MAX_PAGES) throw new ServiceTitanRequestError('ServiceTitan returned too many locations for this ZIP search.', 502);
-      const response = await this.api.get<PaginatedResponse<ServiceTitanLocation>>(
+      const response = await this.get<PaginatedResponse<ServiceTitanLocation>>(
         `${this.config.apiBaseUrl}/crm/v2/${tenantPath}/locations`,
         { headers, params: { zip, active: 'Any', page, pageSize: ZIP_SCAN_PAGE_SIZE } },
       );
@@ -383,7 +393,7 @@ export class ServiceTitanClient implements JobsProvider {
     headers: Record<string, string>,
     tenantPath: string,
   ) {
-    return this.api.get<PaginatedResponse<ServiceTitanJob>>(
+    return this.get<PaginatedResponse<ServiceTitanJob>>(
       `${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs`,
       { headers, params: serviceTitanJobsListParams(query) },
     );
@@ -391,14 +401,14 @@ export class ServiceTitanClient implements JobsProvider {
 
   private getAttachments(jobId: number, headers: Record<string, string>, tenantPath: string): Promise<ServiceTitanAttachment[]> {
     const cached = this.attachmentCache.get(jobId);
-    if (cached && cached.expiresAt > Date.now()) return cached.request;
+    if (!this.rawResponses.getStore() && cached && cached.expiresAt > Date.now()) return cached.request;
     for (const [id, entry] of this.attachmentCache) {
       if (entry.expiresAt <= Date.now()) this.attachmentCache.delete(id);
     }
     if (this.attachmentCache.size >= ATTACHMENT_CACHE_MAX_ENTRIES) {
       this.attachmentCache.delete(this.attachmentCache.keys().next().value!);
     }
-    const request = this.api.get<PaginatedResponse<ServiceTitanAttachment> | ServiceTitanAttachment[] | { attachments?: ServiceTitanAttachment[] }>(
+    const request = this.get<PaginatedResponse<ServiceTitanAttachment> | ServiceTitanAttachment[] | { attachments?: ServiceTitanAttachment[] }>(
       `${this.config.apiBaseUrl}/forms/v2/${tenantPath}/jobs/${jobId}/attachments`,
       { headers },
     ).then((response) => attachmentRecords(response.data)).catch((error) => {
@@ -415,7 +425,7 @@ export class ServiceTitanClient implements JobsProvider {
     let hasMore = true;
     while (hasMore) {
       if (page > 100) throw new ServiceTitanRequestError('ServiceTitan job notes exceeded the pagination safety limit.', 502);
-      const response = await this.api.get<PaginatedResponse<ServiceTitanNote>>(
+      const response = await this.get<PaginatedResponse<ServiceTitanNote>>(
         `${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs/${jobId}/notes`,
         { headers, params: { page, pageSize: 50 } },
       );
@@ -490,7 +500,7 @@ export class ServiceTitanClient implements JobsProvider {
       let page = 1;
       let hasMore: boolean;
       do {
-        const response = await this.api.get<PaginatedResponse<ServiceTitanTagType>>(
+        const response = await this.get<PaginatedResponse<ServiceTitanTagType>>(
           `${this.config.apiBaseUrl}/settings/v2/${tenantPath}/tag-types`,
           { headers, params: { ids: ids.slice(offset, offset + 50).join(','), active: 'Any', page, pageSize: 50 } },
         );
@@ -504,7 +514,7 @@ export class ServiceTitanClient implements JobsProvider {
 
   private async getByIds<T>(url: string, ids: number[], headers: Record<string, string>, extraParams: Record<string, string>): Promise<T[]> {
     if (ids.length === 0) return [];
-    const response = await this.api.get<PaginatedResponse<T>>(url, {
+    const response = await this.get<PaginatedResponse<T>>(url, {
       headers,
       params: { ids: ids.join(','), pageSize: 50, ...extraParams },
     });

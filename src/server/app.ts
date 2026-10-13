@@ -73,6 +73,16 @@ export const createApp = ({
       response.json({ prompt: `${instructions}\n\n${input}`, version: SEO_GENERATOR_VERSION });
     } catch (error) { next(error); }
   });
+  app.get(`${apiPrefix}/admin/service-titan/jobs/:jobId/raw`, async (request, response, next) => {
+    try {
+      if (!localPlatformAdmin && response.locals.actor?.isPlatformAdmin !== true) {
+        throw new HttpError('Platform administrator access required.', 403);
+      }
+      if (!serviceTitan.getRawJob) throw new HttpError('Raw response lookup is unavailable.', 501);
+      response.set('Cache-Control', 'private, no-store');
+      response.json({ data: await serviceTitan.getRawJob(parseJobId(request.params.jobId)) });
+    } catch (error) { next(error); }
+  });
   app.get(`${apiPrefix}/health`, (_request, response) => { response.json({ status: 'ok' }); });
   app.get(`${apiPrefix}/wordpress/plugin`, async (_request, response, next) => {
     try {

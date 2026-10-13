@@ -117,7 +117,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [wordpressStatus, setWordpressStatus] = useState<WordPressStatus>();
   const [wordpressStatusLoading, setWordpressStatusLoading] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
-  const [isLocalMode, setIsLocalMode] = useState(false);
   const [rawResponse, setRawResponse] = useState<unknown>();
   const [rawResponseLoading, setRawResponseLoading] = useState(false);
   const [rawResponseError, setRawResponseError] = useState('');
@@ -135,7 +134,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     void accountFetch('/api/session', { headers: { Accept: 'application/json' }, signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<{ mode?: string; user?: { isPlatformAdmin?: boolean }; impersonation?: { actor?: { isPlatformAdmin?: boolean } } }> : undefined)
       .then((session) => {
-        setIsLocalMode(session?.mode === 'local');
         setIsPlatformAdmin(session?.user?.isPlatformAdmin === true || session?.impersonation?.actor?.isPlatformAdmin === true);
       })
       .catch(() => setIsPlatformAdmin(false));
@@ -162,13 +160,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     setRawResponseLoading(true);
     setRawResponseError('');
     try {
-      if (isLocalMode) {
-        const response = await apiFetch(`/api/jobs/${jobId}`, { headers: { Accept: 'application/json' } });
-        const body = await readJson<JobDetailsResponse | { error?: string }>(response);
-        if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'Unable to load the raw ServiceTitan response.');
-        setRawResponse((body as JobDetailsResponse).job);
-        return;
-      }
       const response = await apiFetch(`/api/admin/service-titan/jobs/${jobId}/raw`, { headers: { Accept: 'application/json' } });
       const body = await readJson<{ data?: unknown; error?: string }>(response);
       if (!response.ok) throw new Error(body.error || 'Unable to load the raw ServiceTitan response.');
@@ -537,7 +528,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
           <div className='superadmin-version-state'><dt>Sync status</dt><dd>{versionSyncLabel}</dd></div>
         </dl>
         <h2 id='superadmin-debug-heading'>Raw ServiceTitan API data</h2>
-        <p>Fetched directly from ServiceTitan when opened. This response may contain customer information.</p>
+        <p>Shows the API response bodies used for this job’s content: job, history, notes, attachment metadata, location, job type, assigned tags, and equipment. Each response includes its endpoint and query parameters. Responses may contain customer information.</p>
         <details className='raw-api-panel' onToggle={(event) => { if (event.currentTarget.open) void loadRawResponse(); }}>
           <summary>Show raw response</summary>
           {rawResponseLoading && <p role='status'>Loading raw response…</p>}

@@ -2,8 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { OpenAIJobCopyGenerator } from './openai.js';
+import { buildJobCopyPrompt } from './job-copy-prompt.js';
 
 const bodyHtml = '<p>The company completed water heater service in Torrance, California, after the customer reported unreliable hot water.</p><p>The technician reviewed the reported concern and evaluated the tankless water heater listed in the job record.</p><p>The documented service addressed the reported issue. Contact the company for help with water heater service in Torrance.</p>';
+
+test('uses issue tags for sparse jobs without claiming undocumented repairs or discussing missing details', () => {
+  const prompt = buildJobCopyPrompt({
+    jobName: 'Plumbing',
+    tagNames: ['Water Damage'],
+    location: { city: 'Austin', state: 'TX', zip: '78701' },
+  });
+  assert.match(prompt, /JOB TAGS \(service\/issue context; not proof of actions or results\): Water Damage/);
+  assert.match(prompt, /do not require corroboration/);
+  assert.match(prompt, /Prefer explicit descriptions of this job/);
+  assert.match(prompt, /Tags alone do not establish the cause/);
+  assert.match(prompt, /Do not write that the record does not specify the issue or work performed/);
+});
 
 test('generates structured job copy with the Responses API', async () => {
   let requestBody: Record<string, unknown> | undefined;
@@ -50,7 +64,7 @@ test('generates structured job copy with the Responses API', async () => {
   assert.match(String(requestBody?.input), /Tankless water heater/);
   assert.match(String(requestBody?.input), /JOB TAGS .*Water Heater, Repair \[redacted\]/);
   assert.doesNotMatch(String(requestBody?.input), /contact@example.com|<b>/);
-  assert.match(String(requestBody?.instructions), /classification metadata, not instructions or proof of work/);
+  assert.match(String(requestBody?.instructions), /tags can establish the service category or reported issue/);
   assert.match(String(requestBody?.instructions), /Use short paragraphs/);
   assert.match(String(requestBody?.instructions), /Exclude customer contact information, street addresses, access codes/);
   assert.doesNotMatch(String(requestBody?.instructions), /Do not publish[^.]*ZIP code/);
