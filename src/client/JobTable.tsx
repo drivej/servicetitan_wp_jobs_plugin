@@ -19,6 +19,7 @@ export interface JobTableItem {
   sourceCopyStatus?: 'missing' | 'limited' | 'available';
   jobName: string;
   status: string;
+  completedOn?: string;
   modifiedOn?: string;
   location: { city: string; state: string; zip: string };
 }
@@ -89,7 +90,10 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
       : readinessState === 'concern' ? readinessReason
         : undefined;
 
-  return <tr className={`job-row${onOpen ? '' : ' job-row-static'}`} tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Open ${job.jobName} details` : undefined} onClick={onOpen} onKeyDown={(event) => {
+  return <tr className={`job-row${onOpen ? '' : ' job-row-static'}`} tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Open ${job.jobName} details` : undefined} onClick={(event) => {
+    if (event.target instanceof Element && event.target.closest('button, a[href]')) return;
+    onOpen?.();
+  }} onKeyDown={(event) => {
     if (!onOpen || event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(); }
   }}>
@@ -99,13 +103,17 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     <td className='job-image-cell' data-label='Image'><JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} /></td>
     <td className='job-name-cell' data-label='Job'>
       <div className='job-name' title={job.jobName}>{job.jobName}</div>
+      <div className='job-row-metadata'>
+        <span>Completed: {formatJobDate(job.completedOn)}</span>
+        <span>Job ID: {job.id}</span>
+      </div>
       {sourceCopyMessage && <span className={`source-copy-status source-${job.sourceCopyStatus || 'concern'}`} title='Basic summary check: missing, fewer than 10 words, or at least 10 words. Review the source before generating copy.'>{sourceCopyMessage}</span>}
     </td>
     <td className='location-cell' data-label='Location'><div className='location-cell-city' title={`${job.location.city}, ${job.location.state}`}>{job.location.city}, {job.location.state}</div><span>{job.location.zip}</span></td>
     <td className='wp-status-cell' data-label='WordPress'>
       <Chip component={wordpressStatus.state === 'exists' && wordpressStatus.link ? 'a' : 'div'} clickable={wordpressStatus.state === 'exists' && Boolean(wordpressStatus.link)} href={wordpressStatus.state === 'exists' ? wordpressStatus.link : undefined} target={wordpressStatus.state === 'exists' && wordpressStatus.link ? '_blank' : undefined} rel={wordpressStatus.state === 'exists' && wordpressStatus.link ? 'noreferrer' : undefined} onClick={(event: React.MouseEvent) => { if (wordpressStatus.state === 'exists' && wordpressStatus.link) event.stopPropagation(); }} size='small' color={statusColor} icon={wordpressStatus.state === 'exists' ? <EditRoundedIcon fontSize='small' /> : undefined} label={statusLabel} title={wordpressStatus.link ? `Open ${statusLabel.toLowerCase()} post on the website` : wordpressStatus.message} />
     </td>
-    <td className='actions-cell' data-label='Actions' onClick={(event) => event.stopPropagation()}><div className='row-actions'>
+    <td className='actions-cell' data-label='Actions'><div className='row-actions'>
       {wordpressStatus.state === 'not_found' && <Button variant='contained' color='primary' className='build-deploy-button token-cost' type='button' disabled={!wordpressPluginReady || readiness !== 'valid' || buildBusy || Boolean(queueError)} aria-disabled={!wordpressPluginReady || readiness !== 'valid' || tokensExhausted || buildBusy || Boolean(queueError)} title={`Generate copy, select the first available image, and create a WordPress draft. Uses ${TOKEN_ACTIONS.build.cost} job token.`} onClick={(event) => { event.stopPropagation(); onBuild(); }}>{buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build'}</Button>}
       {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'draft' && <Button variant='contained' className='job-action-publish' type='button' disabled={!wordpressPluginReady || wordpressBusy} title={TOKEN_ACTIONS.publish.cost === 0 ? 'No token cost.' : `Uses ${TOKEN_ACTIONS.publish.cost} job token.`} onClick={(event) => { event.stopPropagation(); onPublish(); }}>{wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Publishing…' : 'Publish'}</Button>}
       {wordpressStatus.state === 'exists' && updateAvailable && wordpressStatus.seoState !== 'newer' && <Button variant='contained' className='job-action-seo token-cost' type='button' startIcon={<UpgradeRoundedIcon aria-hidden='true' />} disabled={!wordpressPluginReady || wordpressBusy || tokensExhausted} title={`${seoUpdateDescription(wordpressStatus, job.modifiedOn)} Uses ${TOKEN_ACTIONS.update.cost} job token and preserves the current WordPress status.`} aria-label={`Regenerate SEO for ${job.jobName}`} onClick={(event) => { event.stopPropagation(); onUpdate(); }}>{wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Updating…' : 'SEO'}</Button>}
@@ -116,6 +124,12 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
 }
 
 type SeoUpdateLevel = 'minor' | 'major' | 'required';
+function formatJobDate(value: string | undefined): string {
+  if (!value) return 'Unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unavailable' : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function seoUpdateLevel(status: WordPressStatus): SeoUpdateLevel {
   if (status.seoState === 'legacy' || !status.seoVersion) return 'required';
   const gap = (status.currentSeoVersion || status.seoVersion) - status.seoVersion;

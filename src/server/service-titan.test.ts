@@ -124,7 +124,8 @@ test('lists jobs without downloading images and securely downloads verified job 
       } };
       if (url.endsWith('/jobs/2')) return { data: { id: 2, jobNumber: 'J-2', locationId: 11, jobTypeId: 21, jobStatus: 'Completed', summary: 'Repaired leaking pipe.', equipmentIds: [31], tagTypeIds: [41, 42, 41, 999] } };
       if (url.endsWith('/tag-types')) {
-        assert.equal(options?.params?.ids, '41,42,999');
+        assert.equal(options?.params?.ids, undefined);
+        assert.equal(options?.params?.pageSize, 500);
         assert.equal(options?.params?.active, 'Any');
         if (options?.params?.page === 2) return { data: { data: [{ id: 42, name: 'Leak Repair', active: false }], hasMore: false } };
         return { data: { data: [
@@ -178,6 +179,9 @@ test('lists jobs without downloading images and securely downloads verified job 
   assert.deepEqual(details.summary.tagNames, ['Water Heater', 'Leak Repair']);
   assert.equal(details.summary.summaryText, 'Repaired leaking pipe.');
   assert.equal(details.summary.location.address, '123 Main St, Suite 2, Two, TX, 75002');
+  const tagCalls = requestedUrls.filter((url) => url.endsWith('/tag-types')).length;
+  await client.getJobDetails(2);
+  assert.equal(requestedUrls.filter((url) => url.endsWith('/tag-types')).length, tagCalls, 'job detail requests reuse the tag catalog');
   const raw = await client.getRawJob(2) as { jobId: number; responses: Array<{ endpoint: string; params?: Record<string, unknown>; body: unknown }> };
   assert.equal(raw.jobId, 2);
   assert.deepEqual(raw.responses.map((item) => item.endpoint).sort(), [

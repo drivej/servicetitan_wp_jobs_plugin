@@ -518,6 +518,19 @@ td strong {
   justify-content: flex-end;
   gap: 6px;
 }
+.job-row-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+  color: #526572;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+/* Keep disabled buttons as hit targets instead of clicking through to the row. */
+.row-actions button.Mui-disabled {
+  pointer-events: auto;
+}
 .details-hero {
   max-width: 900px;
 }

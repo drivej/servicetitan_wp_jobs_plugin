@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
 
 import type { ServiceTitanConfig } from './config.js';
 import { extractSafeSeoDetails } from './job-seo.js';
@@ -59,6 +60,10 @@ export interface JobsProvider {
   getJobDetails(jobId: number): Promise<JobDetails>;
   getJobImage(jobId: number, attachmentId: string): Promise<JobImage>;
 }
+
+const TAG_CATALOG_CACHE_MS = 24 * 60 * 60_000;
+const TAG_CATALOG_CACHE_MAX_ENTRIES = 100;
+const tagCatalogCache = new Map<string, { expiresAt: number; request: Promise<ServiceTitanTagType[]> }>();
 
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jfif', 'jpeg', 'jpg', 'png', 'tif', 'tiff', 'webp']);
 const IMAGE_MEDIA_TYPES = new Set(['image/avif', 'image/bmp', 'image/gif', 'image/heic', 'image/heif', 'image/jpeg', 'image/pjpeg', 'image/png', 'image/tiff', 'image/webp']);
@@ -495,21 +500,44 @@ export class ServiceTitanClient implements JobsProvider {
 
   private async getTagTypes(ids: number[], headers: Record<string, string>, tenantPath: string): Promise<ServiceTitanTagType[]> {
     if (ids.length === 0) return [];
-    const tags: ServiceTitanTagType[] = [];
-    for (let offset = 0; offset < ids.length; offset += 50) {
-      let page = 1;
-      let hasMore: boolean;
-      do {
-        const response = await this.get<PaginatedResponse<ServiceTitanTagType>>(
-          `${this.config.apiBaseUrl}/settings/v2/${tenantPath}/tag-types`,
-          { headers, params: { ids: ids.slice(offset, offset + 50).join(','), active: 'Any', page, pageSize: 50 } },
-        );
-        tags.push(...response.data.data);
-        hasMore = response.data.hasMore;
-        page++;
-      } while (hasMore);
+    // Share across clients (including queue workers), but isolate credentials and tenants.
+    const key = createHash('sha256').update(JSON.stringify([
+      this.config.apiBaseUrl, this.config.authUrl, this.config.tenantId,
+      this.config.clientId, this.config.clientSecret, this.config.appKey,
+    ])).digest('hex');
+    if (this.rawResponses.getStore()) {
+      return (await this.fetchTagCatalog(headers, tenantPath)).filter((tag) => ids.includes(tag.id));
     }
-    return tags.filter((tag) => ids.includes(tag.id));
+    for (const [cacheKey, entry] of tagCatalogCache) {
+      if (entry.expiresAt <= Date.now()) tagCatalogCache.delete(cacheKey);
+    }
+    let entry = tagCatalogCache.get(key);
+    if (!entry) {
+      if (tagCatalogCache.size >= TAG_CATALOG_CACHE_MAX_ENTRIES) {
+        tagCatalogCache.delete(tagCatalogCache.keys().next().value!);
+      }
+      const request = this.fetchTagCatalog(headers, tenantPath);
+      entry = { expiresAt: Date.now() + TAG_CATALOG_CACHE_MS, request };
+      tagCatalogCache.set(key, entry);
+      const current = entry;
+      void request.catch(() => {
+        if (tagCatalogCache.get(key) === current) tagCatalogCache.delete(key);
+      });
+    }
+    return (await entry.request).filter((tag) => ids.includes(tag.id));
+  }
+
+  private async fetchTagCatalog(headers: Record<string, string>, tenantPath: string): Promise<ServiceTitanTagType[]> {
+    const tags: ServiceTitanTagType[] = [];
+    for (let page = 1; page <= 100; page++) {
+      const response = await this.get<PaginatedResponse<ServiceTitanTagType>>(
+        `${this.config.apiBaseUrl}/settings/v2/${tenantPath}/tag-types`,
+        { headers, params: { active: 'Any', page, pageSize: 500 } },
+      );
+      tags.push(...response.data.data);
+      if (!response.data.hasMore) return tags;
+    }
+    throw new ServiceTitanRequestError('ServiceTitan tag types exceeded the pagination safety limit.', 502);
   }
 
   private async getByIds<T>(url: string, ids: number[], headers: Record<string, string>, extraParams: Record<string, string>): Promise<T[]> {
