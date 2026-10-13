@@ -48,11 +48,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     res.json({
       name: 'Job Showcase for ServiceTitan',
       slug: 'servicetitan-job-integration',
-      version: '1.20.0',
+      version: '1.20.1',
       requires: '6.5',
       tested: '6.8',
       requires_php: '7.4',
-      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.0.zip`,
+      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.1.zip`,
       homepage: config.origin,
       sections: { description: 'Publishes recent project posts from ServiceTitan to WordPress.' },
     });
@@ -493,9 +493,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     } catch (error) { next(error); }
   });
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
-  app.get('/downloads/job-showcase-for-servicetitan-1.20.0.zip', (_req, res, next) => {
+  app.get('/downloads/job-showcase-for-servicetitan-1.20.1.zip', (_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
-    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.0.zip'), (error) => { if (error && !res.headersSent) next(error); });
+    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.1.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));

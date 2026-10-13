@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.20.0
+ * Version: 1.20.1
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.20.0');
+define('STJI_VERSION', '1.20.1');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -33,11 +33,12 @@ define('STJI_UPDATE_SERVER', 'https://servicetitanwpjobsplugin-4unqy.sevalla.app
 define('STJI_UPDATE_CHECK_URL', STJI_UPDATE_SERVER . '/wp-plugin/update-check');
 define('STJI_PLUGIN_BASENAME', 'servicetitan-job-integration/servicetitan-job-integration.php');
 
-/** Add the app-hosted release to WordPress core's normal plugin updater. */
-function stji_plugin_update_check($transient)
+/** Provide the app-hosted release through WordPress' Update URI API. */
+function stji_plugin_update_check($update, array $plugin_data, string $plugin_file, array $locales)
 {
-    if (!is_object($transient) || empty($transient->checked)) {
-        return $transient;
+    unset($plugin_data, $plugin_file, $locales);
+    if (false !== $update) {
+        return $update;
     }
 
     $response = wp_remote_get(STJI_UPDATE_CHECK_URL, array(
@@ -45,34 +46,28 @@ function stji_plugin_update_check($transient)
         'headers' => array('Accept' => 'application/json'),
     ));
     if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
-        return $transient;
+        return false;
     }
 
     $release = json_decode((string) wp_remote_retrieve_body($response));
     if (!is_object($release) || empty($release->version) || empty($release->package)
         || !preg_match('/^\d+\.\d+\.\d+$/', (string) $release->version)
         || 0 !== strpos((string) $release->package, STJI_UPDATE_SERVER . '/downloads/')) {
-        return $transient;
+        return false;
     }
 
-    if (version_compare(STJI_VERSION, (string) $release->version, '<')) {
-        $transient->response[STJI_PLUGIN_BASENAME] = (object) array(
-            'slug' => 'servicetitan-job-integration',
-            'plugin' => STJI_PLUGIN_BASENAME,
-            'new_version' => (string) $release->version,
-            'url' => esc_url_raw((string) ($release->homepage ?? STJI_UPDATE_SERVER)),
-            'package' => esc_url_raw((string) $release->package),
-            'tested' => sanitize_text_field((string) ($release->tested ?? '')),
-            'requires' => sanitize_text_field((string) ($release->requires ?? '')),
-            'requires_php' => sanitize_text_field((string) ($release->requires_php ?? '')),
-        );
-    } else {
-        unset($transient->response[STJI_PLUGIN_BASENAME]);
-    }
-
-    return $transient;
+    return array(
+        'id' => STJI_UPDATE_SERVER . '/',
+        'slug' => 'servicetitan-job-integration',
+        'version' => (string) $release->version,
+        'url' => esc_url_raw((string) ($release->homepage ?? STJI_UPDATE_SERVER)),
+        'package' => esc_url_raw((string) $release->package),
+        'tested' => sanitize_text_field((string) ($release->tested ?? '')),
+        'requires' => sanitize_text_field((string) ($release->requires ?? '')),
+        'requires_php' => sanitize_text_field((string) ($release->requires_php ?? '')),
+    );
 }
-add_filter('pre_set_site_transient_update_plugins', 'stji_plugin_update_check');
+add_filter('update_plugins_servicetitanwpjobsplugin-4unqy.sevalla.app', 'stji_plugin_update_check', 10, 4);
 define('STJI_ZIP_ACF_FIELD_KEY', 'field_stji_zip_codes');
 define('STJI_ZIP_CITY_FIELD_KEY', 'field_stji_zip_city');
 define('STJI_ZIP_STATE_FIELD_KEY', 'field_stji_zip_state');

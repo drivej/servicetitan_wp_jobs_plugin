@@ -1,6 +1,7 @@
 import { Button, TextField } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
+import { LoadingModal } from './LoadingModal';
 
 interface Website { name: string; url: string; }
 interface Member { id: string; name: string; email: string; disabled: boolean; isPlatformAdmin: boolean; role: string; }
@@ -58,6 +59,7 @@ export function AccountMembersAdmin() {
   };
 
   return <main className='app-page'>
+    <LoadingModal open={Boolean(startingViewAs)} label='Opening account workspace' />
     <p className='eyebrow'>Platform administration</p><h1>Account members</h1>
     <p className='intro'>Accounts are grouped by workspace, with administrators first. Disabling a member ends their sessions and blocks new sign-ins.</p>
     <form className='account-actions' onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((value) => value + 1); }}>
