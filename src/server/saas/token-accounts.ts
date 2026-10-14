@@ -22,6 +22,25 @@ export class TokenAccounts {
         nextCursor: rows.length > 50 ? String(rows[49]!.id) : null };
     });
   }
+  async summary(userId: string, workspaceId: string) {
+    return this.db.transaction(userId, async (sql) => {
+      const membership = (await sql.query(`SELECT m.user_id FROM workspace_memberships m
+        JOIN users u ON u.id=m.user_id JOIN workspaces w ON w.id=m.workspace_id
+        JOIN users owner ON owner.id=w.owner_user_id
+        WHERE m.workspace_id=$1 AND m.user_id=$2 AND u.disabled_at IS NULL AND owner.disabled_at IS NULL`, [workspaceId, userId])).rows[0];
+      if (!membership) throw new HttpError('Workspace access required.', 403);
+      const row = (await sql.query(`WITH periods AS (
+        SELECT date_trunc('month', now() AT TIME ZONE 'UTC') AS start
+      ) SELECT
+        COALESCE(-sum(amount) FILTER (WHERE (created_at AT TIME ZONE 'UTC') >= periods.start),0) AS current_usage,
+        COALESCE(-sum(amount) FILTER (WHERE (created_at AT TIME ZONE 'UTC') < periods.start),0) AS previous_usage
+        FROM token_transactions CROSS JOIN periods
+        WHERE workspace_id=$1 AND kind IN ('spend','spend_refund')
+          AND (created_at AT TIME ZONE 'UTC') >= periods.start - interval '1 month'
+          AND (created_at AT TIME ZONE 'UTC') < periods.start + interval '1 month'`, [workspaceId])).rows[0]!;
+      return { currentMonthUsage: Number(row.current_usage), previousMonthUsage: Number(row.previous_usage) };
+    });
+  }
   async history(userId: string, workspaceId: string, before: unknown = '', platform = false) {
     if (typeof before !== 'string' || (before && (!/^[1-9]\d{0,17}$/.test(before)))) throw new HttpError('Invalid transaction cursor.');
     return this.db.transaction(userId, async (sql) => {

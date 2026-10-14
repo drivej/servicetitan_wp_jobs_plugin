@@ -2094,3 +2094,9 @@ td strong {
   .onboarding-plugin-download { padding: 16px; }
   .onboarding-plugin-download .onboarding-download-button { width: 100%; }
 }
+
+.token-navigation { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+.token-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.token-usage-grid strong { font-size: clamp(1.8rem, 4vw, 2.8rem); overflow-wrap: anywhere; }
+.token-usage-grid h3 { margin-top: 0; }
+@media (max-width: 480px) { .token-usage-grid { grid-template-columns: 1fr; } }

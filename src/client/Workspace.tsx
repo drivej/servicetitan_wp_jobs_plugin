@@ -10,6 +10,7 @@ import { TeamSettings, type TeamRole } from './TeamSettings';
 import { TokenAdmin } from './TokenAdmin';
 import { TokenBalanceCard } from './TokenBalanceCard';
 import { TokenHistory } from './TokenHistory';
+import { TokenUsage } from './TokenUsage';
 import { accountFetch, clearAccountCache, configureApi } from './api';
 import { navigateTo, useNavigationLoading } from './navigation';
 import { clearTokenError, setAvailableTokens, useTokenBalance, useTokenError, useTokensExhausted } from './tokenState';
@@ -120,7 +121,7 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   }, [spendVersion]);
   const balance = liveCount ?? count;
   return (
-    <a className={`workspace-token-pill${shining ? ' is-spending' : ''}${path === '/add-tokens' ? ' is-current' : ''}`} href='/add-tokens' aria-current={path === '/add-tokens' ? 'page' : undefined} aria-label={`${balance.toLocaleString()} job tokens available`} title='Job tokens available'>
+    <a className={`workspace-token-pill${shining ? ' is-spending' : ''}${path.startsWith('/add-tokens') ? ' is-current' : ''}`} href='/add-tokens' aria-current={path.startsWith('/add-tokens') ? 'page' : undefined} aria-label={`${balance.toLocaleString()} job tokens available`} title='Job tokens available'>
       <span className='workspace-token-dot' aria-hidden='true'>
         ✦
       </span>
@@ -191,7 +192,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
             <a href='/team' aria-current={window.location.pathname === '/team' ? 'page' : undefined}>
               Team
             </a>
-            <a href='/add-tokens' aria-current={window.location.pathname === '/add-tokens' ? 'page' : undefined}>
+            <a href='/add-tokens' aria-current={window.location.pathname.startsWith('/add-tokens') ? 'page' : undefined}>
               Tokens
             </a>
           </nav>
@@ -492,7 +493,9 @@ export function Workspace({ children }: { children: ReactNode }) {
   const isLocal = session!.mode === 'local';
   const canManage = user.role !== 'member';
   const invitePage = Boolean(invitationToken) || path === '/invite';
-  const tokensPage = path === '/add-tokens';
+  const tokenHistoryPage = path === '/add-tokens/history';
+  const tokenPlansPage = path === '/add-tokens/plans';
+  const tokensPage = path === '/add-tokens' || tokenHistoryPage || tokenPlansPage;
   const adminPage = !isLocal && path === '/admin/tokens';
   const membersAdminPage = !isLocal && path === '/admin/members';
 
@@ -838,7 +841,7 @@ export function Workspace({ children }: { children: ReactNode }) {
             <p id='token-dialog-description'>{tokenError}</p>
             <p>Your request has not been completed.</p>
             <div className='account-actions'>
-              <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens'>
+              <Button component='a' variant='contained' className='account-primary-link' href='/add-tokens/plans'>
                 Add Tokens
               </Button>
               <Button onClick={clearTokenError}>Close</Button>
@@ -849,7 +852,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       {!onboardingPage && tokensExhausted && (isLocal || onboardingComplete) && (
         <div className='token-violator' role='status'>
           <span>You’re out of job tokens. Add tokens to generate copy, build drafts, and update existing posts.</span>
-          <Button component='a' href='/add-tokens' className='token-violator-link'>
+          <Button component='a' href='/add-tokens/plans' className='token-violator-link'>
             Get tokens
           </Button>
         </div>
@@ -911,12 +914,17 @@ export function Workspace({ children }: { children: ReactNode }) {
         )
       ) : tokensPage ? (
         <main className='app-page'>
-          <PageHeader eyebrow='Your workspace' title='Add Tokens' description='Use job tokens to generate copy, build drafts, and update existing posts. Publishing a draft is free.' />
-          <TokenBalanceCard tokens={user.jobTokens} />
+          <PageHeader eyebrow='Your workspace' title={tokenHistoryPage ? 'Token History' : tokenPlansPage ? 'Token Plans' : 'Tokens'} description='Use job tokens to generate copy, build drafts, and update existing posts. Publishing a draft is free.' />
+          <nav className='token-navigation' aria-label='Token sections'>
+            {[['/add-tokens', 'Overview'], ...(canManage ? [['/add-tokens/history', 'History']] : []), ['/add-tokens/plans', 'Plans']].map(([href, label]) => (
+              <Button key={href} component='a' href={href} variant={path === href ? 'contained' : 'outlined'} aria-current={path === href ? 'page' : undefined}>{label}</Button>
+            ))}
+          </nav>
+          {tokenHistoryPage ? (canManage ? <TokenHistory key={user.workspaceId} workspaceId={user.workspaceId} /> : <p>Workspace owner or admin access is required to view token history.</p>) : tokenPlansPage ? <>
+
           <section className='panel account-panel'>
             <h2>Keep your tokens topped up</h2>
             <BillingPlans key={user.workspaceId} workspaceId={user.workspaceId} />
-            {canManage && <TokenHistory key={`history:${user.workspaceId}`} workspaceId={user.workspaceId} />}
             {session?.testTokensEnabled && user.role === 'owner' && (
               <>
                 <h3>Testing</h3>
@@ -935,6 +943,10 @@ export function Workspace({ children }: { children: ReactNode }) {
               </p>
             )}
           </section>
+          </> : <>
+            <TokenBalanceCard tokens={user.jobTokens} />
+            <TokenUsage key={user.workspaceId} workspaceId={user.workspaceId} />
+          </>}
         </main>
       ) : teamPage ? (
         <main className='app-page'>

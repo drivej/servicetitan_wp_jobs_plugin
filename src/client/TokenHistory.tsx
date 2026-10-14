@@ -46,7 +46,8 @@ export function TokenHistory({ workspaceId, platform = false, revision = 0 }: { 
           </tr>)}</tbody>
         </table>
       </div>}
-      <div className='account-actions'>
+      <div className='account-actions' aria-label='Transaction pagination'>
+        <span>Page {cursors.length + 1} · Up to 50 transactions per page</span>
         {cursors.length > 0 && <Button onClick={() => { setBefore(cursors.at(-1)!); setCursors((items) => items.slice(0, -1)); }}>Newer transactions</Button>}
         {history.nextCursor && <Button onClick={() => { setCursors((items) => [...items, before]); setBefore(history.nextCursor!); }}>Older transactions</Button>}
       </div>

@@ -303,6 +303,10 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.json(await billing.portal(res.locals.user as User));
     } catch (error) { next(error); }
   });
+  app.get('/api/tokens/summary', async (_req, res, next) => {
+    const user = res.locals.user as User;
+    try { res.json(await tokenAccounts.summary(user.id, user.workspaceId)); } catch (error) { next(error); }
+  });
   app.get('/api/tokens/history', async (req, res, next) => {
     const user = res.locals.user as User;
     try { res.json(await tokenAccounts.history(user.id, user.workspaceId, req.query.before)); } catch (error) { next(error); }

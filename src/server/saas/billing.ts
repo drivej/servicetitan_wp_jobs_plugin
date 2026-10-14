@@ -117,7 +117,7 @@ export class BillingService {
       const session = await this.stripe.checkout.sessions.create({
         customer, mode: 'subscription', line_items: [{ price: plan.id, quantity: 1 }],
         client_reference_id: user.workspaceId, subscription_data: { metadata: { workspace_id: user.workspaceId } },
-        success_url: `${this.origin}/add-tokens?checkout=success`, cancel_url: `${this.origin}/add-tokens?checkout=canceled`,
+        success_url: `${this.origin}/add-tokens/plans?checkout=success`, cancel_url: `${this.origin}/add-tokens/plans?checkout=canceled`,
         expires_at: attempt.expires,
       }, { idempotencyKey: `workspace-checkout:${attempt.key}` });
       if (!session.url) throw new Error('Stripe checkout URL missing.');
@@ -135,7 +135,7 @@ export class BillingService {
         features: { customer_update: { enabled: true, allowed_updates: ['email', 'address'] }, invoice_history: { enabled: true },
           payment_method_update: { enabled: true }, subscription_cancel: { enabled: true, mode: 'at_period_end' }, subscription_update: { enabled: false } },
       }, { idempotencyKey: 'workspace-portal-configuration-v1' });
-      const session = await this.stripe.billingPortal.sessions.create({ customer: String(row.customer_id), configuration: configuration.id, return_url: `${this.origin}/add-tokens` });
+      const session = await this.stripe.billingPortal.sessions.create({ customer: String(row.customer_id), configuration: configuration.id, return_url: `${this.origin}/add-tokens/plans` });
       return { url: session.url };
     });
   }

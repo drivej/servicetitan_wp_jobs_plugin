@@ -727,6 +727,28 @@ test('ledger history pagination does not duplicate transactions and opening bala
   } finally { await f.close(); }
 });
 
+test('token summary aggregates calendar months, nets refunds and enforces membership', async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.store.login({ subject: 'summary-owner', email: 'summary@example.com', name: 'Owner' });
+    const other = await f.store.login({ subject: 'summary-other', email: 'other-summary@example.com', name: 'Other' });
+    const accounts = new TokenAccounts(f.db);
+    assert.deepEqual(await accounts.summary(owner.user.id, owner.user.id), { currentMonthUsage: 0, previousMonthUsage: 0 });
+    await assert.rejects(accounts.summary(other.user.id, owner.user.id), /Workspace access/);
+    await f.db.transaction(owner.user.id, async (sql) => {
+      await postTokenTransaction(sql, { workspaceId: owner.user.id, kind: 'test_credit', requestedAmount: 100, reference: 'summary-credit', reason: 'Credit' });
+      // Insert at explicit UTC month boundaries to verify the complete ledger aggregation.
+      for (const [index, amount, months] of [[0, -9, 2], [1, -7, 1], [2, 2, 1], [3, -4, 0], [4, 1, 0]]) {
+        await sql.query(`INSERT INTO token_transactions(id,workspace_id,sequence,kind,amount,requested_amount,balance_before,balance_after,reference,reason,created_at)
+          SELECT $1,w.id,(SELECT max(sequence)+1 FROM token_transactions WHERE workspace_id=w.id),$3,$4,$4,w.job_tokens,w.job_tokens+$4,$5,'Usage test',
+          (date_trunc('month',now() AT TIME ZONE 'UTC') - make_interval(months => $6::int)) AT TIME ZONE 'UTC'
+          FROM workspaces w WHERE w.id=$2`, [randomUUID(), owner.user.id, amount! < 0 ? 'spend' : 'spend_refund', amount, `summary-${index}`, months]);
+      }
+    });
+    assert.deepEqual(await accounts.summary(owner.user.id, owner.user.id), { currentMonthUsage: 3, previousMonthUsage: 5 });
+  } finally { await f.close(); }
+});
+
 test('ledger HTTP endpoints enforce platform permissions, CSRF and immutable adjustment references', async () => {
   const f = await fixture();
   const config: SaaSConfig = { databaseUrl: 'unused', origin: 'http://localhost:3000', googleClientId: 'test', googleClientSecret: 'test', secureCookies: false, trustProxyHops: 0, vault };
