@@ -11,7 +11,6 @@ import type { WebsiteAppFactory } from './providers.js';
 import { AccountStore, type User } from './store.js';
 import { ServiceTitanClient } from '../service-titan.js';
 import { WordPressClient } from '../wordpress.js';
-import { ServiceTitanRequestError } from '../service-titan-error.js';
 import { WordPressRequestError } from '../wordpress-error.js';
 import { connectionInput, HttpError, uuid, websiteInput, websiteUrl } from './validation.js';
 import { publicFetch } from './public-fetch.js';
@@ -277,18 +276,22 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const client = new ServiceTitanClient({ ...connectionContext,
         apiBaseUrl: 'https://api.servicetitan.io',
         authUrl: 'https://auth.servicetitan.io/connect/token' });
-      try { await client.validateAccess(); }
-      catch (error) {
-        const message = error instanceof Error ? error.message : 'ServiceTitan rejected the connection.';
-        const code = error instanceof ServiceTitanRequestError && error.status === 401 ? 'credentials' : error instanceof ServiceTitanRequestError && error.status === 403 ? 'permissions' : 'tenant';
-        res.status(422).json({ service: 'servicetitan', code, error: message, helpUrl: `/help/servicetitan-${code}` }); return;
+      const report = await client.checkApiHealth();
+      const required = report.checks.filter((check) => check.name !== 'Attachment download');
+      const failed = required.filter((check) => check.state !== 'available');
+      if (failed.length) {
+        const code = report.checks[0]?.state !== 'available' ? 'credentials' : failed.some((check) => check.statusCode === 401 || check.statusCode === 403) ? 'permissions' : 'tenant';
+        res.status(422).json({ service: 'servicetitan', code,
+          error: `Required ServiceTitan APIs could not be verified: ${failed.map((check) => check.name).join(', ')}.`,
+          helpUrl: `/help/servicetitan-${code}`, report });
+        return;
       }
       const site = await store.websiteWordPressContext(user.id, websiteId, user.workspaceId);
       if (!site.website.wordpressConfigured) throw new HttpError('Validate the WordPress website first.', 409);
       await store.attachConnection(user.id, websiteId, connectionId, user.workspaceId);
       await store.markConnectionValidated(user.id, connectionId, user.workspaceId);
       await store.startTestCooldown(cooldownKey, 30);
-      res.json({ valid: true, service: 'servicetitan' });
+      res.json({ valid: true, service: 'servicetitan', report });
     } catch (error) { next(error); }
   });
   app.post('/api/billing/checkout', async (req, res, next) => {

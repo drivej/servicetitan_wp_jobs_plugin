@@ -16,6 +16,8 @@ import { accountFetch, clearAccountCache, configureApi } from './api';
 import { navigateTo, useNavigationLoading } from './navigation';
 import { clearTokenError, setAvailableTokens, useTokenBalance, useTokenError, useTokensExhausted } from './tokenState';
 
+import type { ApiHealthReport } from '../shared/api-health';
+
 interface User {
   isPlatformAdmin?: boolean;
   avatarUrl?: string | null;
@@ -60,6 +62,7 @@ interface OnboardingStatus {
 }
 type ConnectionCheckKind = 'wordpress' | 'servicetitan' | 'plugin';
 interface ConnectionCheck {
+  report?: ApiHealthReport | undefined;
   kind: ConnectionCheckKind;
   success: boolean;
   message: string;
@@ -92,7 +95,7 @@ const DemoWebsites: Website[] = [
 ];
 
 async function json<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as T & { error?: string; requestId?: string };
+  const body = (await response.json()) as T & { error?: string; requestId?: string; report?: ApiHealthReport };
   if (!response.ok) throw new Error(`${body.error || 'The request could not be completed.'}${body.requestId ? ` (Request ID: ${body.requestId})` : ''}`);
   return body;
 }
@@ -240,7 +243,7 @@ const ConnectionTestButton = ({ disabled, busy, busyLabel, label = 'Test Connect
 );
 
 const ConnectionCheckMessage = ({ check }: { check: ConnectionCheck }) => (
-  <p className={`notice${check.success ? ' connection-success' : ' error'}`} role={check.success ? 'status' : 'alert'}>
+  <div><p className={`notice${check.success ? ' connection-success' : ' error'}`} role={check.success ? 'status' : 'alert'}>
     {check.success && (
       <span className='connection-success-icon' aria-hidden='true'>
         ✓
@@ -257,6 +260,8 @@ const ConnectionCheckMessage = ({ check }: { check: ConnectionCheck }) => (
       )}
     </span>
   </p>
+  {check.report && <ul aria-label='ServiceTitan endpoint results'>{check.report.checks.map((result) => <li key={result.name}><strong>{result.name}: {result.state === 'available' ? 'Available' : result.state === 'unavailable' ? 'Unavailable' : 'Not checked'}</strong> — {result.message}{result.statusCode ? ` (HTTP ${result.statusCode})` : ''}</li>)}</ul>}
+  </div>
 );
 
 export function Workspace({ children }: { children: ReactNode }) {
@@ -633,10 +638,11 @@ export function Workspace({ children }: { children: ReactNode }) {
       const endpoint = kind === 'wordpress' ? '/api/onboarding/validate-website' : kind === 'plugin' ? '/api/onboarding/validate-plugin' : '/api/onboarding/validate-servicetitan';
       const payload = kind === 'servicetitan' ? { connectionId: connection!.id, websiteId: website.id } : { websiteId: website.id };
       const response = await accountFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = (await response.json()) as { error?: string; helpUrl?: string; version?: string; requestId?: string };
+      const result = (await response.json()) as { error?: string; helpUrl?: string; version?: string; requestId?: string; report?: ApiHealthReport };
       if (!response.ok) {
         setSettingsCheck({
           kind,
+          report: result.report,
           success: false,
           message: `${result.error || 'Connection check failed.'}${result.requestId ? ` (Request ID: ${result.requestId})` : ''}`,
           helpUrl: result.helpUrl || (kind === 'wordpress' ? '/help/wordpress-reachability' : kind === 'plugin' ? '/help/plugin-test-failed' : '/help/servicetitan-permissions')
@@ -644,8 +650,8 @@ export function Workspace({ children }: { children: ReactNode }) {
         return;
       }
       await refresh(user, session!.csrfToken!);
-      const message = kind === 'plugin' ? `Plugin version ${result.version} is detected and compatible.` : kind === 'wordpress' ? 'WordPress REST API access validated.' : 'ServiceTitan Jobs access validated.';
-      setSettingsCheck({ kind, success: true, message });
+      const message = kind === 'plugin' ? `Plugin version ${result.version} is detected and compatible.` : kind === 'wordpress' ? 'WordPress REST API access validated.' : 'Required ServiceTitan API endpoints validated.';
+      setSettingsCheck({ kind, success: true, message, report: result.report });
       setTestCooldowns((current) => ({ ...current, [kind]: Date.now() + 30_000 }));
     } catch (reason) {
       setSettingsCheck({ kind, success: false, message: reason instanceof Error ? reason.message : 'Connection check failed.', helpUrl: kind === 'wordpress' ? '/help/wordpress-reachability' : kind === 'plugin' ? '/help/plugin-test-failed' : '/help/servicetitan-permissions' });
@@ -721,7 +727,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteId: saved.id })
       });
-      const wpBody = (await wpResponse.json()) as { error?: string; helpUrl?: string; requestId?: string };
+      const wpBody = (await wpResponse.json()) as { error?: string; helpUrl?: string; requestId?: string; report?: ApiHealthReport };
       if (!wpResponse.ok) {
         setValidationError({
           message: `${wpBody.error || 'WordPress access validation failed.'}${wpBody.requestId ? ` (Request ID: ${wpBody.requestId})` : ''}`,
@@ -781,10 +787,11 @@ export function Workspace({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId: saved.id, websiteId: website.id })
       });
-      const result = (await response.json()) as { error?: string; helpUrl?: string; requestId?: string };
+      const result = (await response.json()) as { error?: string; helpUrl?: string; requestId?: string; report?: ApiHealthReport };
       if (!response.ok) {
         setSettingsCheck({
           kind: 'servicetitan',
+          report: result.report,
           success: false,
           message: `${result.error || 'ServiceTitan connection check failed.'}${result.requestId ? ` (Request ID: ${result.requestId})` : ''}`,
           helpUrl: result.helpUrl || '/help/servicetitan-permissions'
@@ -793,7 +800,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       }
       await refresh(user, session!.csrfToken!);
       setServiceTitanTestPassed(true);
-      setSettingsCheck({ kind: 'servicetitan', success: true, message: 'ServiceTitan Jobs access validated.' });
+      setSettingsCheck({ kind: 'servicetitan', success: true, message: 'Required ServiceTitan API endpoints validated.', report: result.report });
     } catch (reason) {
       setSettingsCheck({
         kind: 'servicetitan',
@@ -1108,7 +1115,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <PageHeader
             eyebrow='Onboarding'
             title={onboardingStage === 1 ? 'Connect your WordPress website' : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'}
-            description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test Jobs access.' : 'Invite teammates to share this workspace, or skip this step and start working.'}
+            description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test the required API endpoints.' : 'Invite teammates to share this workspace, or skip this step and start working.'}
           />
           {message && (
             <p className='notice' role='status'>
