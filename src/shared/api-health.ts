@@ -1,5 +1,6 @@
 export interface ApiHealthCheck {
   name: string;
+  optional?: boolean;
   endpoint: string;
   state: 'available' | 'unavailable' | 'not_checked';
   message: string;

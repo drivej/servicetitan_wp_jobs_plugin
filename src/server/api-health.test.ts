@@ -15,7 +15,7 @@ test('API health checks read endpoints with a sample job and does not return pro
     return { status: 200, data: url.endsWith('/jobs') ? { data: [{ id: 42, customerName: 'Private customer' }] } : { data: [] } };
   });
   const report = await client.checkApiHealth();
-  assert.equal(report.checks.filter((check) => check.state === 'available').length, 10);
+  assert.equal(report.checks.filter((check) => check.state === 'available').length, 13);
   assert.equal(report.checks.find((check) => check.name === 'Attachment download')?.state, 'not_checked');
   assert(calls.some((url) => url.endsWith('/jobs/42/history')));
   assert(!calls.some((url) => url.includes('/attachment/')));
@@ -43,4 +43,17 @@ test('API health marks dependent APIs unchecked when authentication fails', asyn
   assert.equal(report.checks[0]?.state, 'unavailable');
   assert(report.checks.slice(1).every((check) => check.state === 'not_checked'));
   assert(!JSON.stringify(report).includes('private-secret'));
+});
+
+
+test('optional API health probes include invoice and forms without changing required checks', async () => {
+  const calls: string[] = [];
+  const client = clientWith(async (url) => { calls.push(url); return { status: 200, data: url.endsWith('/jobs') ? { data: [{ id: 42 }] } : url.endsWith('/jobs/42') ? { summaryOfWork: '' } : { data: [] } }; });
+  const report = await client.checkApiHealth();
+  for (const name of ['Invoices', 'Forms definitions', 'Form submissions', 'Summary of Work']) assert.equal(report.checks.find(check => check.name === name)?.optional, true);
+  assert.match(report.checks.find(check => check.name === 'Summary of Work')!.message, /empty/);
+  calls.length = 0;
+  const required = await client.checkApiHealth(false);
+  assert(!calls.some(url => /invoices|submissions|\/forms$/.test(url)));
+  assert(!required.checks.some(check => check.optional));
 });

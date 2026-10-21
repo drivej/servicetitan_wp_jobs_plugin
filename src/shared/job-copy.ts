@@ -1,4 +1,6 @@
-export interface JobCopySource {
+import type { WorkContent } from './work-content.js';
+
+export interface JobCopySource extends WorkContent {
   jobName: string;
   summaryText?: string;
   technicianNotes?: string[];

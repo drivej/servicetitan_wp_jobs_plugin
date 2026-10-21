@@ -36,7 +36,7 @@ export function ApiHealth({ connections }: { connections: Array<{ id: string; na
         <Button variant='contained' disabled={busy || !connectionId} onClick={() => void check()}>{busy ? 'Checking APIs…' : 'Check APIs'}</Button>
         <p className='field-help'>Checks run only when requested, at most once per minute per connection. Availability reflects this connection’s access at the time of the check. Empty lists can still be available.</p>
       </>}
-      {busy && <p role='status'>Checking ServiceTitan access. This may take up to a minute.</p>}
+      {busy && <p role='status'>Checking ServiceTitan access. This may take about a minute.</p>}
       {error && <p role='alert' className='notice error'>{error}</p>}
       {report && <>
         <p role='status'>Last checked: {new Date(report.checkedAt).toLocaleString()}. {report.checks.filter((check) => check.state === 'available').length} available, {report.checks.filter((check) => check.state === 'unavailable').length} unavailable, {report.checks.filter((check) => check.state === 'not_checked').length} not checked.</p>
@@ -44,7 +44,7 @@ export function ApiHealth({ connections }: { connections: Array<{ id: string; na
           <caption>ServiceTitan API availability</caption>
           <thead><tr><th scope='col'>API</th><th scope='col'>Availability</th><th scope='col'>Details</th></tr></thead>
           <tbody>{report.checks.map((check) => <tr key={check.name}>
-            <th scope='row'>{check.name}<br /><code>{check.endpoint}</code></th>
+            <th scope='row'>{check.name}{check.optional ? ' (optional enrichment)' : ''}<br /><code>{check.endpoint}</code></th>
             <td>{check.state === 'available' ? 'Available' : check.state === 'unavailable' ? 'Unavailable' : 'Not checked'}</td>
             <td>{check.message}{check.statusCode ? ` (HTTP ${check.statusCode})` : ''}{check.durationMs !== undefined ? ` · ${check.durationMs} ms` : ''}</td>
           </tr>)}</tbody>

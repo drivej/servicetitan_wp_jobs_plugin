@@ -435,6 +435,15 @@ export function JobDetails({ jobId }: { jobId: number }) {
 
       {details && (
         <>
+          <section className='panel details-panel' aria-labelledby='work-content-heading'>
+            <h2 id='work-content-heading'>Work performed — source information</h2>
+            {details.summary.workSummary && <><h3>Completion summary</h3><p>{details.summary.workSummary}</p></>}
+            {!!details.summary.invoiceSummaries?.length && <><h3>Invoice summaries</h3>{details.summary.invoiceSummaries.map((text, index) => <p key={index}>{text}</p>)}</>}
+            {!!details.summary.invoiceWorkItems?.length && <><h3>Billed service items</h3><ul>{details.summary.invoiceWorkItems.map((text, index) => <li key={index}>{text}</li>)}</ul><p className='field-help'>Billed scope alone does not confirm completed actions or outcomes.</p></>}
+            {!!details.summary.formFindings?.length && <><h3>Completed form answers</h3><ul>{details.summary.formFindings.map((finding, index) => <li key={index}><strong>{finding.question}:</strong> {finding.answer}</li>)}</ul></>}
+            {!details.summary.workSummary && !details.summary.invoiceSummaries?.length && !details.summary.invoiceWorkItems?.length && !details.summary.formFindings?.length && <p>No additional work descriptions were found. Existing job summaries and notes are still used.</p>}
+            {details.summary.contentSources?.map((source) => <p className='field-help' key={source.source}>{source.source === 'invoices' ? 'Invoices' : 'Forms'}: {source.message}</p>)}
+          </section>
           <section className='panel details-panel' aria-labelledby='images-heading'>
             <div className='details-section-heading'>
               <div>

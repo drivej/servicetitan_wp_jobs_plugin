@@ -73,6 +73,7 @@ test('Settings validates required endpoints and never marks a failed or incomple
     { name: 'Authentication', endpoint: '/token', state: 'available', message: 'OK' },
     { name: 'Job notes', endpoint: '/notes', state, message: 'Probe result' },
     { name: 'Attachment download', endpoint: '/attachment', state: 'not_checked', message: 'Skipped' },
+    { name: 'Invoices', endpoint: '/invoices', optional: true, state: 'unavailable', message: 'Optional access denied' },
   ] });
   const config = { databaseUrl: 'unused', origin: 'http://localhost:3000', googleClientId: 'test', googleClientSecret: 'test', secureCookies: false, trustProxyHops: 0, vault: new SecretVault({ test: randomBytes(32).toString('base64') }, 'test') };
   const app = createSaaSApp({ config, store, google: { authorization: async () => '', exchange: async () => { throw new Error('unused'); } }, websiteApp: () => express() });

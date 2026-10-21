@@ -1,6 +1,7 @@
 export type ServiceTitanEnvironment = 'integration' | 'production';
 
 export interface ServiceTitanConfig {
+  contentScope?: string;
   clientId: string;
   clientSecret: string;
   appKey: string;

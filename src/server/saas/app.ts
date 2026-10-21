@@ -276,8 +276,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const client = new ServiceTitanClient({ ...connectionContext,
         apiBaseUrl: 'https://api.servicetitan.io',
         authUrl: 'https://auth.servicetitan.io/connect/token' });
-      const report = await client.checkApiHealth();
-      const required = report.checks.filter((check) => check.name !== 'Attachment download');
+      const report = await client.checkApiHealth(false);
+      const required = report.checks.filter((check) => check.name !== 'Attachment download' && !check.optional);
       const failed = required.filter((check) => check.state !== 'available');
       if (failed.length) {
         const code = report.checks[0]?.state !== 'available' ? 'credentials' : failed.some((check) => check.statusCode === 401 || check.statusCode === 403) ? 'permissions' : 'tenant';
@@ -488,7 +488,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       if (!/^\d+$/.test(req.params.jobId) || !Number.isSafeInteger(Number(req.params.jobId)) || Number(req.params.jobId) < 1) {
         throw new HttpError('jobId must be a positive integer.');
       }
-      const serviceTitan = new ServiceTitanClient({ ...context.connection,
+      const serviceTitan = new ServiceTitanClient({ ...context.connection, contentScope: `${user.workspaceId}:${context.connection.id}:${context.connection.version}`,
         apiBaseUrl: 'https://api.servicetitan.io',
         authUrl: 'https://auth.servicetitan.io/connect/token',
       });

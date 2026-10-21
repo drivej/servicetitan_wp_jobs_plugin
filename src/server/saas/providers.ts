@@ -35,7 +35,7 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
 }
 
 export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCopyGenerator, userId: string, { website, connection, wordpress, workspaceId }: WebsiteContext): BuildProviders {
-  const serviceTitan = new ServiceTitanClient({ ...connection,
+  const serviceTitan = new ServiceTitanClient({ ...connection, contentScope: `${workspaceId}:${connection.id}:${connection.version}`,
     apiBaseUrl: 'https://api.servicetitan.io',
     authUrl: 'https://auth.servicetitan.io/connect/token',
   });

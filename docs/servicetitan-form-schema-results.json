@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-10-21T15:40:44.767Z",
+  "environment": "production",
+  "credentialSource": ".env (not verified against saved SaaS connections)",
+  "checks": [
+    {
+      "api": "Authentication",
+      "status": 200
+    },
+    {
+      "api": "Form submission schema sample",
+      "status": 200,
+      "recordsReturned": 20,
+      "statusCounts": {
+        "Completed": 20
+      },
+      "ownerTypes": [
+        "Job",
+        "JobAppointment"
+      ],
+      "unitShapes": {
+        "Picture": {
+          "type": "string",
+          "comment": "null",
+          "attachments": {
+            "count": 2,
+            "sample": {
+              "fileName": "string",
+              "createdFrom": "null",
+              "originalFileName": "string",
+              "thumbnail": "null"
+            }
+          },
+          "id": "string",
+          "name": "string"
+        },
+        "Text": {
+          "value": "string",
+          "type": "string",
+          "comment": "null",
+          "attachments": {
+            "count": 0,
+            "sample": null
+          },
+          "id": "string",
+          "name": "string"
+        },
+        "Checkbox": {
+          "values": {
+            "count": 1,
+            "sample": "string"
+          },
+          "options": "string",
+          "type": "string",
+          "comment": "null",
+          "attachments": {
+            "count": 0,
+            "sample": null
+          },
+          "id": "string",
+          "name": "string"
+        }
+      }
+    }
+  ]
+}

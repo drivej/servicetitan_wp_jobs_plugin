@@ -10,6 +10,10 @@ import { publicFetch } from './saas/public-fetch.js';
 
 import type { ApiHealthCheck, ApiHealthReport } from '../shared/api-health.js';
 
+import { getRecentFormContent } from './form-content-cache.js';
+import { invoiceWorkContent, objectValue, safeWorkText } from './work-content.js';
+import type { WorkContent } from '../shared/work-content.js';
+
 interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
 interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; modifiedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
@@ -34,7 +38,7 @@ interface ServiceTitanAttachment extends Record<string, unknown> {
 }
 
 export interface JobsQuery { startDate: string; endDateExclusive: string; page: number; pageSize: number; zip?: string; }
-export interface JobListItem {
+export interface JobListItem extends WorkContent {
   id: number;
   jobNumber: string;
   jobName: string;
@@ -85,6 +89,8 @@ export class ServiceTitanClient implements JobsProvider {
   private readonly rawResponses = new AsyncLocalStorage<Array<{ endpoint: string; params?: unknown; status?: number; body: unknown }>>();
   private accessToken?: { value: string; expiresAt: number };
   private tokenRequest: Promise<string> | undefined;
+  private readonly workCache = new Map<number, { expiresAt: number; request: Promise<WorkContent> }>();
+  private invoiceDeniedUntil = 0;
   private readonly attachmentCache = new Map<number, { expiresAt: number; request: Promise<ServiceTitanAttachment[]> }>();
 
   constructor(private readonly config: ServiceTitanConfig, private readonly imageFetch: typeof fetch = publicFetch) {
@@ -125,7 +131,7 @@ export class ServiceTitanClient implements JobsProvider {
   }
 
   /** Small read-only probes; response bodies and credentials never leave this method. */
-  async checkApiHealth(): Promise<ApiHealthReport> {
+  async checkApiHealth(includeOptional = true): Promise<ApiHealthReport> {
     const checks: ApiHealthCheck[] = [];
     const checkedAt = new Date().toISOString();
     const tenant = `tenant/${encodeURIComponent(this.config.tenantId)}`;
@@ -166,8 +172,26 @@ export class ServiceTitanClient implements JobsProvider {
       ['Job notes', `jpm/v2/${tenant}/jobs/{jobId}/notes`],
       ['Job attachments', `forms/v2/${tenant}/jobs/{jobId}/attachments`],
     ]) {
-      if (Number.isSafeInteger(jobId) && jobId! > 0) await probe(name!, path!.replace('{jobId}', String(jobId)), { page: 1, pageSize: 1 });
+      if (Number.isSafeInteger(jobId) && jobId! > 0) {
+        const body = await probe(name!, path!.replace('{jobId}', String(jobId)), { page: 1, pageSize: 1 });
+        if (includeOptional && name === 'Job details') {
+          const present = Object.hasOwn(objectValue(body), 'summaryOfWork');
+          checks.push({ name: 'Summary of Work', endpoint: 'Field: jobs/{jobId}.summaryOfWork', optional: true,
+            state: present ? 'available' : 'not_checked', message: present ? safeWorkText(objectValue(body).summaryOfWork) ? 'Field is available and populated.' : 'Field is available but empty on the sample job.' : 'Field was not returned on the sample job.' });
+        }
+      }
       else checks.push({ name: name!, endpoint: `GET /${path!.replace(tenant, 'tenant/{tenant}')}`, state: 'not_checked', message: 'No sample job was available from Jobs.' });
+    }
+    if (includeOptional) {
+      if (!checks.some((check) => check.name === 'Summary of Work')) checks.push({ name: 'Summary of Work', endpoint: 'Field: jobs/{jobId}.summaryOfWork', optional: true, state: 'not_checked', message: 'No sample job was available.' });
+      for (const [name, path] of [
+        ['Invoices', `accounting/v2/${tenant}/invoices`],
+        ['Forms definitions', `forms/v2/${tenant}/forms`],
+        ['Form submissions', `forms/v2/${tenant}/submissions`],
+      ]) {
+        await probe(name!, path!, { page: 1, pageSize: 1, ...(name === 'Invoices' && jobId ? { jobId } : {}) });
+        checks[checks.length - 1]!.optional = true;
+      }
     }
     checks.push({ name: 'Attachment download', endpoint: 'GET /forms/v2/tenant/{tenant}/jobs/attachment/{id}', state: 'not_checked', message: 'Check an image in Job Details to verify downloads. Health checks do not download original files.' });
     return { checkedAt, checks };
@@ -241,8 +265,12 @@ export class ServiceTitanClient implements JobsProvider {
       if (!job) throw new ServiceTitanRequestError('ServiceTitan job was not found.', 404);
       const seoDetails = extractSafeSeoDetails(response.data.summary);
       const equipmentNames = await this.getEquipmentNames(response.data.equipmentIds, headers, tenantPath);
+      const workContent = await this.getWorkContent(jobId, headers, tenantPath);
+      const workSummary = safeWorkText(response.data.summaryOfWork, 2000);
       const summary = {
         ...job,
+        ...workContent,
+        ...(workSummary ? { workSummary } : {}),
         ...(redactHistoryContent(response.data.summary) ? { summaryText: redactHistoryContent(response.data.summary).slice(0, 2_000) } : {}),
         ...(Object.keys(seoDetails).length > 0 ? { seoDetails } : {}),
         ...(equipmentNames.length > 0 ? { equipmentNames } : {}),
@@ -255,6 +283,41 @@ export class ServiceTitanClient implements JobsProvider {
       };
     } catch (error) {
       throw this.toRequestError(error);
+    }
+  }
+
+  private getWorkContent(jobId: number, headers: Record<string, string>, tenantPath: string): Promise<WorkContent> {
+    const cached = this.workCache.get(jobId);
+    if (cached && cached.expiresAt > Date.now()) return cached.request;
+    for (const [key, entry] of this.workCache) if (entry.expiresAt <= Date.now()) this.workCache.delete(key);
+    if (this.workCache.size >= 100) this.workCache.delete(this.workCache.keys().next().value!);
+    const request = Promise.all([
+      this.fetchInvoiceWorkContent(jobId, headers, tenantPath),
+      getRecentFormContent(this.config, jobId, async (params) => (await this.get(`${this.config.apiBaseUrl}/forms/v2/${tenantPath}/submissions`, { headers, params, timeout: 5000 })).data),
+    ]).then(([invoices, forms]) => ({ ...invoices, ...forms, contentSources: [...(invoices.contentSources || []), ...(forms.contentSources || [])] }));
+    this.workCache.set(jobId, { expiresAt: Date.now() + 5 * 60_000, request });
+    return request;
+  }
+
+  private async fetchInvoiceWorkContent(jobId: number, headers: Record<string, string>, tenantPath: string): Promise<WorkContent> {
+    const unavailable: WorkContent = { contentSources: [{ source: 'invoices', state: 'unavailable', message: 'Invoice work descriptions could not be loaded. Existing job sources remain available.' }] };
+    if (this.invoiceDeniedUntil > Date.now()) return unavailable;
+    try {
+      const invoices: unknown[] = [];
+      let hasMore = false;
+      for (let page = 1; page <= 5; page++) {
+        const response = await this.get<unknown>(`${this.config.apiBaseUrl}/accounting/v2/${tenantPath}/invoices`, { headers, params: { jobId, page, pageSize: 20 }, timeout: 5000 });
+        const body = objectValue(response.data);
+        if (!Array.isArray(body.data)) return unavailable;
+        invoices.push(...body.data.slice(0, 20));
+        hasMore = body.hasMore === true;
+        if (!hasMore) break;
+      }
+      return { ...invoiceWorkContent(invoices, jobId), contentSources: [{ source: 'invoices', state: hasMore ? 'partial' : 'available', message: hasMore ? 'Invoice scan limit reached; work descriptions may be incomplete.' : 'Job-linked invoice descriptions loaded. Billed scope does not confirm completed actions.' }] };
+    } catch (error) {
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      if (status === 401 || status === 403 || status === 429) this.invoiceDeniedUntil = Date.now() + 60_000;
+      return unavailable;
     }
   }
 

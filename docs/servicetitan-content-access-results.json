@@ -1,0 +1,121 @@
+{
+  "checkedAt": "2026-10-21T15:36:09.145Z",
+  "environment": "production",
+  "credentialSource": ".env (not verified against saved SaaS connections)",
+  "checks": [
+    {
+      "api": "Authentication",
+      "status": 200
+    },
+    {
+      "api": "Completed jobs sample",
+      "status": 200,
+      "recordsReturned": 3
+    },
+    {
+      "api": "Job details sample 1",
+      "status": 200,
+      "summaryOfWorkPresent": true,
+      "summaryOfWorkNonempty": false,
+      "summaryNonempty": true,
+      "hasInvoiceId": true
+    },
+    {
+      "api": "Invoices for sample 1",
+      "status": 200,
+      "recordsReturned": 1,
+      "jobLinkMatches": true,
+      "summaryNonempty": true,
+      "hasItems": true,
+      "hasItemDescriptions": true
+    },
+    {
+      "api": "Job details sample 2",
+      "status": 200,
+      "summaryOfWorkPresent": true,
+      "summaryOfWorkNonempty": false,
+      "summaryNonempty": true,
+      "hasInvoiceId": true
+    },
+    {
+      "api": "Invoices for sample 2",
+      "status": 200,
+      "recordsReturned": 1,
+      "jobLinkMatches": true,
+      "summaryNonempty": true,
+      "hasItems": true,
+      "hasItemDescriptions": true
+    },
+    {
+      "api": "Job details sample 3",
+      "status": 200,
+      "summaryOfWorkPresent": true,
+      "summaryOfWorkNonempty": false,
+      "summaryNonempty": true,
+      "hasInvoiceId": true
+    },
+    {
+      "api": "Invoices for sample 3",
+      "status": 200,
+      "recordsReturned": 1,
+      "jobLinkMatches": true,
+      "summaryNonempty": true,
+      "hasItems": true,
+      "hasItemDescriptions": true
+    },
+    {
+      "api": "Forms definitions",
+      "status": 200,
+      "recordsReturned": 1,
+      "recordShape": {
+        "id": "number",
+        "active": "boolean",
+        "name": "string",
+        "published": "boolean",
+        "hasConditionalLogic": "boolean",
+        "hasTriggers": "boolean",
+        "createdById": "number",
+        "createdOn": "string",
+        "modifiedOn": "string"
+      }
+    },
+    {
+      "api": "Form submissions",
+      "status": 200,
+      "recordsReturned": 1,
+      "recordShape": {
+        "id": "number",
+        "formId": "number",
+        "formName": "string",
+        "submittedOn": "string",
+        "createdById": "number",
+        "status": "string",
+        "owners": {
+          "count": 2,
+          "sample": {
+            "type": "string",
+            "id": "number"
+          }
+        },
+        "units": {
+          "count": 1,
+          "sample": {
+            "type": "string",
+            "comment": "null",
+            "attachments": {
+              "count": 1,
+              "sample": {
+                "fileName": "string",
+                "createdFrom": "null",
+                "originalFileName": "string",
+                "thumbnail": "null"
+              }
+            },
+            "id": "string",
+            "name": "string"
+          }
+        }
+      }
+    }
+  ]
+}
