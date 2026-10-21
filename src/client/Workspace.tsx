@@ -1,6 +1,7 @@
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import { Avatar, Button, IconButton, TextField } from '@mui/material';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { ApiHealth } from './ApiHealth';
 import { AccountMembersAdmin } from './AccountMembersAdmin';
 import { BillingPlans } from './BillingPlans';
 import { LoadingModal, LoadingPage } from './LoadingModal';
@@ -73,7 +74,7 @@ function workspaceRedirect(path: string, status: OnboardingStatus | undefined, i
   if (!status.activeProduct && !impersonating) return path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
   const setupComplete = status.settingsReady || status.onboardingStep >= 3;
   const helpPage = path === '/help' || path.startsWith('/help/');
-  if (!setupComplete && !helpPage && !['/onboarding', '/settings', '/wordpress-plugin', '/invite'].includes(path)) return '/onboarding';
+  if (!setupComplete && !helpPage && !['/onboarding', '/settings', '/wordpress-plugin', '/invite', '/admin/api-health'].includes(path)) return '/onboarding';
   if (setupComplete && path === '/pricing') return '/';
   return undefined;
 }
@@ -206,6 +207,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
           </nav>
           {user.isPlatformAdmin && !isLocal && (
             <nav className='account-menu-group' aria-label='Administration'>
+              <a href='/admin/api-health' aria-current={window.location.pathname === '/admin/api-health' ? 'page' : undefined}>API Health</a>
               <a href='/admin/tokens' aria-current={window.location.pathname === '/admin/tokens' ? 'page' : undefined}>
                 Token admin
               </a>
@@ -496,6 +498,7 @@ export function Workspace({ children }: { children: ReactNode }) {
   const tokenHistoryPage = path === '/add-tokens/history';
   const tokenPlansPage = path === '/add-tokens/plans';
   const tokensPage = path === '/add-tokens' || tokenHistoryPage || tokenPlansPage;
+  const apiHealthPage = !isLocal && path === '/admin/api-health';
   const adminPage = !isLocal && path === '/admin/tokens';
   const membersAdminPage = !isLocal && path === '/admin/members';
 
@@ -894,6 +897,8 @@ export function Workspace({ children }: { children: ReactNode }) {
             Cancel
           </Button>
         </main>
+      ) : apiHealthPage ? (
+        user.isPlatformAdmin ? <ApiHealth key={user.workspaceId} connections={connections} /> : <main className='app-page'><h1>Access denied</h1><p>Superadmin access is required.</p></main>
       ) : adminPage ? (
         user.isPlatformAdmin ? (
           <TokenAdmin />

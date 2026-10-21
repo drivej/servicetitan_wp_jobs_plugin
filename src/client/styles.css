@@ -2100,3 +2100,8 @@ td strong {
 .token-usage-grid strong { font-size: clamp(1.8rem, 4vw, 2.8rem); overflow-wrap: anywhere; }
 .token-usage-grid h3 { margin-top: 0; }
 @media (max-width: 480px) { .token-usage-grid { grid-template-columns: 1fr; } }
+
+.api-health-table { width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; }
+.api-health-table th, .api-health-table td { padding: 1rem; border-bottom: 1px solid #dce2e9; vertical-align: top; }
+.api-health-table code { font-size: .75rem; overflow-wrap: anywhere; font-weight: normal; }
+.api-health-table caption { text-align: left; font-weight: 600; margin-bottom: .5rem; }

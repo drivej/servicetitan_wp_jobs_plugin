@@ -463,6 +463,19 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       next(error);
     }
   });
+  app.post('/api/admin/service-titan/:connectionId/health', async (req, res, next) => {
+    try {
+      const actor = res.locals.actor as User;
+      const user = res.locals.user as User;
+      if (!actor.isPlatformAdmin) throw new HttpError('Superadmin access required.', 403);
+      const connection = await store.connectionContext(user.id, uuid(req.params.connectionId), user.workspaceId);
+      const key = `api-health:${actor.id}:${connection.id}`;
+      if (!await store.allowRequest(key, 1, 60)) throw new HttpError('Wait a minute before checking this connection again.', 429);
+      const client = new ServiceTitanClient({ ...connection, apiBaseUrl: 'https://api.servicetitan.io', authUrl: 'https://auth.servicetitan.io/connect/token' });
+      res.set('Cache-Control', 'private, no-store');
+      res.json(await client.checkApiHealth());
+    } catch (error) { next(error); }
+  });
   app.get('/api/websites/:id/admin/service-titan/jobs/:jobId/raw', async (req, res, next) => {
     try {
       const user = res.locals.user as User;

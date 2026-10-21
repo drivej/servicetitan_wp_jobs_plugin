@@ -8,6 +8,8 @@ import { ServiceTitanRequestError } from './service-titan-error.js';
 import { filterJobsByLocationIds, serviceTitanJobsListParams } from './service-titan-query.js';
 import { publicFetch } from './saas/public-fetch.js';
 
+import type { ApiHealthCheck, ApiHealthReport } from '../shared/api-health.js';
+
 interface TokenResponse { access_token: string; expires_in: number; }
 interface PaginatedResponse<T> { page: number; pageSize: number; hasMore: boolean; totalCount?: number; data: T[]; }
 interface ServiceTitanJob extends Record<string, unknown> { id: number; jobNumber: string; locationId: number; jobTypeId: number; jobStatus: string; summary?: string; completedOn?: string; modifiedOn?: string; sourceCopyStatus?: 'missing' | 'limited' | 'available'; }
@@ -120,6 +122,55 @@ export class ServiceTitanClient implements JobsProvider {
     } catch (error) {
       throw this.toRequestError(error);
     }
+  }
+
+  /** Small read-only probes; response bodies and credentials never leave this method. */
+  async checkApiHealth(): Promise<ApiHealthReport> {
+    const checks: ApiHealthCheck[] = [];
+    const checkedAt = new Date().toISOString();
+    const tenant = `tenant/${encodeURIComponent(this.config.tenantId)}`;
+    let headers: Record<string, string> | undefined;
+    const started = Date.now();
+    try {
+      headers = { Authorization: `Bearer ${await this.getAccessToken()}`, 'ST-App-Key': this.config.appKey };
+      checks.push({ name: 'Authentication', endpoint: 'POST /connect/token', state: 'available', message: 'Credentials accepted.', durationMs: Date.now() - started });
+    } catch {
+      checks.push({ name: 'Authentication', endpoint: 'POST /connect/token', state: 'unavailable', message: 'Authentication failed or timed out. Verify the connection credentials.', durationMs: Date.now() - started });
+    }
+    const probe = async (name: string, path: string, params?: Record<string, unknown>): Promise<unknown> => {
+      const endpoint = `GET /${path.replace(tenant, 'tenant/{tenant}')}`;
+      if (!headers) {
+        checks.push({ name, endpoint, state: 'not_checked', message: 'Authentication is required.' });
+        return;
+      }
+      const start = Date.now();
+      try {
+        const response = await this.api.get(`${this.config.apiBaseUrl}/${path}`, { headers, params, timeout: 5_000 });
+        checks.push({ name, endpoint, state: 'available', message: 'API request succeeded.', statusCode: response.status, durationMs: Date.now() - start });
+        return response.data;
+      } catch (error) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        checks.push({ name, endpoint, state: 'unavailable', message: status === 401 || status === 403 ? 'Access denied. Check the app permissions and tenant access.' : status === 429 ? 'ServiceTitan rate limit reached. Try again later.' : status === 404 ? 'Endpoint or record was not found.' : 'Request failed or timed out.', ...(status ? { statusCode: status } : {}), durationMs: Date.now() - start });
+      }
+    };
+    const jobs = await probe('Jobs', `jpm/v2/${tenant}/jobs`, { page: 1, pageSize: 1 }) as { data?: Array<{ id?: number }> } | undefined;
+    // Two concurrent probes at most to avoid a diagnostic request burst.
+    for (const batch of [
+      [['Locations', `crm/v2/${tenant}/locations`], ['Job types', `jpm/v2/${tenant}/job-types`]],
+      [['Tag types', `settings/v2/${tenant}/tag-types`], ['Installed equipment', `equipmentsystems/v2/${tenant}/installed-equipment`]],
+    ]) await Promise.all(batch.map(([name, path]) => probe(name!, path!, { page: 1, pageSize: 1 })));
+    const jobId = jobs?.data?.[0]?.id;
+    for (const [name, path] of [
+      ['Job details', `jpm/v2/${tenant}/jobs/{jobId}`],
+      ['Job history', `jpm/v2/${tenant}/jobs/{jobId}/history`],
+      ['Job notes', `jpm/v2/${tenant}/jobs/{jobId}/notes`],
+      ['Job attachments', `forms/v2/${tenant}/jobs/{jobId}/attachments`],
+    ]) {
+      if (Number.isSafeInteger(jobId) && jobId! > 0) await probe(name!, path!.replace('{jobId}', String(jobId)), { page: 1, pageSize: 1 });
+      else checks.push({ name: name!, endpoint: `GET /${path!.replace(tenant, 'tenant/{tenant}')}`, state: 'not_checked', message: 'No sample job was available from Jobs.' });
+    }
+    checks.push({ name: 'Attachment download', endpoint: 'GET /forms/v2/tenant/{tenant}/jobs/attachment/{id}', state: 'not_checked', message: 'Check an image in Job Details to verify downloads. Health checks do not download original files.' });
+    return { checkedAt, checks };
   }
 
   /** Verify auth and the tenant-level job read permission without returning customer data. */
