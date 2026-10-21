@@ -3,7 +3,7 @@ name: Deploy App to Sevalla
 on:
   push:
     branches:
-      - feat/saas-foundation # Change this to 'master' or your production branch if needed
+      - feat/saas-foundation
 
 jobs:
   deploy:
@@ -13,9 +13,10 @@ jobs:
         uses: actions/checkout@v4.2.2
 
       - name: Trigger Sevalla Deployment
-        uses: sevalla-hosting/sevalla-deploy@v3.0.0
+        uses: sevalla-hosting/sevalla-deploy@9ac54237e055eb9113a93ae84a6722a8a89b774a # v2.0.0
         with:
           action: 'deploy-app'
           sevalla-token: ${{ secrets.SEVALLA_TOKEN }}
           app-id: '792d7602-e80b-40d1-9489-9af1d5c2a4f2'
+          branch: ${{ github.ref_name }}
           wait-for-finish: true
