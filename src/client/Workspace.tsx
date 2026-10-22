@@ -49,7 +49,7 @@ interface Session {
   mode: 'saas' | 'local';
   testTokensEnabled?: boolean;
   user?: User;
-  impersonation?: { actor: { name: string; email: string } };
+  impersonation?: { actor: { name: string; email: string; avatarUrl?: string | null } };
   csrfToken?: string;
 }
 interface OnboardingStatus {
@@ -135,7 +135,7 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   );
 };
 
-const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = false }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean; isLocal?: boolean }) => {
+const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = false, administration = false, workspaceLinks = true, onAdminNavigate }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean; isLocal?: boolean; administration?: boolean; workspaceLinks?: boolean; onAdminNavigate?: (href: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -166,6 +166,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
       .join('') ||
     user.email[0]?.toUpperCase() ||
     '?';
+  const panelId = administration ? 'superadmin-menu-panel' : 'account-menu-panel';
   const displayedRole = user.isPlatformAdmin ? 'Super admin' : user.role === 'admin' ? 'Admin' : undefined;
   return (
     <div className='account-menu' ref={container}>
@@ -173,9 +174,9 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
         className='account-avatar-button'
         sx={{ p: 0, width: 38, height: 38, border: '2px solid #d7e5dd', backgroundColor: '#dfece5', color: '#234f42', '&:hover, &[aria-expanded=true]': { borderColor: '#186d4c' } }}
         type='button'
-        aria-label={`Account menu for ${user.name || user.email}`}
+        aria-label={`${administration ? 'Superadmin' : 'Account'} menu for ${user.name || user.email}`}
         aria-expanded={open}
-        aria-controls='account-menu-panel'
+        aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
       >
         <Avatar sx={{ width: 34, height: 34, fontSize: '0.85rem' }} src={!imageFailed ? user.avatarUrl || undefined : undefined} alt='' slotProps={{ img: { referrerPolicy: 'no-referrer', onError: () => setImageFailed(true) } }}>
@@ -183,13 +184,13 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
         </Avatar>
       </IconButton>
       {open && (
-        <div className='account-menu-panel' id='account-menu-panel'>
+        <div className='account-menu-panel' id={panelId}>
           <div className='account-menu-identity'>
             <strong>{user.name}</strong>
             <small>{user.email}</small>
             {displayedRole && <small className='account-menu-role'>{displayedRole}</small>}
           </div>
-          <nav className='account-menu-group' aria-label='Workspace'>
+          {workspaceLinks && <><nav className='account-menu-group' aria-label='Workspace'>
             <a href='/settings' aria-current={window.location.pathname === '/settings' ? 'page' : undefined}>
               Settings
             </a>
@@ -208,13 +209,14 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
               Help &amp; guides
             </a>
           </nav>
-          {user.isPlatformAdmin && !isLocal && (
+          </>}
+          {administration && user.isPlatformAdmin && !isLocal && (
             <nav className='account-menu-group' aria-label='Administration'>
-              <a href='/admin/api-health' aria-current={window.location.pathname === '/admin/api-health' ? 'page' : undefined}>API Health</a>
-              <a href='/admin/tokens' aria-current={window.location.pathname === '/admin/tokens' ? 'page' : undefined}>
+              <a href='/admin/api-health' onClick={onAdminNavigate ? (event) => { event.preventDefault(); if (!busy) onAdminNavigate('/admin/api-health'); } : undefined} aria-current={window.location.pathname === '/admin/api-health' ? 'page' : undefined}>API Health</a>
+              <a href='/admin/tokens' onClick={onAdminNavigate ? (event) => { event.preventDefault(); if (!busy) onAdminNavigate('/admin/tokens'); } : undefined} aria-current={window.location.pathname === '/admin/tokens' ? 'page' : undefined}>
                 Token admin
               </a>
-              <a href='/admin/members' aria-current={window.location.pathname === '/admin/members' ? 'page' : undefined}>
+              <a href='/admin/members' onClick={onAdminNavigate ? (event) => { event.preventDefault(); if (!busy) onAdminNavigate('/admin/members'); } : undefined} aria-current={window.location.pathname === '/admin/members' ? 'page' : undefined}>
                 Account members
               </a>
             </nav>
@@ -540,6 +542,17 @@ export function Workspace({ children }: { children: ReactNode }) {
       setBusy(false);
     }
   };
+  const exitUserViewTo = async (href: string) => {
+    setBusy(true); setError('');
+    try {
+      const response = await accountFetch('/api/admin/impersonation/end', { method: 'POST' });
+      if (!response.ok) await json(response);
+      window.location.assign(href);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to exit user view.');
+      setBusy(false);
+    }
+  };
   const logout = async () => {
     if (isLocal) return;
     setBusy(true);
@@ -816,14 +829,18 @@ export function Workspace({ children }: { children: ReactNode }) {
   return (
     <>
       <LoadingModal open={navigating} />
-      {session?.impersonation && (
-        <aside className='impersonation-banner' role='status'>
+      {(user.isPlatformAdmin || session?.impersonation) && (
+        <aside className='impersonation-banner superadmin-bar' aria-label='Superadmin toolbar'>
           <span>
-            <strong>Super admin view as {user.name}</strong> · {user.email} <span className='impersonation-actor'>— signed in as {session.impersonation.actor.email}</span>
+            <strong>{session?.impersonation ? `Super admin view as ${user.name}` : 'Super admin'}</strong>
+            {session?.impersonation && <> · {user.email} <span className='impersonation-actor'>— signed in as {session.impersonation.actor.email}</span></>}
           </span>
-          <Button size='small' disabled={busy} onClick={() => void logout()}>
-            Exit user view
-          </Button>
+          <div className='superadmin-bar-actions'>
+            {session?.impersonation && <Button size='small' disabled={busy} onClick={() => void logout()}>Exit user view</Button>}
+            <AccountMenu user={session?.impersonation ? { ...user, ...session.impersonation.actor, avatarUrl: session.impersonation.actor.avatarUrl || null, isPlatformAdmin: true } : user}
+              administration workspaceLinks={!session?.impersonation} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal}
+              {...(session?.impersonation ? { onAdminNavigate: (href: string) => { void exitUserViewTo(href); } } : {})} />
+          </div>
         </aside>
       )}
       <header className='workspace-bar'>
@@ -832,7 +849,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
           <JobsButton href={jobsHref} path={path} />
-          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
+          {(!user.isPlatformAdmin || session?.impersonation) && <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />}
         </div>
       </header>
 

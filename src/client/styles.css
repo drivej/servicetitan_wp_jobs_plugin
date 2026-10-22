@@ -2105,3 +2105,13 @@ td strong {
 .api-health-table th, .api-health-table td { padding: 1rem; border-bottom: 1px solid #dce2e9; vertical-align: top; }
 .api-health-table code { font-size: .75rem; overflow-wrap: anywhere; font-weight: normal; }
 .api-health-table caption { text-align: left; font-weight: 600; margin-bottom: .5rem; }
+
+.superadmin-bar { overflow: visible; }
+.superadmin-bar > span { min-width: 0; overflow-wrap: anywhere; }
+.superadmin-bar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.superadmin-bar .account-menu-panel { color: #263b31; max-width: calc(100vw - 36px); }
+@media (max-width: 600px) {
+  .superadmin-bar { gap: 8px; padding: 7px 12px; }
+  .superadmin-bar-actions { gap: 4px; }
+  .superadmin-bar .account-menu-panel { max-width: calc(100vw - 24px); }
+}

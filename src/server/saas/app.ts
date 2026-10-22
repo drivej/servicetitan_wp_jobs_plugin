@@ -171,7 +171,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.get('/api/session', (_req, res) => {
     const actor = res.locals.actor as User;
     res.json({ mode: 'saas', testTokensEnabled: config.testTokensEnabled === true, user: res.locals.user,
-      ...(res.locals.impersonation ? { impersonation: { actor: { name: actor.name, email: actor.email, isPlatformAdmin: actor.isPlatformAdmin === true } } } : {}),
+      ...(res.locals.impersonation ? { impersonation: { actor: { name: actor.name, email: actor.email, avatarUrl: actor.avatarUrl || null, isPlatformAdmin: actor.isPlatformAdmin === true } } } : {}),
       csrfToken: csrfToken(String(res.locals.sessionToken)) });
   });
   app.get('/api/billing', async (_req, res, next) => {
