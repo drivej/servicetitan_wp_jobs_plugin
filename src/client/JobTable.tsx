@@ -104,7 +104,6 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     <td className='job-image-cell' data-label='Image'><JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} /></td>
     <td className='job-name-cell' data-label='Job'>
       <div className='job-name' title={job.descriptionPreview || job.jobName}>{job.descriptionPreview || job.jobName}</div>
-      {job.descriptionPreview && job.descriptionPreview !== job.jobName && <div className='job-type-label'>{job.jobName}</div>}
       <div className='job-row-metadata'>
         <span>{formatJobDate(job.completedOn)}</span>
         <span>#{job.id}</span>
