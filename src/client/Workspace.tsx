@@ -135,7 +135,7 @@ const WorkspaceTokens = ({ count, path }: { count: number; path: string }) => {
   );
 };
 
-const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = false, administration = false, workspaceLinks = true, onAdminNavigate }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean; isLocal?: boolean; administration?: boolean; workspaceLinks?: boolean; onAdminNavigate?: (href: string) => void }) => {
+const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = false, administration = false, onAdminNavigate }: { user: User; onSignOut: () => void; busy: boolean; impersonating?: boolean; isLocal?: boolean; administration?: boolean; onAdminNavigate?: (href: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -190,7 +190,7 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
             <small>{user.email}</small>
             {displayedRole && <small className='account-menu-role'>{displayedRole}</small>}
           </div>
-          {workspaceLinks && <><nav className='account-menu-group' aria-label='Workspace'>
+          {!administration && <><nav className='account-menu-group' aria-label='Workspace'>
             <a href='/settings' aria-current={window.location.pathname === '/settings' ? 'page' : undefined}>
               Settings
             </a>
@@ -221,9 +221,9 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
               </a>
             </nav>
           )}
-          <Button className='account-menu-signout' type='button' variant='text' disabled={busy} onClick={onSignOut}>
+          {!administration && <Button className='account-menu-signout' type='button' variant='text' disabled={busy} onClick={onSignOut}>
             {impersonating ? 'Exit user view' : 'Sign out'}
-          </Button>
+          </Button>}
         </div>
       )}
     </div>
@@ -838,7 +838,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <div className='superadmin-bar-actions'>
             {session?.impersonation && <Button size='small' disabled={busy} onClick={() => void logout()}>Exit user view</Button>}
             <AccountMenu user={session?.impersonation ? { ...user, ...session.impersonation.actor, avatarUrl: session.impersonation.actor.avatarUrl || null, isPlatformAdmin: true } : user}
-              administration workspaceLinks={!session?.impersonation} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal}
+              administration onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal}
               {...(session?.impersonation ? { onAdminNavigate: (href: string) => { void exitUserViewTo(href); } } : {})} />
           </div>
         </aside>
@@ -849,7 +849,7 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
           <JobsButton href={jobsHref} path={path} />
-          {(!user.isPlatformAdmin || session?.impersonation) && <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />}
+          <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
         </div>
       </header>
 
