@@ -82,3 +82,13 @@ test('copy enrichment has an aggregate prompt budget even with large inputs', ()
   const count = (facts.match(/[wijf]/g) || []).length;
   assert(count < 12500);
 });
+
+test('job list preview prefers completion summary, sanitizes summary fallback and bounds literal excerpts', async () => {
+  const { jobDescriptionPreview } = await import('./work-content.js');
+  assert.equal(jobDescriptionPreview({ summaryOfWork: 'Major leak repaired', summary: 'Reported a leak' }), 'Major leak repaired');
+  assert.equal(jobDescriptionPreview({ summaryOfWork: ' ', summary: '<p>Major leak repair. Contact a@example.com</p>' }), 'Major leak repair. Contact [email removed]');
+  assert.equal(jobDescriptionPreview({ summary: null }), '');
+  assert.equal(jobDescriptionPreview({ summary: 42 }), '');
+  const excerpt = jobDescriptionPreview({ summary: 'Major leak repair with pipe replacement. '.repeat(20) });
+  assert(excerpt.length <= 161); assert(excerpt.endsWith('…'));
+});

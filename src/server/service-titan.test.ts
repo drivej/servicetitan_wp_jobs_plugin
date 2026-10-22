@@ -164,6 +164,7 @@ test('lists jobs without downloading images and securely downloads verified job 
   assert.deepEqual(jobs.data.map((job) => job.attachments), [[], []]);
   assert.equal(jobs.data[0]?.sourceCopyStatus, 'missing');
   assert.equal(jobs.data[1]?.sourceCopyStatus, 'limited');
+  assert.equal(jobs.data[1]?.descriptionPreview, 'Repaired leaking pipe.');
   assert.equal(jobs.data[1]?.summaryText, undefined, 'source assessment must not expose the raw summary');
   assert.equal(jobs.data[1]?.location.address, undefined, 'street addresses must not be exposed in the list response');
   assert.equal(requestedUrls.some((url) => url.includes('/jobs/attachment/')), false, 'list filtering must use metadata only');

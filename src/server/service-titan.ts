@@ -11,7 +11,7 @@ import { publicFetch } from './saas/public-fetch.js';
 import type { ApiHealthCheck, ApiHealthReport } from '../shared/api-health.js';
 
 import { getRecentFormContent } from './form-content-cache.js';
-import { invoiceWorkContent, objectValue, safeWorkText } from './work-content.js';
+import { invoiceWorkContent, jobDescriptionPreview, objectValue, safeWorkText } from './work-content.js';
 import type { WorkContent } from '../shared/work-content.js';
 
 interface TokenResponse { access_token: string; expires_in: number; }
@@ -42,6 +42,7 @@ export interface JobListItem extends WorkContent {
   id: number;
   jobNumber: string;
   jobName: string;
+  descriptionPreview?: string;
   status: string;
   completedOn?: string;
   modifiedOn?: string;
@@ -492,6 +493,7 @@ export class ServiceTitanClient implements JobsProvider {
           locationId: job.locationId,
           jobTypeId: job.jobTypeId,
           jobStatus: job.jobStatus,
+          descriptionPreview: jobDescriptionPreview(job),
           ...(job.completedOn ? { completedOn: job.completedOn } : {}),
           sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 10 ? 'limited' : 'available',
         });
@@ -597,6 +599,7 @@ export class ServiceTitanClient implements JobsProvider {
         id: job.id,
         jobNumber: job.jobNumber,
         jobName: jobTypeById.get(job.jobTypeId)?.name || `Job ${job.jobNumber}`,
+        descriptionPreview: typeof job.descriptionPreview === 'string' ? job.descriptionPreview : jobDescriptionPreview(job),
         status: job.jobStatus,
         tagNames: unique(Array.isArray(job.tagTypeIds) ? job.tagTypeIds : [])
           .map((id) => tagById.get(id)).filter((name): name is string => Boolean(name)),

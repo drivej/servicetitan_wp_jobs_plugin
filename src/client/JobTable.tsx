@@ -18,6 +18,7 @@ export interface JobTableItem {
   imageValidationState?: 'loading' | 'valid' | 'invalid' | 'error';
   sourceCopyStatus?: 'missing' | 'limited' | 'available';
   jobName: string;
+  descriptionPreview?: string;
   status: string;
   completedOn?: string;
   modifiedOn?: string;
@@ -90,7 +91,7 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
       : readinessState === 'concern' ? readinessReason
         : undefined;
 
-  return <tr className={`job-row${onOpen ? '' : ' job-row-static'}`} tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Open ${job.jobName} details` : undefined} onClick={(event) => {
+  return <tr className={`job-row${onOpen ? '' : ' job-row-static'}`} tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Open ${job.descriptionPreview || job.jobName} details` : undefined} onClick={(event) => {
     if (event.target instanceof Element && event.target.closest('button, a[href]')) return;
     onOpen?.();
   }} onKeyDown={(event) => {
@@ -102,7 +103,8 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     </td>
     <td className='job-image-cell' data-label='Image'><JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} /></td>
     <td className='job-name-cell' data-label='Job'>
-      <div className='job-name' title={job.jobName}>{job.jobName}</div>
+      <div className='job-name' title={job.descriptionPreview || job.jobName}>{job.descriptionPreview || job.jobName}</div>
+      {job.descriptionPreview && job.descriptionPreview !== job.jobName && <div className='job-type-label'>{job.jobName}</div>}
       <div className='job-row-metadata'>
         <span>{formatJobDate(job.completedOn)}</span>
         <span>#{job.id}</span>

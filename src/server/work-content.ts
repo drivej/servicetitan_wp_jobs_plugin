@@ -63,3 +63,12 @@ export function completedFormFindings(submissions: unknown[], jobId: number): No
   }
   return findings;
 }
+
+/** Compact literal excerpt from list-response fields; no enrichment request or AI inference. */
+export function jobDescriptionPreview(job: Record<string, unknown>): string {
+  const text = safeWorkText(job.summaryOfWork, 2000) || safeWorkText(job.summary, 2000);
+  if (text.length <= 160) return text;
+  const segment = text.slice(0, 160);
+  const boundary = segment.lastIndexOf(' ');
+  return `${segment.slice(0, boundary >= 100 ? boundary : 160).trimEnd()}…`;
+}

@@ -2115,3 +2115,5 @@ td strong {
   .superadmin-bar-actions { gap: 4px; }
   .superadmin-bar .account-menu-panel { max-width: calc(100vw - 24px); }
 }
+
+.job-type-label { margin-top: 3px; color: #526159; font-size: .78rem; line-height: 1.4; }
