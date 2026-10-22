@@ -92,6 +92,8 @@ export class ServiceTitanClient implements JobsProvider {
   private tokenRequest: Promise<string> | undefined;
   private readonly workCache = new Map<number, { expiresAt: number; request: Promise<WorkContent> }>();
   private invoiceDeniedUntil = 0;
+  private readonly invoicePreviewCache = new Map<string, { expiresAt: number; text: string }>();
+  private readonly invoicePreviewRequests = new Map<string, Promise<Map<number, string>>>();
   private readonly attachmentCache = new Map<number, { expiresAt: number; request: Promise<ServiceTitanAttachment[]> }>();
 
   constructor(private readonly config: ServiceTitanConfig, private readonly imageFetch: typeof fetch = publicFetch) {
@@ -109,7 +111,7 @@ export class ServiceTitanClient implements JobsProvider {
       const zipResults = query.zip ? await this.getZipFilteredJobs(query, headers, tenantPath) : undefined;
       const jobsResponse = query.zip ? undefined : await this.getJobsPage(query, headers, tenantPath);
       const pageJobs = zipResults?.data ?? jobsResponse!.data.data;
-      const enrichedJobs = await this.enrichJobs(pageJobs, headers, tenantPath);
+      const [enrichedJobs, invoicePreviews] = await Promise.all([this.enrichJobs(pageJobs, headers, tenantPath), this.getListInvoicePreviews(pageJobs, headers, tenantPath)]);
 
       return {
         data: enrichedJobs.map((job, index) => {
@@ -117,6 +119,7 @@ export class ServiceTitanClient implements JobsProvider {
           const wordCount = summary.split(/\s+/).filter(Boolean).length;
           return {
             ...job,
+            descriptionPreview: invoicePreviews.get(job.id) || job.descriptionPreview || '',
             attachments: [],
             sourceCopyStatus: pageJobs[index]!.sourceCopyStatus || (wordCount === 0 ? 'missing' : wordCount < 10 ? 'limited' : 'available'),
           };
@@ -271,6 +274,7 @@ export class ServiceTitanClient implements JobsProvider {
       const summary = {
         ...job,
         ...workContent,
+        descriptionPreview: jobDescriptionPreview({ ...response.data, invoiceSummary: workContent.invoiceSummaries?.[0] }),
         ...(workSummary ? { workSummary } : {}),
         ...(redactHistoryContent(response.data.summary) ? { summaryText: redactHistoryContent(response.data.summary).slice(0, 2_000) } : {}),
         ...(Object.keys(seoDetails).length > 0 ? { seoDetails } : {}),
@@ -285,6 +289,47 @@ export class ServiceTitanClient implements JobsProvider {
     } catch (error) {
       throw this.toRequestError(error);
     }
+  }
+
+  /** Fetch the listed jobs' canonical invoices in one batch, without forms or item enrichment. */
+  private async getListInvoicePreviews(jobs: ServiceTitanJob[], headers: Record<string, string>, tenantPath: string): Promise<Map<number, string>> {
+    const previews = new Map<number, string>();
+    const missing = jobs.filter(job => {
+      if (!Number.isSafeInteger(job.invoiceId) || Number(job.invoiceId) <= 0) return false;
+      const entry = this.invoicePreviewCache.get(`${job.id}:${job.invoiceId}`);
+      if (entry && entry.expiresAt > Date.now()) { previews.set(job.id, entry.text); return false; }
+      return true;
+    }).slice(0, 50);
+    if (!missing.length || this.invoiceDeniedUntil > Date.now()) return previews;
+    const ids = [...new Set(missing.map(job => Number(job.invoiceId)))].sort((a,b) => a-b).join(',');
+    let request = this.invoicePreviewRequests.get(ids);
+    if (!request) {
+      request = (async () => {
+        const found = new Map<number, string>();
+        try {
+          const response = await this.get<unknown>(`${this.config.apiBaseUrl}/accounting/v2/${tenantPath}/invoices`, { headers, params: { ids, page: 1, pageSize: 50 }, timeout: 5000 });
+          const data = objectValue(response.data).data;
+          if (!Array.isArray(data)) return found;
+          for (const job of missing) {
+            const matching = data.filter(raw => objectValue(raw).id === job.invoiceId);
+            const summary = invoiceWorkContent(matching, job.id).invoiceSummaries?.[0];
+            found.set(job.id, summary ? jobDescriptionPreview({ invoiceSummary: summary }) : '');
+          }
+          for (const [key, entry] of this.invoicePreviewCache) if (entry.expiresAt <= Date.now()) this.invoicePreviewCache.delete(key);
+          for (const job of missing) {
+            if (this.invoicePreviewCache.size >= 500) this.invoicePreviewCache.delete(this.invoicePreviewCache.keys().next().value!);
+            this.invoicePreviewCache.set(`${job.id}:${job.invoiceId}`, { expiresAt: Date.now() + 5 * 60_000, text: found.get(job.id) || '' });
+          }
+        } catch (error) {
+          const status = isAxiosError(error) ? error.response?.status : undefined;
+          if (status === 401 || status === 403 || status === 429) this.invoiceDeniedUntil = Date.now() + 60_000;
+        }
+        return found;
+      })().finally(() => { this.invoicePreviewRequests.delete(ids); });
+      this.invoicePreviewRequests.set(ids, request);
+    }
+    for (const [id, text] of await request) previews.set(id, text);
+    return previews;
   }
 
   private getWorkContent(jobId: number, headers: Record<string, string>, tenantPath: string): Promise<WorkContent> {
@@ -494,6 +539,7 @@ export class ServiceTitanClient implements JobsProvider {
           jobTypeId: job.jobTypeId,
           jobStatus: job.jobStatus,
           descriptionPreview: jobDescriptionPreview(job),
+          ...(Number.isSafeInteger(job.invoiceId) ? { invoiceId: job.invoiceId } : {}),
           ...(job.completedOn ? { completedOn: job.completedOn } : {}),
           sourceCopyStatus: wordCount === 0 ? 'missing' : wordCount < 10 ? 'limited' : 'available',
         });

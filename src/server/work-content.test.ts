@@ -92,3 +92,37 @@ test('job list preview prefers completion summary, sanitizes summary fallback an
   const excerpt = jobDescriptionPreview({ summary: 'Major leak repair with pipe replacement. '.repeat(20) });
   assert(excerpt.length <= 161); assert(excerpt.endsWith('…'));
 });
+
+test('job list batches invoice summaries, preserves job association, caches and falls back on denied access', async () => {
+  let invoiceCalls = 0;
+  let denied = false;
+  const client = new ServiceTitanClient(config());
+  const api = {
+    post: async () => ({ data: { access_token: 'token', expires_in: 3600 } }),
+    get: async (url: string, options: { params: Record<string, unknown> }) => {
+      if (url.endsWith('/jobs')) return { data: { data: [
+        { id: 42, invoiceId: 100, jobNumber: '42', locationId: 1, jobTypeId: 2, jobStatus: 'Completed', summary: 'Original issue' },
+        { id: 43, invoiceId: 101, jobNumber: '43', locationId: 1, jobTypeId: 2, jobStatus: 'Completed', summary: 'Fallback job summary' },
+      ], hasMore: false } };
+      if (url.endsWith('/locations')) return { data: { data: [{ id: 1, address: { city: 'Rome', state: 'GA', zip: '30161' } }] } };
+      if (url.endsWith('/job-types')) return { data: { data: [{ id: 2, name: 'Plumbing Service (2hrs)' }] } };
+      if (url.endsWith('/invoices')) {
+        invoiceCalls++; assert.equal(options.params.ids, '100,101');
+        if (denied) throw { isAxiosError: true, response: { status: 403 } };
+        return { data: { data: [{ id: 100, job: { id: 42 }, summary: '<p>Major leak repair</p>' }, { id: 101, job: { id: 999 }, summary: 'Wrong job invoice' }] } };
+      }
+      throw new Error('List must not request forms or per-job details');
+    },
+  };
+  Object.assign(client, { api });
+  const query = { startDate: '2026-01-01', endDateExclusive: '2026-11-01', page: 1, pageSize: 25 };
+  const result = await client.getJobs(query);
+  assert.equal(result.data[0]?.descriptionPreview, 'Major leak repair');
+  assert.equal(result.data[0]?.jobName, 'Plumbing Service (2hrs)');
+  assert.equal(result.data[1]?.descriptionPreview, 'Fallback job summary');
+  await client.getJobs(query); assert.equal(invoiceCalls, 1);
+  denied = true;
+  const deniedClient = new ServiceTitanClient(config()); Object.assign(deniedClient, { api });
+  assert.equal((await deniedClient.getJobs(query)).data[0]?.descriptionPreview, 'Original issue');
+  await deniedClient.getJobs(query); assert.equal(invoiceCalls,2);
+});
