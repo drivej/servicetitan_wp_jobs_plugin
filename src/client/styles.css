@@ -387,28 +387,28 @@ td strong {
   font-size: 0.96rem;
 }
 .jobs-table {
-  /* table-layout: fixed; */
+  table-layout: fixed;
+  width: 100%;
   font-size: 0.8rem;
 }
 .jobs-table .job-image-column {
-  width: 1%;
+  width: 80px;
 }
 .jobs-table .readiness-column {
-  width: 1%;
+  width: 32px;
 }
 .jobs-table .job-name-column {
-  width: 17%;
+  width: auto;
 }
 .jobs-table .location-column {
-  width: 24%;
+  width: 18%;
 }
 .jobs-table .wp-status-column {
-  width: 12%;
+  width: 112px;
 }
 .jobs-table .actions-column {
-  width: 27%;
+  width: 240px;
 }
-.jobs-table .readiness-column { width: 1%; }
 .jobs-table .readiness-cell {
   padding: 4px !important;
   text-align: center;
@@ -453,12 +453,14 @@ td strong {
   color: #748078;
   font-size: 0.75rem;
 }
-.jobs-table .job-name {
+.jobs-table .job-name,
+.jobs-table .job-type-label {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
+.jobs-table .job-name-cell { min-width: 0; }
 .location-cell-city {
   max-width: 100%;
   text-overflow: ellipsis;
@@ -520,8 +522,8 @@ td strong {
 }
 .job-row-metadata {
   display: flex;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  white-space: normal;
   gap: 2px 12px;
   margin-top: 4px;
   color: #526572;
