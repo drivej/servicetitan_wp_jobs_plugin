@@ -60,6 +60,7 @@ export interface JobContentHistoryItem { id: string; source: 'history' | 'note';
 export interface JobDetails { job: ServiceTitanJob; summary: JobListItem; attachments: JobAttachment[]; history: JobContentHistoryItem[]; }
 export interface JobImage { id: string; fileName: string; contentType: string; bytes: Uint8Array; }
 export interface JobsProvider {
+  getScannerJobs?(page: number): Promise<JobsResult>;
   getRawJob?(jobId: number): Promise<unknown>;
   getJobs(query: JobsQuery): Promise<JobsResult>;
   getJobImageCandidates?(jobId: number): Promise<JobAttachment[]>;
@@ -132,6 +133,17 @@ export class ServiceTitanClient implements JobsProvider {
     } catch (error) {
       throw this.toRequestError(error);
     }
+  }
+
+  /** Scanner order is independent of the job browser's appointment-date filters. */
+  async getScannerJobs(page: number): Promise<JobsResult> {
+    try {
+      const token = await this.getAccessToken();
+      const headers = { Authorization: `Bearer ${token}`, 'ST-App-Key': this.config.appKey };
+      const tenantPath = `tenant/${encodeURIComponent(this.config.tenantId)}`;
+      const response = await this.get<PaginatedResponse<ServiceTitanJob>>(`${this.config.apiBaseUrl}/jpm/v2/${tenantPath}/jobs`, { headers, params: { jobStatus: 'Completed', sort: '-CreatedOn', page, pageSize: 25, includeTotal: false } });
+      return { page, pageSize: 25, hasMore: response.data.hasMore, data: response.data.data.slice(0,25).map(job => ({ id: job.id, jobNumber: job.jobNumber, jobName: `Job ${job.jobNumber}`, status: job.jobStatus, location: { city: '', state: '', zip: '' } })) };
+    } catch (error) { throw this.toRequestError(error); }
   }
 
   /** Small read-only probes; response bodies and credentials never leave this method. */

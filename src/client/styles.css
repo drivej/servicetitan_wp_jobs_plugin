@@ -2119,3 +2119,11 @@ td strong {
 }
 
 .job-type-label { margin-top: 3px; color: #526159; font-size: .78rem; line-height: 1.4; }
+
+.scanner-panel, .scanner-result { padding: var(--space-5, 24px); }
+.scanner-progress { margin-top: 20px; }
+.scanner-results { display: grid; gap: 16px; margin-top: 24px; }
+.scanner-result { min-width: 0; overflow-wrap: anywhere; }
+.scanner-result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.scanner-result-heading h2 { margin: 0; font-size: 1.15rem; }
+.scanner-rating { flex-shrink: 0; padding: 5px 10px; border-radius: 8px; color: #186d4c; background: #e2eedb; }

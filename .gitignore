@@ -149,3 +149,6 @@ dist/
 
 # Local durable build queue
 .data/
+
+# Checksum-verified local/deployment Node.js runtime
+.node-runtime/

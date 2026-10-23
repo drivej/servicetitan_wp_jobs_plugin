@@ -10,6 +10,7 @@ export interface StoredBuildTask extends BuildTask, BuildScope { updatedAt: numb
 export interface BuildQueueStore {
   enqueue(scope: BuildScope, jobId: number): Promise<BuildTask>;
   list(scope: BuildScope, jobIds: number[]): Promise<BuildTask[]>;
+  listById(scope: BuildScope, ids: string[]): Promise<BuildTask[]>;
   claim(): Promise<StoredBuildTask | undefined>;
   save(task: StoredBuildTask): Promise<void>;
 }
@@ -48,6 +49,9 @@ export class FileBuildQueueStore implements BuildQueueStore {
   list(scope: BuildScope, jobIds: number[]) {
     return this.access((tasks) => Array.from(new Map(tasks.filter((t) => t.workspaceId === scope.workspaceId && t.websiteId === scope.websiteId && jobIds.includes(t.jobId)).map((t) => [t.jobId, publicTask(t)])).values()));
   }
+  listById(scope: BuildScope, ids: string[]) {
+    return this.access(tasks => tasks.filter(task => task.workspaceId === scope.workspaceId && task.websiteId === scope.websiteId && ids.includes(task.id)).map(publicTask));
+  }
   claim() {
     return this.access((tasks) => {
       for (const task of tasks) if (task.state === 'running' && task.updatedAt < Date.now() - staleAfter) {
@@ -81,6 +85,9 @@ export class PostgresBuildQueueStore implements BuildQueueStore {
     return this.db.transaction(undefined, async (sql) => (await sql.query(`SELECT DISTINCT ON (job_id) payload FROM build_deploy_tasks
       WHERE workspace_id=$1 AND website_id=$2 AND job_id=ANY($3::bigint[]) ORDER BY job_id,created_at DESC`,
     [scope.workspaceId, scope.websiteId, jobIds])).rows.map((row) => publicTask(row.payload as StoredBuildTask)));
+  }
+  listById(scope: BuildScope, ids: string[]) {
+    return this.db.transaction(undefined, async sql => (await sql.query('SELECT payload FROM build_deploy_tasks WHERE workspace_id=$1 AND website_id=$2 AND id=ANY($3::uuid[])', [scope.workspaceId,scope.websiteId,ids])).rows.map(row => publicTask(row.payload as StoredBuildTask)));
   }
   claim() {
     return this.db.transaction(undefined, async (sql) => {

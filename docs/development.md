@@ -8,7 +8,7 @@ Existing `.env` credentials still work with `npm run dev`. In development, absen
 
 ## SaaS development configuration
 
-Use Node 22.22 or newer and PostgreSQL 17. Put these in your ignored `.env` (use your actual local configuration):
+Use Node.js 24.22.1 (pinned in `.nvmrc`) and PostgreSQL 17. Run `nvm install && nvm use`, or run `bash scripts/install-node.sh` and prepend `$PWD/.node-runtime/bin` to your shell PATH. Put these in your ignored `.env` (use your actual local configuration):
 
 ```dotenv
 APP_MODE=saas
@@ -135,3 +135,7 @@ The workspace selector changes the current session. Other tabs refresh when they
 See [Stripe subscriptions](stripe.md) for sandbox setup and billing migration requirements.
 
 See [token ledger and platform administration](token-ledger.md) for migration 005, operator bootstrap and adjustment APIs.
+
+### Job Scanner deployment
+
+Run migrations through `013_job_scanner.sql` before deploying the scanner-enabled server. It adds the internal `job_scanner_tasks` table, active-scan uniqueness and queue/history indexes. Separate runtime roles need `SELECT, INSERT, UPDATE` on that table. Startup verifies these permissions. Scanner records contain scope IDs, progress, short ratings, and build-task references; no integration secrets or full job content. No production migration is performed by the build command.

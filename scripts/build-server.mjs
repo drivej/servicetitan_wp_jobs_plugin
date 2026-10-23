@@ -6,7 +6,7 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  target: 'node22',
+  target: 'node24',
   sourcemap: true,
   outdir: 'dist/server',
   external: ['express', 'vite', 'dotenv', 'dotenv/config', 'pg', 'openid-client', 'undici', 'ipaddr.js', 'stripe'],

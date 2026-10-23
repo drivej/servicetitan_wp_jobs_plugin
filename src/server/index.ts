@@ -1,3 +1,6 @@
+import { FileScannerStore, PostgresScannerStore } from './scanner-store.js';
+import { executeScan, ScannerWorker, scannerApi } from './job-scanner.js';
+import { DisabledJobScorer, OpenAIJobScorer } from './job-scorer.js';
 import { BuildQueueWorker, FileBuildQueueStore, PostgresBuildQueueStore } from './build-queue.js';
 import { buildAndDeploy } from './build-deploy.js';
 import 'dotenv/config';
@@ -31,6 +34,8 @@ const copyGenerator = aiConfig ? new OpenAIJobCopyGenerator(aiConfig) : new Disa
 const staticOptions = isProduction ? { staticDirectory: resolve(process.cwd(), 'dist/client') } : {};
 const store = saasConfig && db ? new AccountStore(db, saasConfig.vault) : undefined;
 const queue = db ? new PostgresBuildQueueStore(db) : new FileBuildQueueStore(resolve(process.env.BUILD_QUEUE_FILE || '.data/build-deploy.json'));
+const scannerStore = db ? new PostgresScannerStore(db) : new FileScannerStore(resolve('.data/job-scanner.json'));
+const scorer = aiConfig ? new OpenAIJobScorer(aiConfig) : new DisabledJobScorer();
 const localScope = { userId: 'local', workspaceId: 'local', websiteId: 'local' };
 const localWordPressSiteUrl = (collectionUrl: string): string => {
   const url = new URL(collectionUrl);
@@ -52,13 +57,20 @@ const worker = new BuildQueueWorker(queue, async (task) => {
     : localProviders!;
   return buildAndDeploy(task.jobId, providers, task.id);
 });
+const scannerWorker = new ScannerWorker(scannerStore, async task => {
+  const providers = store
+    ? websiteBuildProviders(store,copyGenerator,task.userId,await store.websiteContext(task.userId,task.websiteId,task.workspaceId))
+    : localProviders!;
+  await executeScan(task,providers,scorer,scannerStore,queue);
+});
 const app = saasConfig && store
-  ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue), ...staticOptions })
-  : createApp({ ...localProviders!, ...staticOptions,
+  ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue, scannerStore), ...staticOptions })
+  : createApp({ ...localProviders!, ...staticOptions, scanner: scannerApi(localScope,scannerStore,queue),
       localPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN?.toLowerCase() !== 'false',
       buildQueue: { enqueue: (jobId) => queue.enqueue(localScope, jobId), list: (jobIds) => queue.list(localScope, jobIds) },
     });
 worker.start();
+scannerWorker.start();
 if (mode === 'local') app.get('/api/session', (_req, res) => {
   res.json({ mode: 'local', user: {
     id: process.env.LOCAL_USER_ID || 'local-user',
@@ -121,7 +133,7 @@ const shutdown = async (signal: string) => {
     }
 
     if (forceConnectionsClosed) clearTimeout(forceConnectionsClosed);
-    await worker.stop();
+    await Promise.all([worker.stop(),scannerWorker.stop()]);
     await pool?.end();
     await closePublicFetch();
     clearTimeout(forceExit);

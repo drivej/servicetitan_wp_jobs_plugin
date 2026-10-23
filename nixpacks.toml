@@ -1,13 +1,23 @@
 providers = ["node"]
 
 [variables]
-NIXPACKS_NODE_VERSION = "22"
+NIXPACKS_NODE_VERSION = "24"
+
+# Install the exact patched binary instead of relying on the builder's Nix snapshot.
+[phases.setup]
+nixPkgs = ["curl", "gnutar", "gzip", "coreutils"]
+
+[phases.node-runtime]
+dependsOn = ["setup"]
+cmds = ["bash scripts/install-node.sh"]
+paths = ["/app/.node-runtime/bin"]
 
 [phases.install]
-cmds = ["npm ci --include=dev"]
+dependsOn = ["node-runtime"]
+cmds = ["node --version", "npm ci --include=dev"]
 
 [phases.build]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm start"
+cmd = "exec /app/.node-runtime/bin/node dist/server/index.js"

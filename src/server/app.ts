@@ -2,7 +2,8 @@ import { resolve } from 'node:path';
 
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 
-import { HttpError } from './saas/validation.js';
+import type { ScannerTask } from '../shared/job-scanner.js';
+import { HttpError, uuid } from './saas/validation.js';
 
 import { OpenAIRequestError } from './openai-error.js';
 import { DisabledJobCopyGenerator, type JobCopyGenerator } from './openai.js';
@@ -19,6 +20,7 @@ import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
   localPlatformAdmin?: boolean;
+  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -38,6 +40,7 @@ const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPR
 
 export const createApp = ({
   localPlatformAdmin = false,
+  scanner,
   serviceTitan,
   wordpress,
   copyGenerator = new DisabledJobCopyGenerator(),
@@ -128,6 +131,18 @@ export const createApp = ({
       if (!serviceTitan.getJobImageCandidates) throw new HttpError('Image candidate lookup is unavailable.', 501);
       response.set('Cache-Control', 'private, no-store');
       response.json({ attachments: await serviceTitan.getJobImageCandidates(parseJobId(request.params.jobId)) });
+    } catch (error) { next(error); }
+  });
+  app.get(`${apiPrefix}/scanner/latest`, async (_request, response, next) => {
+    try { if (!scanner) throw new HttpError('Job Scanner is unavailable.',503); response.set('Cache-Control','private, no-store'); response.json({ scan: await scanner.latest() }); } catch (error) { next(error); }
+  });
+  app.post(`${apiPrefix}/scanner/start`, async (request, response, next) => {
+    try {
+      if (!scanner) throw new HttpError('Job Scanner is unavailable.',503);
+      if (response.locals.user && response.locals.user.jobTokens < 1) throw new HttpError('At least one token is required to start a scan.',402);
+      let operationId: string;
+      try { operationId = uuid(request.get('Idempotency-Key')); } catch { throw new HttpError('A valid Idempotency-Key is required.',400); }
+      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId) });
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {

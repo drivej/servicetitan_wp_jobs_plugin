@@ -820,3 +820,23 @@ test('durable build queue scopes results and serializes claims and duplicate sub
     assert.match((await first.list(scope, [42]))[0]?.error || '', /Check WordPress/);
   } finally { await f.close(); }
 });
+
+test('Job Scanner bills one scan token, replays settled results, and refunds side-effect-free scoring failures',async()=>{
+  const { TokenOperationSafeFailure }=await import('../token-operation.js');
+  const f=await fixture();try{
+    const owner=await f.store.login({subject:'scanner-billing',email:'scanner@example.com',name:'Scanner owner'});
+    const connection=await f.store.saveConnection(owner.user.id,source);const site=await f.store.saveWebsite(owner.user.id,siteInput(connection.id));
+    await f.db.transaction(owner.user.id,sql=>postTokenTransaction(sql,{workspaceId:owner.user.workspaceId,kind:'test_credit',requestedAmount:6,reference:'test:scanner-seed',reason:'Scanner test setup'}));
+    let calls=0;const scanId='scanner-stable';const operation=async()=>{calls++;return{candidates:[]};};
+    await f.store.spendJobToken(owner.user.id,site.id,'job_scan',operation,owner.user.workspaceId,undefined,scanId,'scanner');
+    await f.store.spendJobToken(owner.user.id,site.id,'job_scan',operation,owner.user.workspaceId,undefined,scanId,'scanner');
+    assert.equal(calls,1);assert.equal((await f.store.session(owner.token))?.jobTokens,5);
+    await assert.rejects(f.store.spendJobToken(owner.user.id,site.id,'job_scan',async()=>{throw new TokenOperationSafeFailure(new Error('rating failed'));},owner.user.workspaceId,undefined,'scanner-failed','scanner'),/rating failed/);
+    assert.equal((await f.store.session(owner.token))?.jobTokens,5);
+    const rows=await f.sql.query("SELECT action,state FROM token_spend_operations WHERE workspace_id=$1 ORDER BY created_at",[owner.user.workspaceId]);
+    assert.deepEqual(rows.rows.map(row=>row.state),['settled','failed']);
+    for (let i=0;i<5;i++) await f.store.spendJobToken(owner.user.id,site.id,'build',async()=>({draft:true}),owner.user.workspaceId,i+1,`scanner-draft-${i}`,'build');
+    assert.equal((await f.store.session(owner.token))?.jobTokens,0);
+    await assert.rejects(f.store.spendJobToken(owner.user.id,site.id,'build',async()=>{throw new Error('must not run');},owner.user.workspaceId,6,'scanner-extra','build'),/No job tokens/);
+  }finally{await f.close();}
+});

@@ -74,7 +74,7 @@ function workspaceRedirect(path: string, status: OnboardingStatus | undefined, i
   // Jobs require a subscription; setup, billing, settings, and help remain accessible.
   // Platform administrators may inspect a customer's configured jobs while viewing as them.
   // Paid mutations remain subject to the impersonated workspace's normal token checks.
-  if (!status.activeProduct && !impersonating) return path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
+  if (!status.activeProduct && !impersonating) return path === '/job-scanner' || path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
   const setupComplete = status.settingsReady || status.onboardingStep >= 3;
   const helpPage = path === '/help' || path.startsWith('/help/');
   if (!setupComplete && !helpPage && !['/onboarding', '/settings', '/wordpress-plugin', '/invite', '/admin/api-health'].includes(path)) return '/onboarding';
@@ -848,6 +848,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         <div className='workspace-menu-row d-flex gap-2 p-2 align-end'>
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
+          <Button component='a' href='/job-scanner' variant={path === '/job-scanner' ? 'contained' : 'text'} aria-current={path === '/job-scanner' ? 'page' : undefined}>Job Scanner</Button>
           <JobsButton href={jobsHref} path={path} />
           <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
         </div>
@@ -1364,7 +1365,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         </main>
       ) : (
         <div key={`${user.id}:${selected}`}>
-          {!isLocal && !onboardingComplete && (path === '/jobs' || path.startsWith('/jobs/')) ? (
+          {!isLocal && !onboardingComplete && (path === '/job-scanner' || path === '/jobs' || path.startsWith('/jobs/')) ? (
             <main className='app-page'>
               <h1>Complete setup</h1>
               <p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p>

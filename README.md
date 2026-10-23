@@ -13,7 +13,7 @@ The user-facing setup documentation is available in the running app at
 
 ## Local development
 
-Requires Node.js 22 or newer.
+Requires Node.js 24.22.1. Use `nvm install && nvm use` with the checked-in `.nvmrc`.
 
 1. Copy `.env.example` to `.env` and enter credentials from the same ServiceTitan environment.
 2. Ensure the ServiceTitan app has read access to **Jobs**, **Job Types**, **Locations**, and **Settings → Tag Types**. Assigned job tags are resolved to names and included as classification context when generating project copy.
@@ -161,6 +161,8 @@ Deploy this directory as a Node.js application and configure these environment v
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional; defaults to `gpt-6-luna`)
 - `ZIP_LOOKUP_API_URL` (optional; defaults to `https://api.zippopotam.us`)
+
+The checked-in `nixpacks.toml` installs checksum-verified Node.js 24.22.1 before dependencies/build and starts the app with that exact binary. Its custom runtime phase avoids relying on the Nixpacks package snapshot for patch availability. Do not override this with a start command pointing at an older system Node binary. Rebuild/redeploy to apply the runtime upgrade.
 
 Use `npm run build` as the build command and `npm start` as the start command. Do not set `PORT`; Sevalla supplies it to the web process.
 
@@ -344,3 +346,19 @@ Enrichment is optional: missing access, empty results, and provider failures pre
 Cost bounds: full invoice enrichment is fetched only on details/generation/build, up to five pages of 20; per-job results are cached five minutes (100 jobs per provider). Completed forms are indexed in a shared workspace/integration/credential-scoped cache for five minutes, limited to three pages of 50 submissions in a 30-day window and ten cached integrations. Only explicit Job owners, completed submissions, and named Text/Checkbox answers are used; the latest sampled completed submission per form/job wins. Form coverage is explicitly partial, and older submissions may be absent. Attachments, OCR, and photos are excluded from form enrichment. Optional enrichment contributes at most 12,000 text characters to a prompt.
 
 The jobs list prefers a sanitized invoice-summary excerpt, then Summary of Work, job summary, and finally job type. Canonical invoice IDs from the jobs response are fetched in one optional batch per page (up to 50), with strict invoice/job association checks and a five-minute preview cache. No forms or full per-job enrichment runs for list labels. Missing invoice IDs, denied access, and empty summaries preserve the existing fallback labels. Long excerpts wrap within the Job column; the original job-type label remains underneath.
+
+### Job Scanner
+
+Open **Job Scanner** (`/job-scanner`) in the workspace navigation. Starting a scan authorizes **1 token for scanning plus 1 token per draft build**, up to six total. Completed jobs are traversed newest-first by ServiceTitan creation date; the API does not support the completion-date sort we tested. Jobs already present in WordPress or whose status cannot be verified are skipped. Jobs need image metadata and at least 120 characters of source narrative before AI rating. The AI scores factual local-service content readiness (0–100), rather than promising search rankings.
+
+The scanner stops at ten candidates scoring at least 70, source exhaustion, or safety limits (500 jobs, 40 ratings, about ten minutes before draft creation). It ranks the qualified candidates and sends up to five to the existing durable build queue. Each build rechecks current membership/credentials and existing WordPress posts, verifies an image, generates copy, and writes only a draft. Review the results and use **Publish draft** explicitly; publishing remains free. If the balance is insufficient or a provider fails, fewer drafts may be produced. The page shows per-draft failures; uncertain WordPress outcomes still follow the existing charged-reservation/manual-reconciliation rules.
+
+SaaS requires migration `013_job_scanner.sql` **before deploying this server**. Apply it with the migration-owner connection. If using a separate runtime role, grant (substitute the actual role):
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON job_scanner_tasks TO st_jobs_app;
+```
+
+Scanner tasks and ratings survive restarts. Active scans are deduplicated per workspace/website; request IDs and token reservations prevent repeat scan charges. A lost worker heartbeat marks the interrupted scan failed for manual review, instead of repeating work or writes. Queued builds can continue even if a scan is interrupted after enqueueing; check the displayed jobs/WordPress before retrying. Scoring failures before draft enqueueing are refunded; a completed scan with zero candidates still costs one scan token. The scanner uses one worker per process and checks its queue every 30 seconds while idle. The page polls only while work is active and pauses network polling in hidden tabs. Local mode stores scans in `.data/job-scanner.json` and must use a single process per file, as with local builds; local mode does not charge app tokens.
+
+Full source records are not stored in scanner task payloads: only IDs, bounded titles, ratings/reasons, progress and build references. Existing enrichment cache and source limits apply. Scan history currently remains until operator cleanup; preserve ledger and idempotency history when setting retention policies.

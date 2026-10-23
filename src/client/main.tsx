@@ -4,6 +4,7 @@ import { Button, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { Workspace } from './Workspace';
 
 import { App } from './App';
+import { JobScanner } from './JobScanner';
 import { JobDetails } from './JobDetails';
 import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
@@ -31,6 +32,8 @@ const page = helpTopicMatch
     ? <WelcomePage />
   : path === '/invite'
     ? <WelcomePage />
+  : path === '/job-scanner'
+    ? <JobScanner />
   : jobDetailsMatch
       ? <JobDetails jobId={Number(jobDetailsMatch[1])} />
       : path === '/jobs'

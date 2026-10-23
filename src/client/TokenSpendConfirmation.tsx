@@ -65,7 +65,7 @@ export function useTokenSpendConfirmation() {
     onCancel={(event) => { event.preventDefault(); finish(false); }}
   >
     <h2 id={titleId}>{pending ? TOKEN_ACTIONS[pending.action].label : 'Confirm token spend'}</h2>
-    <p id={descriptionId}>This will cost {pending ? TOKEN_ACTIONS[pending.action].cost : 1} token{pending && TOKEN_ACTIONS[pending.action].cost === 1 ? '' : 's'}. Continue?</p>
+    <p id={descriptionId}>{pending?.action === 'job_scan' ? 'Scanning costs 1 token. You also authorize up to 5 drafts at 1 token each (up to 6 total). Continue?' : <>This will cost {pending ? TOKEN_ACTIONS[pending.action].cost : 1} token{pending && TOKEN_ACTIONS[pending.action].cost === 1 ? '' : 's'}. Continue?</>}</p>
     <label className="token-spend-preference">
       <Checkbox checked={dontShowAgain} onChange={(event) => setDontShowAgain(event.target.checked)} />
       <span>Don’t show this again for this action</span>

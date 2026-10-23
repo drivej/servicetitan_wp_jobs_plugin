@@ -6,6 +6,7 @@ import { DisabledWordPressClient, WordPressClient } from '../wordpress.js';
 import { ZippopotamClient } from '../zip-lookup.js';
 import { publicFetch } from './public-fetch.js';
 import type { BuildQueueStore, BuildScope } from '../build-queue.js';
+import { scannerApi, type ScannerStore } from '../job-scanner.js';
 import type { BuildProviders } from '../build-deploy.js';
 import type { AccountStore, WebsiteContext } from './store.js';
 import { HttpError } from './validation.js';
@@ -16,7 +17,7 @@ export function minimizeJobDetails(details: JobDetails): JobDetails {
   const { id, jobNumber, locationId, jobTypeId, jobStatus } = details.job;
   return { ...details, job: { id, jobNumber, locationId, jobTypeId, jobStatus }, summary: { ...details.summary, location } };
 }
-export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator(), queue?: BuildQueueStore): WebsiteAppFactory {
+export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator(), queue?: BuildQueueStore, scannerStore?: ScannerStore): WebsiteAppFactory {
   const apps = new Map<string, { app: Express; expiresAt: number }>();
   return (userId, context) => {
     const { website, connection, workspaceId } = context;
@@ -25,7 +26,7 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
     const existing = apps.get(key);
     if (existing) return existing.app;
     const scope: BuildScope = { userId, workspaceId, websiteId: website.id };
-    const app = createApp({ ...websiteBuildProviders(store, copyGenerator, userId, context), apiPrefix: '',
+    const app = createApp({ ...(scannerStore && queue ? { scanner: scannerApi(scope,scannerStore,queue) } : {}), ...websiteBuildProviders(store, copyGenerator, userId, context), apiPrefix: '',
       ...(queue ? { buildQueue: { enqueue: (jobId: number) => queue.enqueue(scope, jobId), list: (jobIds: number[]) => queue.list(scope, jobIds) } } : {}),
     });
     if (apps.size >= 100) apps.delete(apps.keys().next().value!);
@@ -41,6 +42,7 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
   });
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
   return { companyWebsiteUrl: website.url, serviceTitan: {
+    getScannerJobs: (page) => serviceTitan.getScannerJobs(page),
     getJobs: (query) => serviceTitan.getJobs(query),
     getJobImageCandidates: (id) => serviceTitan.getJobImageCandidates(id),
     getJob: async (id) => (await getJobDetails(id)).summary,
