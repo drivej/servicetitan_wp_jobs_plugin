@@ -1,3 +1,4 @@
+import { ownershipConflict, type WebsiteIdentity } from './website-identity.js';
 import { postTokenTransaction } from './token-ledger.js';
 import { TOKEN_ACTIONS, type TokenAction } from '../../shared/token-actions.js';
 import { TokenOperationSafeFailure } from '../token-operation.js';
@@ -11,7 +12,7 @@ export type Role = 'owner' | 'admin' | 'member';
 const allRoles: Role[] = ['owner','admin','member'];
 export interface User { workspaceId: string; workspaceName: string; role: Role; id: string; email: string; name: string; avatarUrl: string | null; jobTokens: number; isPlatformAdmin?: boolean; }
 export interface Connection { id: string; name: string; environment: 'integration' | 'production'; tenantId: string; version: number; }
-export interface Website { id: string; name: string; url: string; connectionId: string | null; restBase: string; zipAcfField: string; wordpressConfigured: boolean; wordpressUsername?: string | null; version: number; }
+export interface Website { id: string; name: string; url: string; connectionId: string | null; restBase: string; zipAcfField: string; wordpressConfigured: boolean; wordpressUsername?: string | null; version: number; installationId?: string | undefined; canonicalUrl?: string | undefined; ownershipVerified?: boolean; ownershipClaimed?: boolean; }
 export interface WebsiteContext {
   workspaceId: string;
   website: Website;
@@ -20,7 +21,7 @@ export interface WebsiteContext {
 }
 const userFrom = (row: Record<string, unknown>): User => ({ id: String(row.id), email: String(row.email), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, jobTokens: Number(row.job_tokens), isPlatformAdmin: row.is_platform_admin === true, workspaceId: String(row.workspace_id), workspaceName: String(row.workspace_name), role: row.role as Role });
 const connectionFrom = (row: Record<string, unknown>): Connection => ({ id: String(row.id), name: String(row.name), environment: row.environment as Connection['environment'], tenantId: String(row.tenant_id), version: Number(row.version) });
-const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: row.connection_id == null ? null : String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), version: Number(row.version) });
+const websiteFrom = (row: Record<string, unknown>): Website => ({ id: String(row.id), name: String(row.name), url: String(row.url), connectionId: row.connection_id == null ? null : String(row.connection_id), restBase: String(row.rest_base), zipAcfField: String(row.zip_acf_field), wordpressConfigured: Boolean(row.wordpress_credentials), installationId: row.installation_id ? String(row.installation_id) : undefined, canonicalUrl: row.canonical_url ? String(row.canonical_url) : undefined, ownershipClaimed: !!row.installation_id, ownershipVerified: !!row.installation_id && row.ownership_verified_version === row.version, version: Number(row.version) });
 const audit = async (sql: Sql, userId: string, action: string, target: string, jobId?: number): Promise<void> => {
   await sql.query("INSERT INTO audit_logs(id, user_id, action, target_id, job_id, workspace_id) VALUES ($1,$2,$3,$4,$5,nullif(current_setting('app.workspace_id',true),'')::uuid)", [randomUUID(), userId, action, target, jobId ?? null]);
 };
@@ -243,7 +244,8 @@ export class AccountStore {
       const credentials = row.wordpress_credentials
         ? this.vault.decrypt<NonNullable<WebsiteContext['wordpress']>>(String(row.wordpress_credentials), `website:${workspaceId}:${row.id}`)
         : undefined;
-      return { ...websiteFrom(row), wordpressUsername: credentials?.username ?? null };
+      const { installationId: _identity, canonicalUrl: _canonical, ...website } = websiteFrom(row);
+      return { ...website, wordpressUsername: credentials?.username ?? null };
     }));
   }
   async saveWebsite(userId: string, input: WebsiteInput, id: string = randomUUID(), update = false, workspaceId = userId): Promise<Website> {
@@ -252,7 +254,7 @@ export class AccountStore {
       if (update) {
         previous = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2 FOR UPDATE', [workspaceId, id])).rows[0];
         if (!previous) throw new HttpError('Website not found.', 404);
-        if (previous.url !== input.url) throw new HttpError('Create a new website to change its URL.');
+        if (previous.url !== input.url && previous.installation_id) throw new HttpError('This website address is owned. Contact support for a reviewed migration.');
       } else {
         const existing = (await sql.query('SELECT id FROM websites WHERE workspace_id=$1 LIMIT 1', [workspaceId])).rows[0];
         if (existing) throw new HttpError('This workspace already has a website. Update the existing website in Settings.');
@@ -263,7 +265,7 @@ export class AccountStore {
       }
       const encrypted = input.wordpress ? this.vault.encrypt(input.wordpress, `website:${workspaceId}:${id}`) : previous?.wordpress_credentials || null;
       const row = (update
-        ? await sql.query('UPDATE websites SET name=$3,connection_id=coalesce($7,connection_id),wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField, input.connectionId || null])
+        ? await sql.query('UPDATE websites SET name=$3,connection_id=coalesce($7,connection_id),wordpress_credentials=$4,rest_base=$5,zip_acf_field=$6,validated_at=NULL,plugin_validated_at=NULL,url=$8,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING *', [workspaceId, id, input.name, encrypted, input.restBase, input.zipAcfField, input.connectionId || null, input.url])
         : await sql.query('INSERT INTO websites(id,workspace_id,connection_id,name,url,wordpress_credentials,rest_base,zip_acf_field) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *', [id, workspaceId, input.connectionId || null, input.name, input.url, encrypted, input.restBase, input.zipAcfField])).rows[0]!;
       if (update) await sql.query('UPDATE workspaces SET onboarding_step=1 WHERE id=$1', [workspaceId]);
       await audit(sql, userId, update ? 'website.updated' : 'website.created', id);
@@ -311,12 +313,49 @@ export class AccountStore {
       return { pluginReady: row.plugin_ready === true, websiteReady: row.website_ready === true, serviceTitanReady: row.st_ready === true, onboardingStep: Number(row.onboarding_step) || 1 };
     });
   }
-  async markWebsiteValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
-    await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {
-      const result = await sql.query('UPDATE websites SET validated_at=now() WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL RETURNING id', [workspaceId, id]);
-      if (result.rows.length !== 1) throw new HttpError('Website credentials are missing.', 400);
-      await sql.query('UPDATE workspaces SET onboarding_step=GREATEST(onboarding_step,2) WHERE id=$1', [workspaceId]);
+  async markWebsiteValidated(userId: string, id: string, workspaceId = userId, identity?: WebsiteIdentity, version?: number): Promise<void> {
+    if (!identity || version === undefined) throw new HttpError('Verify website ownership first.', 409);
+    try {
+      await this.workspaceTransaction(userId, workspaceId, ['owner','admin'], async (sql) => {
+        const site = (await sql.query('SELECT * FROM websites WHERE workspace_id=$1 AND id=$2 FOR UPDATE', [workspaceId,id])).rows[0];
+        if (!site) throw new HttpError('Website not found.',404);
+        if (site.version !== version) throw new HttpError('Website settings changed. Verify again.',409);
+        if (site.installation_id && (site.installation_id !== identity.installationId || site.canonical_url !== identity.canonicalUrl)) {
+          throw new HttpError('Installation identity changed. Contact support for a reviewed migration.',409);
+        }
+        await sql.query(`UPDATE websites SET installation_id=$3,canonical_url=$4,ownership_verified_version=version,validated_at=now()
+          WHERE workspace_id=$1 AND id=$2 AND wordpress_credentials IS NOT NULL`, [workspaceId,id,identity.installationId,identity.canonicalUrl]);
+        if (!site.wordpress_credentials) throw new HttpError('Website credentials are missing.');
+        await sql.query('UPDATE workspaces SET onboarding_step=GREATEST(onboarding_step,2) WHERE id=$1',[workspaceId]);
+        await audit(sql,userId,'website.ownership_verified',id);
+      });
+    } catch (error) {
+      if ((error as {code?: string}).code === '23505') throw ownershipConflict();
+      throw error;
+    }
+  }
+  async assertWebsiteOwnership(userId: string, id: string, workspaceId: string, version: number): Promise<void> {
+    await this.workspaceTransaction(userId,workspaceId,allRoles,async (sql) => {
+      const site = (await sql.query(`SELECT id FROM websites WHERE workspace_id=$1 AND id=$2 AND version=$3
+        AND ownership_verified_version=version AND installation_id IS NOT NULL AND validated_at IS NOT NULL`,[workspaceId,id,version])).rows[0];
+      if (!site) throw new HttpError('Verify website ownership in Settings before publishing.',409,'website_ownership_required');
     });
+  }
+  async requestWebsiteOwnership(userId: string, id: string, workspaceId: string, identity: WebsiteIdentity, version: number, kind: string, message: string): Promise<void> {
+    await this.workspaceTransaction(userId,workspaceId,['owner','admin'],async(sql) => {
+      const site = (await sql.query('SELECT id FROM websites WHERE workspace_id=$1 AND id=$2 AND version=$3',[workspaceId,id,version])).rows[0];
+      if (!site) throw new HttpError('Website settings changed. Try again.',409);
+      await sql.query(`INSERT INTO website_ownership_requests(id,requester_id,requester_workspace_id,installation_id,canonical_url,kind,message)
+        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(requester_workspace_id,installation_id,kind) DO NOTHING`,[randomUUID(),userId,workspaceId,identity.installationId,identity.canonicalUrl,kind,message]);
+      await audit(sql,userId,`website.${kind}_requested`,id);
+    });
+  }
+  async ownershipRequests(userId: string, workspaceId: string) {
+    return this.workspaceTransaction(userId,workspaceId,['owner','admin'],async(sql) => (await sql.query(`SELECT r.id,r.kind,r.canonical_url AS url,r.message,r.created_at,u.email AS requester_email
+      FROM website_ownership_requests r JOIN users u ON u.id=r.requester_id
+      WHERE (r.kind='access' AND EXISTS(SELECT 1 FROM websites w WHERE w.workspace_id=$1 AND (w.installation_id=r.installation_id OR w.canonical_url=r.canonical_url)))
+      OR EXISTS(SELECT 1 FROM platform_administrators a WHERE a.user_id=$2)
+      ORDER BY r.created_at DESC`,[workspaceId,userId])).rows);
   }
   async markPluginValidated(userId: string, id: string, workspaceId = userId): Promise<void> {
     await this.workspaceTransaction(userId, workspaceId, allRoles, async (sql) => {

@@ -1,3 +1,4 @@
+import { verifyWebsiteIdentity } from './website-identity.js';
 import { TokenAccounts } from './token-accounts.js';
 import { PlatformMembers } from './platform-members.js';
 import { BillingService } from './billing.js';
@@ -12,7 +13,7 @@ import { AccountStore, type User } from './store.js';
 import { ServiceTitanClient } from '../service-titan.js';
 import { WordPressClient } from '../wordpress.js';
 import { WordPressRequestError } from '../wordpress-error.js';
-import { connectionInput, HttpError, uuid, websiteInput, websiteUrl } from './validation.js';
+import { connectionInput, HttpError, record, textField, uuid, websiteInput, websiteUrl } from './validation.js';
 import { publicFetch } from './public-fetch.js';
 
 export const sessionCookieName = (secure: boolean): string => secure ? '__Host-st_session' : 'st_session';
@@ -47,11 +48,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     res.json({
       name: 'Job Showcase for ServiceTitan',
       slug: 'servicetitan-job-integration',
-      version: '1.20.2',
+      version: '1.20.3',
       requires: '6.5',
       tested: '6.8',
       requires_php: '7.4',
-      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.2.zip`,
+      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.3.zip`,
       homepage: config.origin,
       sections: { description: 'Publishes recent project posts from ServiceTitan to WordPress.' },
     });
@@ -224,7 +225,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       }
       const body = await response.json() as { plugin?: string; version?: string; postType?: string };
       const version = body.version?.split('.').map(Number);
-      const compatible = body.plugin === 'servicetitan-job-integration' && version?.length === 3 && version.every(Number.isFinite) && (version[0]! > 1 || version[0] === 1 && (version[1]! > 18 || version[1] === 18 && version[2]! >= 1));
+      const compatible = body.plugin === 'servicetitan-job-integration' && version?.length === 3 && version.every(Number.isFinite) && (version[0]! > 1 || version[0] === 1 && (version[1]! > 20 || version[1] === 20 && version[2]! >= 3));
       if (!compatible) { res.status(422).json({ service: 'wordpress-plugin', error: 'The companion plugin is missing, too old, or returned an invalid status. Install the latest plugin and test again.', helpUrl: '/wordpress-plugin' }); return; }
       try {
         await store.markPluginValidated(user.id, websiteId, user.workspaceId);
@@ -248,7 +249,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       if (!await store.allowRequest(`settings-test-attempt:${cooldownKey}`, 5, 60)) { res.status(429).json({ error: 'Too many checks for these settings. Wait a minute before trying again.' }); return; }
       if (await store.testCooldownActive(cooldownKey)) { res.status(429).json({ error: 'This check was completed recently. Change and save the settings to test again, or wait 30 seconds.' }); return; }
       if (!context.wordpress) { res.status(422).json({ service: 'wordpress', code: 'credentials', error: 'WordPress credentials are missing.', helpUrl: '/help/wordpress-credentials' }); return; }
-      const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField });
+      const wordpress = new WordPressClient({ ...context.wordpress, collectionUrl: `${context.website.url}/wp-json/wp/v2/${context.website.restBase}`, postStatus: 'draft', zipAcfFieldName: context.website.zipAcfField }, publicFetch);
       try { await wordpress.validateAccess(); }
       catch (error) {
         const message = error instanceof Error ? error.message : 'WordPress REST API validation failed.';
@@ -256,7 +257,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
         const code = status === 401 ? 'credentials' : status === 403 ? 'permissions' : status === 404 ? 'rest-api' : 'reachability';
         res.status(422).json({ service: 'wordpress', code, error: message, helpUrl: `/help/wordpress-${code}` }); return;
       }
-      await store.markWebsiteValidated(user.id, websiteId, user.workspaceId);
+      const identity = await verifyWebsiteIdentity(context.website.url, context.wordpress);
+      await store.markWebsiteValidated(user.id, websiteId, user.workspaceId, identity, context.website.version);
       await store.startTestCooldown(cooldownKey, 30);
       res.json({ valid: true, service: 'wordpress' });
     } catch (error) { next(error); }
@@ -445,6 +447,25 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     try { res.json({ websites: await store.listWebsites((res.locals.user as User).id, (res.locals.user as User).workspaceId) }); }
     catch (error) { next(error); }
   });
+  app.get('/api/website-ownership/requests', async (_req,res,next) => {
+    try { const user=res.locals.user as User; res.json({ requests: await store.ownershipRequests(user.id,user.workspaceId) }); }
+    catch(error) { next(error); }
+  });
+  app.post('/api/website-ownership/requests', async (req,res,next) => {
+    try {
+      const user=res.locals.user as User;
+      if (!['owner','admin'].includes(user.role)) throw new HttpError('Administrator access required.',403);
+      const input=record(req.body,['websiteId','kind','message']);
+      if (input.kind !== 'access' && input.kind !== 'dispute') throw new HttpError('Choose access or dispute.');
+      const message=textField(input.message,'Request details',2000);
+      const id=uuid(input.websiteId);
+      const context=await store.websiteWordPressContext(user.id,id,user.workspaceId);
+      if (!context.wordpress) throw new HttpError('Save administrator credentials first.',422);
+      const identity=await verifyWebsiteIdentity(context.website.url,context.wordpress);
+      await store.requestWebsiteOwnership(user.id,id,user.workspaceId,identity,context.website.version,input.kind,message);
+      res.status(202).json({ message: input.kind === 'access' ? 'Access request recorded. The workspace administrator can review it in Team settings and invite you.' : 'Ownership dispute recorded for platform review. Access remains unchanged.' });
+    } catch(error) { next(error); }
+  });
   app.post('/api/websites', async (req, res, next) => {
     try { res.status(201).json(await store.saveWebsite((res.locals.user as User).id, websiteInput(req.body), undefined, false, (res.locals.user as User).workspaceId)); }
     catch (error) {
@@ -516,9 +537,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     } catch (error) { next(error); }
   });
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
-  app.get('/downloads/job-showcase-for-servicetitan-1.20.2.zip', (_req, res, next) => {
+  app.get('/downloads/job-showcase-for-servicetitan-1.20.3.zip', (_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
-    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.2.zip'), (error) => { if (error && !res.headersSent) next(error); });
+    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.3.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));
@@ -526,7 +547,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   }
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
     if (res.headersSent) return;
-    if (error instanceof HttpError) { res.status(error.status).json({ error: error.message }); return; }
+    if (error instanceof HttpError) { res.status(error.status).json({ error: error.message, ...(error.code ? { code: error.code } : {}) }); return; }
     const code = (error as { code?: string }).code;
     if (code === '23505') { res.status(409).json({ error: 'That connection or website already exists.' }); return; }
     if (code === '23503') { res.status(400).json({ error: 'The selected connection is not available.' }); return; }

@@ -72,7 +72,7 @@ async function fixture(beforeWorkspaceMigration?: (sql: Sql) => Promise<void>) {
       finally { release(); }
     },
   };
-  return { db, sql, store: new AccountStore(db, vault), async close() {
+  return { db, sql, schema, role, store: new AccountStore(db, vault), async close() {
     if (pool) {
       await sql.query(`DROP SCHEMA ${schema} CASCADE; DROP ROLE ${role}`);
       await pool.end();
@@ -122,7 +122,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 11);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 14);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -173,7 +173,10 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
       assert.equal((await f.store.websiteContext(alice.user.id, site.id)).connection.clientSecret, 'production-secret');
       assert.throws(() => connectionInput({ ...source, clientSecret: '' }), /Client secret/);
       await assert.rejects(f.store.saveConnection(alice.user.id, { ...source, tenantId: '999' }, connection.id, true), /new connection/);
-      await assert.rejects(f.store.saveWebsite(alice.user.id, { ...siteInput(connection.id), url: 'https://changed.example.com' }, site.id, true), /new website/);
+      const corrected = await f.store.saveWebsite(alice.user.id, { ...siteInput(connection.id), url: 'https://changed.example.com' }, site.id, true);
+      assert.equal(corrected.url,'https://changed.example.com');
+      assert.equal(corrected.ownershipClaimed,false);
+      await f.store.saveWebsite(alice.user.id,siteInput(connection.id),site.id,true);
     });
     await t.test('OAuth attempts are bound to browser, expire and can only be consumed once', async () => {
       const state = randomToken(), browser = randomToken();
@@ -423,6 +426,8 @@ test('workspace migration preserves existing sessions, balances, resources, encr
     const context = await f.store.websiteContext(ownerId,siteId,ownerId);
     assert.equal(context.connection.clientSecret,source.clientSecret);
     assert.equal(context.wordpress!.applicationPassword,'kept-secret');
+    assert.equal(context.website.ownershipVerified,false);
+    await assert.rejects(f.store.assertWebsiteOwnership(ownerId,siteId,ownerId,context.website.version),/Verify website ownership/);
     assert.equal((await f.store.listWebsites(ownerId))[0]!.id,siteId);
     const oldAudit = (await f.sql.query("SELECT * FROM audit_logs WHERE action='website.created'")).rows[0]!;
     assert.equal(oldAudit.workspace_id,ownerId);
@@ -877,4 +882,140 @@ test('enable-member HTTP endpoint requires superadmin session and CSRF',async()=
     const login=await f.store.login({subject:'enable-target',email:'enable-target@example.com',name:'Target'});
     assert(login.user.id===target.user.id);
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await f.close();}
+});
+
+test('website ownership claims are atomic, private, version-bound, and survive credential edits', async () => {
+  const f=await fixture();
+  try {
+    const alice=await f.store.login({subject:'ownership-alice',email:'alice@example.com',name:'Alice'});
+    const bob=await f.store.login({subject:'ownership-bob',email:'bob@example.com',name:'Bob'});
+    const ac=await f.store.saveConnection(alice.user.id,source);
+    const bc=await f.store.saveConnection(bob.user.id,source);
+    const a=await f.store.saveWebsite(alice.user.id,siteInput(ac.id));
+    const b=await f.store.saveWebsite(bob.user.id,{...siteInput(bc.id),url:'https://www.example.com'});
+    await assert.rejects(f.store.assertWebsiteOwnership(alice.user.id,a.id,alice.user.id,a.version),/Verify website ownership/);
+    const identity={installationId:randomUUID(),canonicalUrl:'https://example.com'};
+    const claims=await Promise.allSettled([
+      f.store.markWebsiteValidated(alice.user.id,a.id,alice.user.id,identity,a.version),
+      f.store.markWebsiteValidated(bob.user.id,b.id,bob.user.id,identity,b.version),
+    ]);
+    assert.equal(claims.filter(result=>result.status==='fulfilled').length,1);
+    const failure=claims.find(result=>result.status==='rejected') as PromiseRejectedResult;
+    assert.equal(failure.reason.status,409);
+    assert.equal(failure.reason.code,'website_already_connected');
+    assert(!failure.reason.message.includes('alice@example.com'));
+    await f.store.assertWebsiteOwnership(alice.user.id,a.id,alice.user.id,a.version);
+    await assert.rejects(f.store.assertWebsiteOwnership(bob.user.id,a.id,bob.user.id,a.version),/Verify website ownership/);
+    // New plugin UUIDs cannot reclaim an already owned canonical address.
+    await assert.rejects(f.store.markWebsiteValidated(bob.user.id,b.id,bob.user.id,{...identity,installationId:randomUUID()},b.version),/Website already connected/);
+    await f.store.requestWebsiteOwnership(bob.user.id,b.id,bob.user.id,identity,b.version,'access','I work with this team.');
+    await f.store.requestWebsiteOwnership(bob.user.id,b.id,bob.user.id,identity,b.version,'access','Duplicate click.');
+    await f.store.requestWebsiteOwnership(bob.user.id,b.id,bob.user.id,identity,b.version,'dispute','Please review my ownership.');
+    const teammate=await f.store.login({subject:'ownership-member',email:'member@example.com',name:'Member'});
+    const invitation=await f.store.invite(alice.user.id,alice.user.id,teammate.user.email,'member');
+    await f.store.acceptInvitation(teammate.user.id,teammate.token,invitation.token);
+    await f.store.assertWebsiteOwnership(teammate.user.id,a.id,alice.user.id,a.version);
+    await assert.rejects(f.store.markWebsiteValidated(teammate.user.id,a.id,alice.user.id,identity,a.version),/permission/);
+    await assert.rejects(f.store.requestWebsiteOwnership(teammate.user.id,a.id,alice.user.id,identity,a.version,'access','test'),/permission/);
+    await f.store.changeMember(alice.user.id,alice.user.id,teammate.user.id);
+    await assert.rejects(f.store.assertWebsiteOwnership(teammate.user.id,a.id,alice.user.id,a.version),/permission/);
+    const ownerRequests=await f.store.ownershipRequests(alice.user.id,alice.user.id);
+    assert.equal(ownerRequests.length,1);
+    assert.equal(ownerRequests[0]!.requester_email,'bob@example.com');
+    assert.equal((await f.store.ownershipRequests(bob.user.id,bob.user.id)).length,0);
+    const listed=(await f.store.listWebsites(alice.user.id))[0]!;
+    assert.equal(listed.ownershipVerified,true);
+    assert(!('installationId' in listed));
+    await assert.rejects(f.store.saveWebsite(alice.user.id,{...siteInput(ac.id),url:'https://changed.example.com'},a.id,true),/reviewed migration/);
+    const changed=await f.store.saveWebsite(alice.user.id,siteInput(ac.id),a.id,true);
+    await assert.rejects(f.store.assertWebsiteOwnership(alice.user.id,a.id,alice.user.id,changed.version),/Verify website ownership/);
+    await assert.rejects(f.store.markWebsiteValidated(alice.user.id,a.id,alice.user.id,identity,a.version),/settings changed/);
+    await assert.rejects(f.store.markWebsiteValidated(bob.user.id,b.id,bob.user.id,identity,b.version),/Website already connected/);
+    await f.store.markWebsiteValidated(alice.user.id,a.id,alice.user.id,identity,changed.version);
+    await f.store.assertWebsiteOwnership(alice.user.id,a.id,alice.user.id,changed.version);
+    await assert.rejects(f.store.markWebsiteValidated(alice.user.id,a.id,alice.user.id,{...identity,installationId:randomUUID()},changed.version),/identity changed/);
+  } finally { await f.close(); }
+});
+
+test('ownership request HTTP endpoints enforce sessions, CSRF, workspace scoping, and owner privacy',async()=>{
+  const f=await fixture();
+  let server:ReturnType<ReturnType<typeof createSaaSApp>['listen']> | undefined;
+  try {
+    const owner=await f.store.login({subject:'request-owner',email:'private-owner@example.com',name:'Private Owner'});
+    const requester=await f.store.login({subject:'request-outsider',email:'requester@example.com',name:'Requester'});
+    const oc=await f.store.saveConnection(owner.user.id,source);
+    const rc=await f.store.saveConnection(requester.user.id,source);
+    const ownSite=await f.store.saveWebsite(owner.user.id,siteInput(oc.id));
+    const requestSite=await f.store.saveWebsite(requester.user.id,siteInput(rc.id));
+    const identity={installationId:randomUUID(),canonicalUrl:'https://example.com'};
+    await f.store.markWebsiteValidated(owner.user.id,ownSite.id,owner.user.id,identity,ownSite.version);
+    await f.store.requestWebsiteOwnership(requester.user.id,requestSite.id,requester.user.id,identity,requestSite.version,'access','Please invite me.');
+    const config:SaaSConfig={databaseUrl:'unused',origin:'http://localhost:3000',googleClientId:'test',googleClientSecret:'test',secureCookies:false,trustProxyHops:0,vault};
+    const app=createSaaSApp({config,store:f.store,google:{authorization:async()=>'',exchange:async()=>{throw new Error('unused');}},websiteApp:()=>express()});
+    server=app.listen(0,'127.0.0.1');
+    await new Promise<void>(done=>server!.once('listening',done));
+    const address=server.address();assert(address&&typeof address==='object');
+    const base=`http://127.0.0.1:${address.port}/api/website-ownership/requests`;
+    const headers=(token:string)=>({Cookie:`st_session=${token}`,Origin:config.origin,'X-CSRF-Token':csrfToken(token),'Content-Type':'application/json'});
+    assert.equal((await fetch(base)).status,401);
+    const ownerResponse=await fetch(base,{headers:headers(owner.token)});
+    assert.equal(ownerResponse.status,200);
+    assert.equal((await ownerResponse.json()).requests[0].requester_email,'requester@example.com');
+    const privateResponse=await fetch(base,{headers:headers(requester.token)});
+    const privateBody=await privateResponse.text();
+    assert(!privateBody.includes('private-owner'));assert.deepEqual(JSON.parse(privateBody),{requests:[]});
+    const body=JSON.stringify({websiteId:ownSite.id,kind:'access',message:'test'});
+    assert.equal((await fetch(base,{method:'POST',headers:headers(requester.token),body})).status,404);
+    assert.equal((await fetch(base,{method:'POST',headers:{...headers(requester.token),'X-CSRF-Token':'forged'},body})).status,403);
+    assert.equal((await fetch(base,{method:'POST',headers:headers(requester.token),body:JSON.stringify({websiteId:requestSite.id,kind:'transfer',message:'test'})})).status,400);
+  } finally {
+    if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}
+    await f.close();
+  }
+});
+
+// CI can exercise actual blocking unique-index conflicts using two PostgreSQL connections.
+test('concurrent PostgreSQL sessions cannot claim the same installation', {skip:!process.env.TEST_DATABASE_URL}, async()=>{
+  const f=await fixture();
+  const clients=[new pg.Client({connectionString:process.env.TEST_DATABASE_URL}),new pg.Client({connectionString:process.env.TEST_DATABASE_URL})];
+  try {
+    const a=await f.store.login({subject:'concurrent-a',email:'a@example.com',name:'A'});
+    const b=await f.store.login({subject:'concurrent-b',email:'b@example.com',name:'B'});
+    const ac=await f.store.saveConnection(a.user.id,source);
+    const bc=await f.store.saveConnection(b.user.id,source);
+    const asite=await f.store.saveWebsite(a.user.id,siteInput(ac.id));
+    const bsite=await f.store.saveWebsite(b.user.id,{...siteInput(bc.id),url:'https://www.example.com'});
+    await Promise.all(clients.map(client=>client.connect()));
+    let arrivals=0;let release!:()=>void;
+    const barrier=new Promise<void>((done,fail)=>{
+      const timeout=setTimeout(()=>fail(new Error('Concurrent claims did not reach the write barrier.')),10_000);
+      timeout.unref();
+      release=()=>{clearTimeout(timeout);done();};
+    });
+    const stores=clients.map(client=>new AccountStore({
+      async transaction<T>(userId:string|undefined,action:(sql:Sql)=>Promise<T>):Promise<T>{
+        await client.query(`BEGIN; SET LOCAL ROLE ${f.role}; SET LOCAL search_path TO ${f.schema};`);
+        try {
+          await client.query("SELECT set_config('app.user_id',$1,true)",[userId||'']);
+          const sql:Sql={async query(query,values){
+            if(query.includes('UPDATE websites SET installation_id')){
+              if(++arrivals===2) release();
+              await barrier;
+            }
+            return client.query(query,values);
+          }};
+          const result=await action(sql);await client.query('COMMIT');return result;
+        } catch(error){await client.query('ROLLBACK');throw error;}
+      },
+    },vault));
+    const identity={installationId:randomUUID(),canonicalUrl:'https://example.com'};
+    const results=await Promise.allSettled([
+      stores[0]!.markWebsiteValidated(a.user.id,asite.id,a.user.id,identity,asite.version),
+      stores[1]!.markWebsiteValidated(b.user.id,bsite.id,b.user.id,identity,bsite.version),
+    ]);
+    assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+    const loser=results.find(result=>result.status==='rejected') as PromiseRejectedResult;
+    assert.equal(loser.reason.code,'website_already_connected');
+    assert.equal((await f.sql.query('SELECT id FROM websites WHERE installation_id=$1',[identity.installationId])).rows.length,1);
+  } finally {await Promise.all(clients.map(client=>client.end()));await f.close();}
 });

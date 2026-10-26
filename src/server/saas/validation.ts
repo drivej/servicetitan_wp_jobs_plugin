@@ -1,7 +1,7 @@
 import ipaddr from 'ipaddr.js';
 
 export class HttpError extends Error {
-  constructor(message: string, readonly status = 400) { super(message); }
+  constructor(message: string, readonly status = 400, readonly code?: string) { super(message); }
 }
 export const record = (input: unknown, allowed: string[]): Record<string, unknown> => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError('A JSON object is required.');
@@ -36,6 +36,7 @@ export function websiteUrl(value: unknown): string {
     || (ipaddr.isValid(host) && !publicAddress(host))) {
     throw new HttpError('Enter a public HTTPS website URL without credentials, query parameters, or a custom port.');
   }
+  if (/%(?:2f|5c|00)/i.test(url.pathname) || /\\/.test(String(value))) throw new HttpError('Website URL contains an unsafe path.');
   return url.toString().replace(/\/+$/, '');
 }
 export interface ConnectionInput { name: string; environment: 'integration' | 'production'; tenantId: string; clientId: string; clientSecret: string; appKey: string; }

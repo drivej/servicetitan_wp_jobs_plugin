@@ -57,7 +57,7 @@ test('reports a missing WordPress post with the current SEO version', async () =
 test('detects the installed companion plugin version', async () => {
   const mockFetch: typeof fetch = async (input) => {
     assert.equal(String(input), 'https://wordpress.example/wp-json/servicetitan-job-integration/v1/status');
-    return new Response(JSON.stringify({ version: '1.20.2' }), {
+    return new Response(JSON.stringify({ version: '1.20.3' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -66,8 +66,8 @@ test('detects the installed companion plugin version', async () => {
 
   assert.deepEqual(await client.getPluginStatus(), {
     state: 'current',
-    requiredVersion: '1.20.2',
-    installedVersion: '1.20.2',
+    requiredVersion: '1.20.3',
+    installedVersion: '1.20.3',
     seoGeneratorVersion: SEO_GENERATOR_VERSION,
   });
 });
@@ -77,7 +77,7 @@ test('syncs the configured ACF field and backfills missing ZIP location metadata
   const mockFetch: typeof fetch = async (input, init) => {
     requests.push({ url: String(input), ...(init ? { init } : {}) });
     if (requests.length === 1) {
-      return new Response(JSON.stringify({ version: '1.20.2' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ version: '1.20.3' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (requests.length === 2) {
       return new Response(JSON.stringify({ zipcodes: [
@@ -122,7 +122,7 @@ test('requires an update when the companion plugin status route is missing', asy
   const status = await client.getPluginStatus();
 
   assert.equal(status.state, 'update_required');
-  assert.equal(status.requiredVersion, '1.20.2');
+  assert.equal(status.requiredVersion, '1.20.3');
 });
 
 test('loads multiple correlated post statuses in one plugin request', async () => {

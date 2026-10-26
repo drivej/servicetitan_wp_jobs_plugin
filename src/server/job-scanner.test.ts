@@ -25,7 +25,7 @@ function providers(ids:number[], existing:number[] = []) {
       getJobDetails:async(id)=>({job:{id,jobNumber:String(id),locationId:1,jobTypeId:2,jobStatus:'Completed'},summary:summary(id),history:[],attachments:[{id:'photo',fileName:'work.jpg',contentType:'image/jpeg'}]}),
       getJobImage:async()=>{throw new Error('Scanning must not download original images');},
     },
-    wordpress:{getPluginStatus:async()=>({state:'current',requiredVersion:'1.20.2',seoGeneratorVersion:13}),getStatuses:async(jobIds)=>Object.fromEntries(jobIds.map(id=>[id,existing.includes(id)?{state:'exists',label:'Published'}:{state:'not_found',label:'None'}])),getStatus:async()=>({state:'not_found',label:'None'}),pushJob:async()=>{throw new Error('Only the existing build worker may write drafts');},regenerateJob:async()=>{throw new Error('unused');},updateStatus:async()=>{throw new Error('Scanning must not publish');}},
+    wordpress:{getPluginStatus:async()=>({state:'current',requiredVersion:'1.20.3',seoGeneratorVersion:13}),getStatuses:async(jobIds)=>Object.fromEntries(jobIds.map(id=>[id,existing.includes(id)?{state:'exists',label:'Published'}:{state:'not_found',label:'None'}])),getStatus:async()=>({state:'not_found',label:'None'}),pushJob:async()=>{throw new Error('Only the existing build worker may write drafts');},regenerateJob:async()=>{throw new Error('unused');},updateStatus:async()=>{throw new Error('Scanning must not publish');}},
     copyGenerator:{generate:async()=>{throw new Error('Only build worker generates post copy');}},
     spendJobToken:async(action,operation)=>{charges.push(action);return operation();},
   };

@@ -1,3 +1,4 @@
+import { WebsiteOwnershipRequests } from './WebsiteOwnership';
 import { TextField } from '@mui/material';
 import { MenuItem, Select } from '@mui/material';
 import { Button } from '@mui/material';
@@ -44,6 +45,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     ? `mailto:${invite.email}?subject=${encodeURIComponent('Join my ServiceTitan Jobs workspace')}&body=${encodeURIComponent(`You are invited to join my ServiceTitan Jobs workspace. Sign in with ${invite.email} and accept this invitation within 7 days:\n\n${invite.url}`)}`
     : undefined;
   return <div className="team-settings-layout" id="team">
+    {role !== 'member' && <WebsiteOwnershipRequests workspaceId={workspaceId}/>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     <section className="panel account-panel team-members-panel" aria-labelledby="team-members-heading">

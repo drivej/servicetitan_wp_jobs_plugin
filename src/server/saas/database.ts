@@ -30,6 +30,10 @@ export class PostgresDatabase implements Database {
     if (!result.rows[0] || result.rows[0].rolsuper || result.rows[0].rolbypassrls) {
       throw new Error('DATABASE_URL must use a non-superuser role without BYPASSRLS.');
     }
+    await this.pool.query('SELECT installation_id,canonical_url,ownership_verified_version FROM websites LIMIT 0');
+    const ownershipPermissions=await this.pool.query(`SELECT has_table_privilege(current_user,'website_ownership_requests','SELECT') AND
+      has_table_privilege(current_user,'website_ownership_requests','INSERT') AS ready`);
+    if (!ownershipPermissions.rows[0]?.ready) throw new Error('Website ownership migration or permissions are missing. Run migration 014 and grant SELECT, INSERT on website_ownership_requests.');
     await this.pool.query('SELECT w.job_tokens,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id LIMIT 0');
     await this.pool.query('SELECT workspace_id,amount,balance_after FROM token_transactions LIMIT 0');
     await this.pool.query('SELECT user_id FROM platform_administrators LIMIT 0');
@@ -59,8 +63,11 @@ export class PostgresDatabase implements Database {
       (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
        tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);
     if (ledgerTriggers.rows[0]?.count !== 5) throw new Error('Required token ledger integrity triggers are missing. Run migrations first.');
-    const tables = await this.pool.query("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid IN ('servicetitan_connections'::regclass, 'websites'::regclass, 'audit_logs'::regclass)");
-    if (tables.rows.length !== 3 || tables.rows.some((row) => !row.relrowsecurity || !row.relforcerowsecurity)) {
+    const ownershipIndexes=await this.pool.query(`SELECT count(*)::integer AS count FROM pg_index WHERE
+      indexrelid IN ('websites_installation_owner'::regclass,'websites_canonical_owner'::regclass) AND indisunique AND indisvalid`);
+    if (ownershipIndexes.rows[0]?.count !== 2) throw new Error('Required website ownership unique indexes are missing. Run migration 014.');
+    const tables = await this.pool.query("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid IN ('servicetitan_connections'::regclass, 'websites'::regclass, 'audit_logs'::regclass, 'website_ownership_requests'::regclass)");
+    if (tables.rows.length !== 4 || tables.rows.some((row) => !row.relrowsecurity || !row.relforcerowsecurity)) {
       throw new Error('Required database ownership policies are missing. Run migrations first.');
     }
   }

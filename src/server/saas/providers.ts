@@ -4,6 +4,7 @@ import { DisabledJobCopyGenerator, type JobCopyGenerator } from '../openai.js';
 import { ServiceTitanClient, type JobDetails } from '../service-titan.js';
 import { DisabledWordPressClient, WordPressClient } from '../wordpress.js';
 import { ZippopotamClient } from '../zip-lookup.js';
+import { verifyWebsiteIdentity } from './website-identity.js';
 import { publicFetch } from './public-fetch.js';
 import type { BuildQueueStore, BuildScope } from '../build-queue.js';
 import { scannerApi, type ScannerStore } from '../job-scanner.js';
@@ -35,11 +36,24 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
   };
 }
 
-export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCopyGenerator, userId: string, { website, connection, wordpress, workspaceId }: WebsiteContext): BuildProviders {
+export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCopyGenerator, userId: string, { website, connection, wordpress, workspaceId }: WebsiteContext, fetcher: typeof fetch = publicFetch): BuildProviders {
   const serviceTitan = new ServiceTitanClient({ ...connection, contentScope: `${workspaceId}:${connection.id}:${connection.version}`,
     apiBaseUrl: 'https://api.servicetitan.io',
     authUrl: 'https://auth.servicetitan.io/connect/token',
   });
+  const assertOwned = async () => {
+    await store.assertWebsiteOwnership(userId,website.id,workspaceId,website.version);
+    if (!wordpress || !website.installationId || !website.ownershipVerified) throw new HttpError('Verify website ownership in Settings.',409);
+    const identity=await verifyWebsiteIdentity(website.url,wordpress,fetcher);
+    if (identity.installationId !== website.installationId || identity.canonicalUrl !== website.canonicalUrl) throw new HttpError('Website identity changed. Verify ownership in Settings.',409);
+    // Settings or membership may have changed during the remote check.
+    await store.assertWebsiteOwnership(userId,website.id,workspaceId,website.version);
+  };
+  const ownedFetch: typeof fetch = async (input, init) => {
+    // Re-check cached apps and queued work before each WordPress request.
+    await assertOwned();
+    return fetcher(input,init);
+  };
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
   return { companyWebsiteUrl: website.url, serviceTitan: {
     getScannerJobs: (page) => serviceTitan.getScannerJobs(page),
@@ -49,13 +63,14 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
     getJobDetails,
     getJobImage: (id, attachment) => serviceTitan.getJobImage(id, attachment),
   }, copyGenerator,
-    spendJobToken: (action, operation, jobId, operationId, fingerprint) => {
+    spendJobToken: async (action, operation, jobId, operationId, fingerprint) => {
       if (!operationId) throw new HttpError('A valid Idempotency-Key is required.');
+      if (action !== 'ai_generation') await assertOwned();
       return store.spendJobToken(userId, website.id, action, operation, workspaceId, jobId, operationId, fingerprint);
     },
     wordpress: wordpress ? new WordPressClient({ ...wordpress,
       collectionUrl: `${website.url}/wp-json/wp/v2/${website.restBase}`,
       postStatus: 'draft', zipAcfFieldName: website.zipAcfField,
-    }, publicFetch, new ZippopotamClient({ apiBaseUrl: 'https://api.zippopotam.us' })) : new DisabledWordPressClient(),
+    }, ownedFetch, new ZippopotamClient({ apiBaseUrl: 'https://api.zippopotam.us' })) : new DisabledWordPressClient(),
   };
 }

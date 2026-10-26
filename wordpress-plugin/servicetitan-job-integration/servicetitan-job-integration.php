@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.20.2
+ * Version: 1.20.3
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.20.2');
+define('STJI_VERSION', '1.20.3');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -699,6 +699,11 @@ add_action('admin_notices', 'stji_acf_field_compatibility_notice');
  */
 function stji_register_status_route(): void
 {
+    register_rest_route('servicetitan-job-integration/v1', '/identity', array(
+        'methods' => WP_REST_Server::READABLE,
+        'permission_callback' => static function (): bool { return current_user_can('manage_options'); },
+        'callback' => 'stji_rest_identity',
+    ));
     register_rest_route(
         'servicetitan-job-integration/v1',
         '/status',
@@ -748,6 +753,27 @@ add_action('rest_api_init', 'stji_register_status_route');
 /**
  * Return companion-plugin compatibility information.
  */
+// Per-blog option preserves multisite boundaries. add_option is atomic on first use.
+// Never remove this option on disconnect, plugin deactivation, or uninstall.
+function stji_rest_identity(): WP_REST_Response
+{
+    $id = get_option('stji_installation_id');
+    if (!$id) {
+        if (!add_option('stji_installation_id', wp_generate_uuid4(), '', false)) {
+            // A concurrent request may have inserted the option after our cached miss.
+            wp_cache_delete('notoptions', 'options');
+            wp_cache_delete('stji_installation_id', 'options');
+        }
+        $id = get_option('stji_installation_id');
+    }
+    if (!$id) {
+        return new WP_REST_Response(array('code' => 'stji_identity_unavailable'), 503);
+    }
+    $response = new WP_REST_Response(array('installationId' => $id, 'canonicalUrl' => untrailingslashit(home_url())), 200);
+    $response->header('Cache-Control', 'private, no-store');
+    return $response;
+}
+
 function stji_rest_status(): WP_REST_Response
 {
     return new WP_REST_Response(
