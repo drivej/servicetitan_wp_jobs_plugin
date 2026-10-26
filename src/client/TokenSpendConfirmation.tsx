@@ -79,7 +79,7 @@ export function useTokenSpendConfirmation() {
         ? '1 token for the scan, plus 1 token for each draft built (up to 5). Approving authorizes up to 6 tokens from your account balance.'
         : `Approve spending ${cost} ${cost === 1 ? 'token' : 'tokens'} from your account balance to ${action === 'ai_generation' ? 'generate this copy' : action === 'update' ? 'update this post' : 'build this draft'}.`}</p>
       <div className='token-approval-actions'>
-        <Button type='button' autoFocus className='token-approval-cancel' onClick={() => finish(false)}>Not now</Button>
+        <Button type='button' autoFocus className='token-approval-cancel' onClick={() => finish(false)}>Maybe Later</Button>
         <Button type='button' variant='contained' className='token-approval-confirm' onClick={() => finish(true)}>{copy.approve}<span className='token-approval-arrow' aria-hidden='true'>→</span></Button>
       </div>
       <p className='token-approval-footnote'>Nothing starts until you approve.</p>
