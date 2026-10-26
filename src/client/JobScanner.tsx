@@ -1,10 +1,11 @@
+import { startJobScan } from './scannerApi';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
 import { Button, LinearProgress } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import type { ScannerTask } from '../shared/job-scanner';
 import type { WordPressStatus } from './wordpressStatusCache';
-import { apiFetch, apiUrl } from './api';
+import { apiFetch } from './api';
 import { PageHeader } from './PageHeader';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
@@ -85,13 +86,8 @@ export function JobScanner() {
     if (exhausted) { showTokenError(); return; }
     if (!await confirmTokenSpend('job_scan')) return;
     setBusy(true); setError(''); setStatuses({});
-    const key = `job-scanner-request:${apiUrl('/api/scanner/start')}`;
-    let id: string = window.crypto.randomUUID();
-    try { id = window.sessionStorage.getItem(key) || id; window.sessionStorage.setItem(key,id); } catch { /* One-shot request remains safe while mounted. */ }
     try {
-      const body=await read<{scan:ScannerTask}>(await apiFetch('/api/scanner/start',{method:'POST',headers:{'Idempotency-Key':id}}));
-      setScan(body.scan);
-      try { window.sessionStorage.removeItem(key); } catch { /* Ignore unavailable storage. */ }
+      setScan(await startJobScan());
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to start scan.'); }
     finally {setBusy(false);}
   };
@@ -138,13 +134,6 @@ export function JobScanner() {
             onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void publish(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
         })}</tbody>
       </table></div>
-    </section>}
-    {!!scan?.selected.some(item=>item.build?.state!=='succeeded') && <section className='panel scanner-result' aria-label='Draft progress and failures'>
-      <h2>{isActive?'Preparing more drafts':'Jobs not pushed'}</h2>
-      <ul>{scan.selected.filter(item=>item.build?.state!=='succeeded').map(item=><li key={item.jobId}>
-        <a href={`/jobs/${item.jobId}`}>{item.title} · #{item.jobId}</a> · {item.score}/100 · {item.build?.state==='failed'?'Draft failed':item.build?.state==='running'?'Building draft…':'Draft queued'}
-        {item.build?.error && <p className='notice error'>{item.build.error}</p>}
-      </li>)}</ul>
     </section>}
     {tokenSpendDialog}
   </main>;

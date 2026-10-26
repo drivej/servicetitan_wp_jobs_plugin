@@ -2182,3 +2182,19 @@ td strong {
 }
 
 .scanner-row-rating { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 6px; background: #e9e4f5; color: #563c83; font-size: 12px; font-weight: 700; }
+
+.jobs-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 24px; max-width: none; }
+.jobs-page-header > .eyebrow { grid-column: 1 / -1; }
+.jobs-page-header > .page-title { grid-column: 1; grid-row: 2; }
+.jobs-page-header > .job-scout-toolbar { grid-column: 2; grid-row: 2; margin: 0; text-align: right; }
+.jobs-page-header .job-scout-actions { justify-content: flex-end; }
+@media (max-width: 700px) {
+  .jobs-page-header { grid-template-columns: minmax(0, 1fr); }
+  .jobs-page-header > .job-scout-toolbar { grid-column: 1; grid-row: 3; text-align: left; }
+  .jobs-page-header .job-scout-actions { justify-content: flex-start; }
+}
+.job-scout-actions { display: flex; align-items: center; gap: 8px; }
+.job-scout-actions .job-scout-button { background: #6541a5; color: #fff; border-radius: 12px; padding: 11px 18px; text-transform: none; font-weight: 700; }
+.job-scout-actions .job-scout-button:hover { background: #513187; }
+.job-scout-actions .job-scout-button.Mui-disabled { background: #e5e0ec; color: #776e83; }
+.job-scout-toolbar .field-help { margin: 8px 0 0; }

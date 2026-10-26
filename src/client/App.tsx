@@ -1,5 +1,8 @@
-import { Alert, Button, Pagination, Paper, TextField } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import { startJobScan } from './scannerApi';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Pagination, Paper, TextField } from '@mui/material';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
@@ -60,6 +63,23 @@ export function App() {
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
   const tokensExhausted = useTokensExhausted();
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
+  const [scoutInfoOpen,setScoutInfoOpen] = useState(false);
+  const [scannerBusy,setScannerBusy] = useState(false);
+  const scannerOpening = useRef(false);
+  const runJobScout = async () => {
+    if (scannerOpening.current || !wordpressPluginReady) return;
+    if (tokensExhausted) { showTokenError(); return; }
+    scannerOpening.current=true;
+    try {
+      if (!await confirmTokenSpend('job_scan')) return;
+      setScannerBusy(true);
+      await startJobScan();
+      navigateTo('/job-scanner');
+    } catch(reason) {
+      setActionError({title:'Unable to start AI Job Scout',message:reason instanceof Error?reason.message:'Please try again.'});
+    } finally {scannerOpening.current=false;setScannerBusy(false);}
+  };
+
 
   useEffect(() => {
     const controller = new AbortController();
@@ -331,7 +351,24 @@ export function App() {
   return (
     <main className='app-page'>
       <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
-      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' />
+      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' className='jobs-page-header' actions={<div className='job-scout-toolbar'>
+        <div className='job-scout-actions'>
+          <Button variant='contained' className='job-scout-button' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>} disabled={scannerBusy || !wordpressPluginReady} onClick={()=>void runJobScout()}>{scannerBusy?'Starting AI Job Scout…':'Find My Next Great Posts'}</Button>
+          <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
+        </div>
+        <p className='field-help'>1 token per scan + 1 per draft · Up to 6 tokens total</p>
+      </div>} />
+      <Dialog open={scoutInfoOpen} onClose={()=>setScoutInfoOpen(false)} aria-labelledby='job-scout-info-title' aria-describedby='job-scout-info-description'>
+        <DialogTitle id='job-scout-info-title'>AI Job Scout</DialogTitle>
+        <DialogContent>
+          <h3>Your next great post is already in your job history.</h3>
+          <p id='job-scout-info-description'>Let AI find promising completed jobs and turn the best matches into WordPress drafts—ready for your review.</p>
+          <p>AI Job Scout searches your recent completed jobs independently of the date and ZIP filters on this page. It skips jobs already in WordPress and prepares up to five drafts. You choose what to publish.</p>
+          <p>1 token per scan, plus 1 token per draft created (up to 6 tokens total). You’ll approve the spend before the scan starts.</p>
+        </DialogContent>
+        <DialogActions><Button onClick={()=>setScoutInfoOpen(false)}>Got it</Button></DialogActions>
+      </Dialog>
+
 
       {wordpressPluginLoading ? (
         <Alert severity='info' role='status'>
