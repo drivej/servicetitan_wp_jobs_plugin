@@ -1,3 +1,4 @@
+import { scannerSkipReason } from './scanner-rating.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
@@ -106,6 +107,45 @@ test('AI scorer uses strict schema without search and rejects malformed or faile
   let request:Record<string,unknown>={};
   const scorer=new OpenAIJobScorer({apiKey:'private',model:'gpt-6-luna',apiBaseUrl:'https://example.test'},async(_url,init)=>{request=JSON.parse(String(init?.body));return new Response(JSON.stringify({output_text:JSON.stringify({score:85,reason:'Documented repair with a clear outcome.'})}));});
   assert.equal((await scorer.rate(summary(1))).score,85);assert.equal(request.store,false);assert.equal(request.tools,undefined);
+  const instructions=String(request.instructions);
+  assert.match(instructions,/clear service or customer issue \(0-30\)/);
+  assert.match(instructions,/useful project details[\s\S]*?\(0-30\)/);
+  assert.match(instructions,/local relevance[\s\S]*?\(0-20\)/);
+  assert.match(instructions,/distinct, helpful page \(0-20\)/);
+  assert.match(instructions,/Completed work and documented outcomes strengthen the score but are not mandatory/);
+  assert.match(instructions,/Generic labels plus a city alone are insufficient/);
   const bad=new OpenAIJobScorer({apiKey:'private',model:'test',apiBaseUrl:'https://example.test'},async()=>new Response(JSON.stringify({output_text:'{"score":101,"reason":"invalid"}'})));
   await assert.rejects(bad.rate(summary(1)),/AI content rating failed/);
+});
+
+test('scanner rates concise service records and uses the same 70-point acceptance threshold', async()=>{
+  const f=await fileFixture();
+  try {
+    const s=scope();await f.store.enqueue(s,randomUUID());const task=(await f.store.claim())!;
+    const {p}=providers([1,2,3]);
+    const original=p.serviceTitan.getJobDetails.bind(p.serviceTitan);
+    p.serviceTitan.getJobDetails=async id=>{
+      const details=await original(id);
+      return {...details,summary:{...details.summary,workSummary:'',summaryText:id===1?'Tankless heater maintenance; descaled heat exchanger.':id===2?'Service call.':'Routine furnace inspection; filter and airflow check.'}};
+    };
+    const seen:string[]=[];
+    await executeScan(task,p,{rate:async source=>{
+      seen.push(source.summaryText!);
+      // Fixed editorial decisions exercise routing/thresholds without relying
+      // on nondeterministic live AI responses in a regression test.
+      return {score:source.summaryText==='Service call.'?40:70,reason:'Fixture editorial decision.'};
+    }},f.store,f.queue);
+    assert.equal(task.rated,3,'all short records reach the scorer for semantic evaluation');
+    assert.equal(seen.length,3);
+    assert.deepEqual(task.candidates.map(item=>item.jobId),[1,3]);
+    assert.equal(task.candidates[0]!.score,70);
+  } finally {await f.close();}
+});
+
+test('scanner retains the attachment requirement while letting the model assess short context',async()=>{
+  const {p}=providers([1]);
+  const details=await p.serviceTitan.getJobDetails(1);
+  const brief={...details,summary:{...details.summary,summaryText:'Annual furnace inspection.',workSummary:''}};
+  assert.equal(scannerSkipReason(brief),undefined);
+  assert.match(scannerSkipReason({...brief,attachments:[]})!,/no attachments/);
 });

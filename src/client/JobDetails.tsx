@@ -541,7 +541,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
       {isPlatformAdmin && <section className='superadmin-debug-panel' aria-labelledby='superadmin-debug-heading'>
         <div className='superadmin-debug-banner'><strong>SUPER ADMIN CONTENT</strong><span>Visible to the signed-in platform administrator</span></div>
         <h2>Job scanner rating</h2>
-        <p>Rate this job using the job scanner’s scoring rules. The scanner requires at least 70/100, enough documented work, attachments, and no existing WordPress post.</p>
+        <p>Rate this job using the job scanner’s scoring rules. The scanner requires at least 70/100, useful factual service and local details, attachments, and no existing WordPress post. Brief records and routine services can qualify; a documented completed repair is not required.</p>
         <Button variant='outlined' disabled={ratingLoading} onClick={() => void rateJob()}>{ratingLoading ? 'Rating job…' : 'Rate for job scanner'}</Button>
         {ratingError && <p className='notice error' role='alert'>{ratingError}</p>}
         {scannerRating && <div role='status'><p><strong>{scannerRating.score}/100</strong> · {scannerRating.passesScore ? 'Meets' : 'Below'} the {scannerRating.threshold}/100 score threshold.</p><p>{scannerRating.reason}</p>{scannerRating.skipReason && <p>{scannerRating.skipReason}</p>}</div>}

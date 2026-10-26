@@ -77,11 +77,11 @@ test('superadmin prompt preview and scanner rating require the platform actor wi
     assert.equal(spent, 0);
     const ratingResponse = await fetch(`${url}/scanner-rating`, { method: 'POST', headers: { 'X-Test-Actor': 'admin' } });
     assert.equal(ratingResponse.status, 200);
-    const rating = await ratingResponse.json() as { score: number; threshold: number; passesScore: boolean; skipReason: string };
+    const rating = await ratingResponse.json() as { score: number; threshold: number; passesScore: boolean; skipReason: string | null };
     assert.equal(rating.score, 70);
     assert.equal(rating.threshold, 70);
     assert.equal(rating.passesScore, true);
-    assert.match(rating.skipReason, /120 characters/);
+    assert.equal(rating.skipReason, null, 'brief job records are eligible for scoring');
     assert.equal(spent, 0);
     const generated = await fetch(`${url}/ai-copy`, { method: 'POST' });
     assert.equal(generated.status, 200);
