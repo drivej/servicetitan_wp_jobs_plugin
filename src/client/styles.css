@@ -2180,3 +2180,5 @@ td strong {
   .account-member-table td { display: block; border: 0; padding: 0; }
   .account-member-table .member-email { flex-basis: 100%; }
 }
+
+.scanner-row-rating { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 6px; background: #e9e4f5; color: #563c83; font-size: 12px; font-weight: 700; }

@@ -1,3 +1,5 @@
+import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
+import { navigateTo } from './navigation';
 import { Button, LinearProgress } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import type { ScannerTask } from '../shared/job-scanner';
@@ -18,6 +20,10 @@ export function JobScanner() {
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
   const [publishing,setPublishing] = useState<number>();
+  const [jobs,setJobs] = useState<Record<number,JobTableItem>>({});
+  const [detailsError,setDetailsError] = useState('');
+  const [refreshing,setRefreshing] = useState(false);
+  const [refreshVersion,setRefreshVersion] = useState(0);
   const [statuses,setStatuses] = useState<Record<number,WordPressStatus>>({});
   const exhausted = useTokensExhausted();
   const plugin = useWordPressPluginStatus();
@@ -25,6 +31,35 @@ export function JobScanner() {
   const generation = useRef(0);
   const progress = useRef('');
   const isActive = activeScan(scan);
+  const pushed = scan?.selected.filter(item=>item.build?.state==='succeeded' && item.build.result?.state==='exists') || [];
+  const pushedIds = pushed.map(item=>item.jobId).join(',');
+  useEffect(()=>{
+    const controller=new AbortController();
+    setJobs({});setDetailsError('');
+    const ids=pushedIds ? pushedIds.split(',').map(Number) : [];
+    void Promise.allSettled(ids.map(async id=>{
+      const details=await read<{summary:JobTableItem;attachments:NonNullable<JobTableItem['attachments']>}>(await apiFetch(`/api/jobs/${id}`,{signal:controller.signal}));
+      return {id,job:{...details.summary,attachments:details.attachments}};
+    })).then(results=>{
+      if(controller.signal.aborted)return;
+      const loaded:Record<number,JobTableItem>={};
+      for(const result of results)if(result.status==='fulfilled')loaded[result.value.id]=result.value.job;
+      setJobs(loaded);
+      if(results.some(result=>result.status==='rejected'))setDetailsError('Some ServiceTitan details could not be loaded. Your WordPress draft results are still shown below.');
+    });
+    return ()=>controller.abort();
+  },[scan?.id,pushedIds,refreshVersion]);
+  const refreshStatuses = async (jobId?:number) => {
+    setRefreshing(true);setError('');
+    try {
+      const ids=jobId ? [jobId] : pushed.map(item=>item.jobId);
+      if(!ids.length)return;
+      const body=await read<{statuses:Record<number,WordPressStatus>}>(await apiFetch('/api/wordpress/statuses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds:ids})}));
+      setStatuses(current=>({...current,...body.statuses}));
+    }catch(reason){setError(reason instanceof Error?reason.message:'Unable to refresh WordPress statuses.');}
+    finally{setRefreshing(false);}
+  };
+
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
     const current = ++generation.current;
@@ -87,23 +122,29 @@ export function JobScanner() {
         {!isActive && !scan.selected.length && scan.state === 'succeeded' && <p>No jobs met the content threshold. The scan cost one token; no draft tokens were charged.</p>}
       </div>}
     </section>
-    {!!scan?.selected.length && <section className='scanner-results' aria-label='Top job opportunities'>
-      {scan.selected.map(item=>{
-        const status=statuses[item.jobId] || item.build?.result;
-        const published=status?.postStatus === 'publish';
-        const draftReady=item.build?.state === 'succeeded' && status?.postStatus === 'draft';
-        return <article key={item.jobId} className='panel scanner-result'>
-          <div className='scanner-result-heading'><h2>{item.title}</h2><strong className='scanner-rating'>{item.score}/100</strong></div>
-          <p>{item.reason}</p>
-          <p>Job #{item.jobId} · {published ? 'Published' : item.build?.state === 'succeeded' ? 'Draft ready' : item.build?.state === 'failed' ? 'Draft failed' : item.build?.state === 'running' ? 'Building draft…' : 'Draft queued'}</p>
-          {item.build?.error && <p className='notice error'>{item.build.error}</p>}
-          <div className='account-actions'>
-            <Button component='a' href={`/jobs/${item.jobId}`}>Review job and copy</Button>
-            {status?.link && <Button component='a' href={status.link} target='_blank' rel='noreferrer'>Open in WordPress</Button>}
-            {draftReady && <Button variant='contained' disabled={publishing !== undefined || !plugin.ready} onClick={()=>void publish(item.jobId)}>{publishing===item.jobId ? 'Publishing…' : 'Publish draft'}</Button>}
-          </div>
-        </article>;
-      })}
+    {pushed.length > 0 && <section className='scanner-results' aria-labelledby='scanner-pushed-heading'>
+      <h2 id='scanner-pushed-heading'>Jobs pushed to WordPress</h2>
+      <p>{pushed.length} {pushed.length===1?'job was':'jobs were'} sent to WordPress as {pushed.length===1?'a draft':'drafts'}. Review each job before publishing.</p>
+      {detailsError && <p className='notice' role='status'>{detailsError} <Button onClick={()=>setRefreshVersion(value=>value+1)}>Retry details</Button></p>}
+      <div className='table-wrap'><table className='jobs-table'>
+        <caption className='visually-hidden'>Jobs successfully pushed by this scan</caption>
+        <colgroup><col className='readiness-column'/><col className='job-image-column'/><col className='job-name-column'/><col className='location-column'/><col className='wp-status-column'/><col className='actions-column'/></colgroup>
+        <JobTableHeader refreshing={refreshing} disabled={refreshing || publishing!==undefined} onRefresh={()=>void refreshStatuses()}/>
+        <tbody>{pushed.map(item=>{
+          const status=statuses[item.jobId] || item.build!.result!;
+          const job=jobs[item.jobId] || {id:item.jobId,jobName:item.title,status:'Completed',location:{city:'—',state:'—',zip:'—'}};
+          return <JobTableRow key={item.jobId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status}
+            wordpressBusy={publishing!==undefined || refreshing} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted}
+            onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void publish(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
+        })}</tbody>
+      </table></div>
+    </section>}
+    {!!scan?.selected.some(item=>item.build?.state!=='succeeded') && <section className='panel scanner-result' aria-label='Draft progress and failures'>
+      <h2>{isActive?'Preparing more drafts':'Jobs not pushed'}</h2>
+      <ul>{scan.selected.filter(item=>item.build?.state!=='succeeded').map(item=><li key={item.jobId}>
+        <a href={`/jobs/${item.jobId}`}>{item.title} · #{item.jobId}</a> · {item.score}/100 · {item.build?.state==='failed'?'Draft failed':item.build?.state==='running'?'Building draft…':'Draft queued'}
+        {item.build?.error && <p className='notice error'>{item.build.error}</p>}
+      </li>)}</ul>
     </section>}
     {tokenSpendDialog}
   </main>;
