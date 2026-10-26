@@ -158,7 +158,7 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       if (mutation && (req.get('Origin') !== config.origin || !equalToken(req.get('X-CSRF-Token') || '', csrfToken(token)))) {
         throw new HttpError('The request could not be verified. Refresh the page and try again.', 403);
       }
-      const ai = req.path.endsWith('/ai-copy');
+      const ai = req.path.endsWith('/ai-copy') || req.path.endsWith('/scanner-rating');
       if (!await store.allowRequest(`${ai ? 'ai' : mutation ? 'write' : 'read'}:${actor.id}`, ai ? 10 : mutation ? 30 : 180, 60)) {
         throw new HttpError('Too many requests. Try again in a minute.', 429);
       }

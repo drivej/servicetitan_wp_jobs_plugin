@@ -1,3 +1,4 @@
+import { rateScannerJob, scannerSkipReason } from './scanner-rating.js';
 import type { BuildProviders } from './build-deploy.js';
 import type { BuildQueueStore, BuildScope } from './build-queue.js';
 import type { JobScorer } from './job-scorer.js';
@@ -47,10 +48,8 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
           let details;
           try { details = await providers.serviceTitan.getJobDetails(job.id); }
           catch { continue; }
-          const notes = details.history.filter(item => item.promptEligible).map(item => item.content);
-          const content = [details.summary.workSummary, details.summary.summaryText, ...(details.summary.invoiceSummaries || []), ...(details.summary.invoiceWorkItems || []), ...(details.summary.formFindings || []).map(item => item.answer), ...notes].filter(Boolean).join(' ');
-          if (content.length < 120 || !details.attachments.length) continue;
-          const rating = await scorer.rate({ ...details.summary, technicianNotes: notes });
+          if (scannerSkipReason(details)) continue;
+          const rating = await rateScannerJob(details, scorer);
           task.rated++;
           if (rating.score >= SCANNER_MIN_SCORE) task.candidates.push({ jobId: job.id, title: safeWorkText(details.summary.descriptionPreview || details.summary.workSummary || details.summary.summaryText || details.summary.jobName,160), ...rating });
           await store.save(task);

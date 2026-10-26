@@ -18,12 +18,18 @@ const validCopy: GeneratedJobCopy = {
   seoDescription: 'Documented plumbing service in Torrance addressed a kitchen drain blockage with work recorded by the technician.',
 };
 
-test('prompt preview requires the platform actor and matches generation without spending tokens', async () => {
+test('superadmin prompt preview and scanner rating require the platform actor without spending tokens', async () => {
   let reads = 0;
   let generations = 0;
   let spent = 0;
   let generatedFacts = '';
   const routes = createApp({
+    jobScorer: { rate: async source => {
+      assert.deepEqual(source.technicianNotes, ['Repaired a leaking pipe.']);
+      assert.deepEqual(source.tagNames, ['Water Heater']);
+      assert.equal(source.companyWebsiteUrl, undefined, 'scanner source must not acquire copy-preview extras');
+      return { score: 70, reason: 'Documented repair.' };
+    } },
     serviceTitan: {
       getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
       getJob: async () => { throw new Error('unused'); },
@@ -60,6 +66,7 @@ test('prompt preview requires the platform actor and matches generation without 
   const url = `http://127.0.0.1:${address.port}/api/jobs/42`;
   try {
     assert.equal((await fetch(`${url}/prompt-preview`)).status, 403);
+    assert.equal((await fetch(`${url}/scanner-rating`, { method: 'POST' })).status, 403);
     assert.equal(reads, 0);
     const response = await fetch(`${url}/prompt-preview`, { headers: { 'X-Test-Actor': 'admin' } });
     assert.equal(response.status, 200);
@@ -67,6 +74,14 @@ test('prompt preview requires the platform actor and matches generation without 
     const preview = await response.json() as { prompt: string };
     assert.match(preview.prompt, /Water Heater/);
     assert.equal(generations, 0);
+    assert.equal(spent, 0);
+    const ratingResponse = await fetch(`${url}/scanner-rating`, { method: 'POST', headers: { 'X-Test-Actor': 'admin' } });
+    assert.equal(ratingResponse.status, 200);
+    const rating = await ratingResponse.json() as { score: number; threshold: number; passesScore: boolean; skipReason: string };
+    assert.equal(rating.score, 70);
+    assert.equal(rating.threshold, 70);
+    assert.equal(rating.passesScore, true);
+    assert.match(rating.skipReason, /120 characters/);
     assert.equal(spent, 0);
     const generated = await fetch(`${url}/ai-copy`, { method: 'POST' });
     assert.equal(generated.status, 200);

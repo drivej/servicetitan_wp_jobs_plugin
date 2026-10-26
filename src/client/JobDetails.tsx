@@ -1,5 +1,5 @@
 import { Button, Radio, TextField } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { ErrorDialog } from './ErrorDialog';
 import { JobTableHeader, JobTableRow } from './JobTable';
@@ -121,6 +121,27 @@ export function JobDetails({ jobId }: { jobId: number }) {
   const [rawResponseLoading, setRawResponseLoading] = useState(false);
   const [rawResponseError, setRawResponseError] = useState('');
   const [rawResponseCopied, setRawResponseCopied] = useState(false);
+  const ratingRequest = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setScannerRating(undefined); setRatingError(''); setRatingLoading(false);
+    return () => { ratingRequest.current?.abort(); };
+  }, [jobId]);
+  const [scannerRating, setScannerRating] = useState<{ score: number; reason: string; threshold: number; passesScore: boolean; skipReason: string | null }>();
+  const [ratingLoading, setRatingLoading] = useState(false);
+  const [ratingError, setRatingError] = useState('');
+  const rateJob = async () => {
+    ratingRequest.current?.abort();
+    const controller = new AbortController();
+    ratingRequest.current = controller;
+    setRatingLoading(true); setRatingError(''); setScannerRating(undefined);
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/scanner-rating`, { method: 'POST', signal: controller.signal });
+      const body = await readJson<{ score: number; reason: string; threshold: number; passesScore: boolean; skipReason: string | null; error?: string }>(response);
+      if (!response.ok) throw new Error(body.error || 'Unable to rate this job.');
+      if (!controller.signal.aborted) setScannerRating(body);
+    } catch (error) { if (!controller.signal.aborted) setRatingError(error instanceof Error ? error.message : 'Unable to rate this job.'); }
+    finally { if (!controller.signal.aborted) setRatingLoading(false); }
+  };
   const [promptPreview, setPromptPreview] = useState('');
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState('');
@@ -519,6 +540,11 @@ export function JobDetails({ jobId }: { jobId: number }) {
       </div>
       {isPlatformAdmin && <section className='superadmin-debug-panel' aria-labelledby='superadmin-debug-heading'>
         <div className='superadmin-debug-banner'><strong>SUPER ADMIN CONTENT</strong><span>Visible to the signed-in platform administrator</span></div>
+        <h2>Job scanner rating</h2>
+        <p>Rate this job using the job scanner’s scoring rules. The scanner requires at least 70/100, enough documented work, attachments, and no existing WordPress post.</p>
+        <Button variant='outlined' disabled={ratingLoading} onClick={() => void rateJob()}>{ratingLoading ? 'Rating job…' : 'Rate for job scanner'}</Button>
+        {ratingError && <p className='notice error' role='alert'>{ratingError}</p>}
+        {scannerRating && <div role='status'><p><strong>{scannerRating.score}/100</strong> · {scannerRating.passesScore ? 'Meets' : 'Below'} the {scannerRating.threshold}/100 score threshold.</p><p>{scannerRating.reason}</p>{scannerRating.skipReason && <p>{scannerRating.skipReason}</p>}</div>}
         <h2 id='prompt-preview-heading'>Job copy prompt</h2>
         <p>Build the prompt from current ServiceTitan job data, including assigned tags. Previewing uses no job tokens and does not generate copy.</p>
         <Button variant='outlined' disabled={promptLoading} onClick={() => void loadPromptPreview()}>{promptLoading ? 'Building prompt…' : promptPreview ? 'Refresh prompt' : 'Generate prompt'}</Button>

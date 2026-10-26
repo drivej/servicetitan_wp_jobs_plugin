@@ -64,8 +64,8 @@ const scannerWorker = new ScannerWorker(scannerStore, async task => {
   await executeScan(task,providers,scorer,scannerStore,queue);
 });
 const app = saasConfig && store
-  ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue, scannerStore), ...staticOptions })
-  : createApp({ ...localProviders!, ...staticOptions, scanner: scannerApi(localScope,scannerStore,queue),
+  ? createSaaSApp({ config: saasConfig, store, google: new GoogleOIDC(saasConfig), websiteApp: websiteAppFactory(store, copyGenerator, queue, scannerStore, scorer), ...staticOptions })
+  : createApp({ jobScorer: scorer, ...localProviders!, ...staticOptions, scanner: scannerApi(localScope,scannerStore,queue),
       localPlatformAdmin: process.env.LOCAL_USER_PLATFORM_ADMIN?.toLowerCase() !== 'false',
       buildQueue: { enqueue: (jobId) => queue.enqueue(localScope, jobId), list: (jobIds) => queue.list(localScope, jobIds) },
     });

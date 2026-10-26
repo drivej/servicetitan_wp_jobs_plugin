@@ -1,3 +1,6 @@
+import { rateScannerJob, scannerSkipReason } from './scanner-rating.js';
+import { DisabledJobScorer, type JobScorer } from './job-scorer.js';
+import { SCANNER_MIN_SCORE } from '../shared/job-scanner.js';
 import { resolve } from 'node:path';
 
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
@@ -19,6 +22,7 @@ import type { BuildTask } from '../shared/build-queue.js';
 import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
+  jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
   scanner?: { latest(): Promise<ScannerTask | null>; start(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
@@ -40,6 +44,7 @@ const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPR
 
 export const createApp = ({
   localPlatformAdmin = false,
+  jobScorer = new DisabledJobScorer(),
   scanner,
   serviceTitan,
   wordpress,
@@ -64,6 +69,16 @@ export const createApp = ({
       ...(companyWebsiteUrl ? { companyWebsiteUrl } : {}),
     };
   };
+  app.post(`${apiPrefix}/jobs/:jobId/scanner-rating`, async (request, response, next) => {
+    try {
+      if (!localPlatformAdmin && response.locals.actor?.isPlatformAdmin !== true) throw new HttpError('Platform administrator access required.', 403);
+      response.set('Cache-Control', 'private, no-store');
+      const details = await serviceTitan.getJobDetails(parseJobId(request.params.jobId));
+      const rating = await rateScannerJob(details, jobScorer);
+      const skipReason = scannerSkipReason(details);
+      response.json({ ...rating, threshold: SCANNER_MIN_SCORE, passesScore: rating.score >= SCANNER_MIN_SCORE, skipReason: skipReason || null });
+    } catch (error) { next(error); }
+  });
   app.get(`${apiPrefix}/jobs/:jobId/prompt-preview`, async (request, response, next) => {
     try {
       if (!localPlatformAdmin && response.locals.actor?.isPlatformAdmin !== true) {
