@@ -89,7 +89,4 @@ export function clearAccountCache(user: string): void {
   } catch { /* Storage may be unavailable. */ }
 }
 
-// Browser preferences survive sign-out/cache clearing and are isolated per user.
-export const tokenPreferenceKey = (action: string, cost: number): string =>
-  `user-preferences:${userId}:token-spend:${action}:${cost}`;
 import { markTokensExhausted } from './tokenState';

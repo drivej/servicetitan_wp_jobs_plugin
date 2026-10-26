@@ -1,6 +1,6 @@
 import { useId } from 'react';
 
-function GoldCoins() {
+export function GoldCoins() {
   const gold = useId();
   return (
     <svg viewBox='0 0 220 180' fill='none' aria-hidden='true' focusable='false'>
