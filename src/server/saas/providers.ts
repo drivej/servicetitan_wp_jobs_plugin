@@ -12,7 +12,7 @@ import type { BuildProviders } from '../build-deploy.js';
 import type { AccountStore, WebsiteContext } from './store.js';
 import { HttpError } from './validation.js';
 
-export type WebsiteAppFactory = (userId: string, context: WebsiteContext) => Express;
+export type WebsiteAppFactory = ((userId: string, context: WebsiteContext) => Express) & { clearCache?: () => void };
 export function minimizeJobDetails(details: JobDetails): JobDetails {
   const { address: _address, ...location } = details.summary.location;
   const { id, jobNumber, locationId, jobTypeId, jobStatus } = details.job;
@@ -20,7 +20,7 @@ export function minimizeJobDetails(details: JobDetails): JobDetails {
 }
 export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGenerator = new DisabledJobCopyGenerator(), queue?: BuildQueueStore, scannerStore?: ScannerStore): WebsiteAppFactory {
   const apps = new Map<string, { app: Express; expiresAt: number }>();
-  return (userId, context) => {
+  const factory: WebsiteAppFactory = (userId, context) => {
     const { website, connection, workspaceId } = context;
     const key = `${userId}:${workspaceId}:${website.id}:${website.version}:${connection.id}:${connection.version}`;
     for (const [id, value] of apps) if (value.expiresAt <= Date.now()) apps.delete(id);
@@ -34,6 +34,8 @@ export function websiteAppFactory(store: AccountStore, copyGenerator: JobCopyGen
     apps.set(key, { app, expiresAt: Date.now() + 5 * 60_000 });
     return app;
   };
+  factory.clearCache=()=>apps.clear();
+  return factory;
 }
 
 export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCopyGenerator, userId: string, { website, connection, wordpress, workspaceId }: WebsiteContext, fetcher: typeof fetch = publicFetch): BuildProviders {
@@ -52,7 +54,7 @@ export function websiteBuildProviders(store: AccountStore, copyGenerator: JobCop
   const ownedFetch: typeof fetch = async (input, init) => {
     // Re-check cached apps and queued work before each WordPress request.
     await assertOwned();
-    return fetcher(input,init);
+    return store.withWebsiteOwnership(userId,website.id,workspaceId,website.version,()=>fetcher(input,init));
   };
   const getJobDetails = async (id: number) => minimizeJobDetails(await serviceTitan.getJobDetails(id));
   return { companyWebsiteUrl: website.url, serviceTitan: {

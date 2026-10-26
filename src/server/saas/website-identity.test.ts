@@ -38,6 +38,7 @@ test('cached and background WordPress providers reject unclaimed, changed, or re
   const store={
     assertWebsiteOwnership:async()=>{if(!authorized) throw new Error('Membership revoked');},
     spendJobToken:async()=>{spends++;},
+    withWebsiteOwnership:async(_user:unknown,_site:unknown,_workspace:unknown,_version:unknown,operation:()=>Promise<unknown>)=>{if(!authorized) throw new Error('Membership revoked');return operation();},
   } as unknown as import('./store.js').AccountStore;
   const context:import('./store.js').WebsiteContext={
     workspaceId:randomUUID(),

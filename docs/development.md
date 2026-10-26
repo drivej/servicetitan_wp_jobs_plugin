@@ -90,7 +90,7 @@ Coverage includes two users sharing an email, identity/session rotation, encrypt
 
 Build with `npm ci && npm run build`; start with `npm start`. Set `NODE_ENV=production`, `APP_MODE=saas`, an HTTPS `APP_ORIGIN`, and the secret variables above. Set `TRUST_PROXY_HOPS` only after verifying the exact trusted reverse-proxy topology; default 0 trusts no forwarded client IPs. `/api/health` is a process health endpoint, not a database readiness check.
 
-No Sevalla resources have been provisioned. The region, resources, domain, Google OAuth registration and database/runtime credentials still need configuration. This implementation is not a production launch: the existing push adapter still has process-local publication locking and partial-publication recovery limitations. Next phases add durable operations, generation/cost provenance, the pull connector, billing semantics and Stripe. Account deletion/export, connection/site archival, bulk encryption rotation, operational cleanup jobs and fuller WordPress integration tests also remain future work.
+No Sevalla resources have been provisioned. The region, resources, domain, Google OAuth registration and database/runtime credentials still need configuration. This implementation is not a production launch: the existing push adapter still has process-local publication locking and partial-publication recovery limitations. Next phases add durable operations, generation/cost provenance, the pull connector, billing semantics and Stripe. Account export, connection/site archival, bulk encryption rotation, operational cleanup jobs and fuller WordPress integration tests also remain future work.
 
 The existing privacy limitation remains: summary text is not a comprehensive PII redactor. SaaS no longer sends the raw job object or the structured street/unit address to its editor/generator, but free-text facts still require review and stronger minimization before automated publication.
 
@@ -139,3 +139,5 @@ See [token ledger and platform administration](token-ledger.md) for migration 00
 ### Job Scanner deployment
 
 Run migrations through `013_job_scanner.sql` before deploying the scanner-enabled server. It adds the internal `job_scanner_tasks` table, active-scan uniqueness and queue/history indexes. Separate runtime roles need `SELECT, INSERT, UPDATE` on that table. Startup verifies these permissions. Scanner records contain scope IDs, progress, short ratings, and build-task references; no integration secrets or full job content. No production migration is performed by the build command.
+
+Superadmin account deletion is implemented with migration **015**. See [account deletion](account-deletion.md) for erasure behavior, billing cleanup, and the additional `DELETE ON website_ownership_requests` runtime grant.

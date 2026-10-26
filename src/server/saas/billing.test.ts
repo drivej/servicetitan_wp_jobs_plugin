@@ -95,3 +95,25 @@ test('plans preserve Stripe recurrence for daily, weekly, monthly and yearly bil
     assert.throws(() => planFromPrice({ ...price(), recurring: { ...price().recurring!, interval_count: count } }, 900));
   }
 });
+
+test('account billing deletion expires checkout, deletes the customer, and safely retries missing or already-deleted customers',async()=>{
+  const db:Database={transaction:async()=>{throw new Error('No SQL needed');}};
+  const config={secretKey:'sk_test_example',webhookSecret:'whsec_example',prices:[],development:true,maxTokens:200};
+  const stripe=new Stripe(config.secretKey);
+  const calls:string[]=[];let deleted=false;let missing=false;let failure=false;
+  stripe.checkout.sessions.retrieve=(async()=>({status:'open'})) as never;
+  stripe.checkout.sessions.expire=(async()=>{calls.push('expire');return {};}) as never;
+  stripe.customers.retrieve=(async()=>{
+    if(failure) throw new Error('Network unavailable');
+    if(missing) throw Object.assign(new Error('No customer'),{code:'resource_missing'});
+    return {id:'cus_delete',deleted};
+  }) as never;
+  stripe.customers.del=(async()=>{calls.push('delete');deleted=true;return {id:'cus_delete',deleted:true};}) as never;
+  const service=new BillingService(db,config,'http://localhost:3000',stripe);
+  await service.deleteAccountCustomer({customerId:'cus_delete',checkoutId:'cs_delete'});
+  assert.deepEqual(calls,['expire','delete']);
+  await service.deleteAccountCustomer({customerId:'cus_delete',checkoutId:null});
+  assert.deepEqual(calls,['expire','delete']);
+  missing=true;await service.deleteAccountCustomer({customerId:'cus_delete',checkoutId:null});
+  failure=true;await assert.rejects(service.deleteAccountCustomer({customerId:'cus_delete',checkoutId:null}),/account has not been deleted/);
+});

@@ -125,6 +125,23 @@ export class BillingService {
       return { url: session.url };
     });
   }
+  async deleteAccountCustomer({ customerId,checkoutId }: { customerId: string | null; checkoutId: string | null }): Promise<void> {
+    this.assertMode();
+    try {
+      if (checkoutId) {
+        try {
+          const checkout=await this.stripe.checkout.sessions.retrieve(checkoutId);
+          if (checkout.status==='open') await this.stripe.checkout.sessions.expire(checkoutId);
+        } catch(error) { if ((error as {code?:string}).code!=='resource_missing') throw error; }
+      }
+      if (customerId) {
+        try {
+          const customer=await this.stripe.customers.retrieve(customerId);
+          if (!customer.deleted) await this.stripe.customers.del(customerId);
+        } catch(error) { if ((error as {code?:string}).code!=='resource_missing') throw error; }
+      }
+    } catch { throw new HttpError('Billing cleanup failed. The account has not been deleted from the app. Retry deletion.',503); }
+  }
   async portal(user: User) {
     this.assertMode();
     return this.owned(user, true, async (_sql, row) => {
@@ -172,7 +189,8 @@ export class BillingService {
       const billing = (await sql.query('SELECT workspace_id FROM workspace_billing WHERE customer_id=$1', [customer])).rows[0];
       if (!billing) return; // Not a subscription belonging to this application.
       const workspaceId = String(billing.workspace_id);
-      await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      const workspace=(await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
+      if (!workspace) return; // Account deletion may have won the workspace lock.
       const inserted = await sql.query(`INSERT INTO stripe_token_grants(invoice_id,workspace_id,subscription_id,period_start,tokens)
         VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING invoice_id`, [invoiceId, workspaceId, subscriptionId, periodStart, plan.tokens]);
       if (!inserted.rows.length) return;

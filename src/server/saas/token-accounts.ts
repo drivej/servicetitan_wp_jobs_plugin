@@ -53,7 +53,7 @@ export class TokenAccounts {
         if (!membership) throw new HttpError('Workspace owner or admin access required.', 403);
       }
       if (!workspace) throw new HttpError('Workspace not found.', 404);
-      const rows = (await sql.query(`SELECT t.*,u.name AS actor_name FROM token_transactions t LEFT JOIN users u ON u.id=t.actor_user_id
+      const rows = (await sql.query(`SELECT t.*,CASE WHEN t.actor_deleted THEN 'Deleted user' ELSE u.name END AS actor_name FROM token_transactions t LEFT JOIN users u ON u.id=t.actor_user_id
         WHERE workspace_id=$1 AND ($2::bigint IS NULL OR sequence<$2) ORDER BY sequence DESC LIMIT 51`, [workspaceId, before || null])).rows;
       const total = (await sql.query('SELECT COALESCE(sum(amount),0) AS balance FROM token_transactions WHERE workspace_id=$1', [workspaceId])).rows[0]!;
       const balance = Number(workspace.job_tokens), ledgerBalance = Number(total.balance);

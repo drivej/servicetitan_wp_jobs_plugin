@@ -122,7 +122,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 14);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 15);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -182,8 +182,11 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
       const state = randomToken(), browser = randomToken();
       await f.store.beginLogin(state, browser, 'verifier', 'nonce');
       await assert.rejects(f.store.consumeLogin(state, randomToken()));
-      assert.deepEqual(await f.store.consumeLogin(state, browser), { verifier: 'verifier', nonce: 'nonce' });
+      assert.deepEqual(await f.store.consumeLogin(state, browser), { verifier: 'verifier', nonce: 'nonce', returnTo: '/pricing' });
       await assert.rejects(f.store.consumeLogin(state, browser));
+      const inviteState=randomToken();
+      await f.store.beginLogin(inviteState,browser,'invite-verifier','invite-nonce','/invite');
+      assert.deepEqual(await f.store.consumeLogin(inviteState,browser),{verifier:'invite-verifier',nonce:'invite-nonce',returnTo:'/invite'});
       const expired = randomToken();
       await f.store.beginLogin(expired, browser, 'v', 'n');
       await f.sql.query("UPDATE oauth_attempts SET expires_at=now()-interval '1 second'");
@@ -235,12 +238,18 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
         assert.equal((await fetch(creditUrl, { method: 'POST', headers: { Cookie: `st_session=${alice.token}`, Origin: config.origin } })).status, 403);
         const aliceBalance = (await f.store.session(alice.token))!.jobTokens;
         const bobBalance = (await f.store.session(bobSession.token))!.jobTokens;
-        const credits = await Promise.all([1, 2].map(() => fetch(creditUrl, {
-          method: 'POST', headers: headers(alice.token),
-          body: JSON.stringify({ userId: bob.user.id, amount: 1000, jobTokens: 1000 }),
+        for (const body of [{ userId: bob.user.id, amount: 1000, jobTokens: 1000 },
+          ...[null, true, '1000', -1, 0, 1.5, 2_147_483_648].map(amount=>({amount}))]) {
+          assert.equal((await fetch(creditUrl,{method:'POST',headers:headers(alice.token),body:JSON.stringify(body)})).status,400);
+        }
+        assert.equal((await f.store.session(alice.token))!.jobTokens,aliceBalance);
+        const credits = await Promise.all([1, 1000].map(amount => fetch(creditUrl, {
+          method: 'POST', headers: headers(alice.token), body: JSON.stringify({ amount }),
         })));
         assert(credits.every((response) => response.status === 200));
-        assert.equal((await f.store.session(alice.token))!.jobTokens, aliceBalance + 2);
+        assert.equal((await f.store.session(alice.token))!.jobTokens, aliceBalance + 1001);
+        assert.equal((await fetch(creditUrl,{method:'POST',headers:headers(alice.token)})).status,200);
+        assert.equal((await f.store.session(alice.token))!.jobTokens, aliceBalance + 1002);
         assert.equal((await f.store.session(bobSession.token))!.jobTokens, bobBalance);
         config.testTokensEnabled = false;
         assert.equal((await fetch(creditUrl, { method: 'POST', headers: headers(alice.token) })).status, 403);
@@ -250,7 +259,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
         const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
         const callback = `${base}/auth/google/callback?code=test&state=${state}`;
         const loggedIn = await fetch(callback, { headers: { Cookie: loginCookie.split(';')[0]! }, redirect: 'manual' });
-        assert.equal(loggedIn.headers.get('location'), '/');
+        assert.equal(loggedIn.headers.get('location'), '/pricing');
         assert(loggedIn.headers.getSetCookie().some((value) => value.startsWith('st_session=') && value.includes('HttpOnly')));
         const replay = await fetch(callback, { headers: { Cookie: loginCookie.split(';')[0]! }, redirect: 'manual' });
         assert.equal(replay.headers.get('location'), '/?login=failed');
@@ -1018,4 +1027,150 @@ test('concurrent PostgreSQL sessions cannot claim the same installation', {skip:
     assert.equal(loser.reason.code,'website_already_connected');
     assert.equal((await f.sql.query('SELECT id FROM websites WHERE installation_id=$1',[identity.installationId])).rows.length,1);
   } finally {await Promise.all(clients.map(client=>client.end()));await f.close();}
+});
+
+test('superadmin account deletion erases account data and unassociated users while preserving shared users and other accounts',async()=>{
+  const f=await fixture();
+  try {
+    const operator=await f.store.login({subject:'erase-operator',email:'operator@example.com',name:'Operator'});
+    const owner=await f.store.login({subject:'erase-owner',email:'owner@example.com',name:'Owner'});
+    const shared=await f.store.login({subject:'erase-shared',email:'shared@example.com',name:'Shared'});
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1),($2)',[operator.user.id,owner.user.id]);
+    const invitation=await f.store.invite(owner.user.id,owner.user.id,shared.user.email,'member');
+    await f.store.acceptInvitation(shared.user.id,shared.token,invitation.token);
+    const orphan=randomUUID(),orphanToken=randomToken();
+    await f.sql.query("INSERT INTO users(id,google_subject,email,name) VALUES($1,'erase-orphan','orphan@example.com','Orphan')",[orphan]);
+    await f.sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,'member')",[owner.user.id,orphan]);
+    await f.sql.query("INSERT INTO sessions(token_hash,user_id,workspace_id,expires_at) VALUES($1,$2,$3,now()+interval '1 day')",[hashToken(orphanToken),orphan,owner.user.id]);
+    const connection=await f.store.saveConnection(owner.user.id,source);
+    const site=await f.store.saveWebsite(owner.user.id,siteInput(connection.id));
+    const identity={installationId:randomUUID(),canonicalUrl:'https://example.com'};
+    await f.store.markWebsiteValidated(owner.user.id,site.id,owner.user.id,identity,site.version);
+    const sc=await f.store.saveConnection(shared.user.id,source);
+    const ss=await f.store.saveWebsite(shared.user.id,{...siteInput(sc.id),url:'https://www.example.com'});
+    await f.store.requestWebsiteOwnership(shared.user.id,ss.id,shared.user.id,identity,ss.version,'access','Please add me.');
+    await f.store.requestWebsiteOwnership(owner.user.id,site.id,owner.user.id,identity,site.version,'dispute','An old dispute.');
+    const accounts=new TokenAccounts(f.db);
+    await accounts.adjust(operator.user.id,owner.user.id,{amount:20,reason:'Target balance',requestId:randomUUID()});
+    await accounts.adjust(owner.user.id,shared.user.id,{amount:7,reason:'Surviving balance',requestId:randomUUID()});
+    const queue=new PostgresBuildQueueStore(f.db);
+    await queue.enqueue({userId:owner.user.id,workspaceId:owner.user.id,websiteId:site.id},12);
+    await queue.enqueue({userId:owner.user.id,workspaceId:shared.user.id,websiteId:ss.id},13);
+    await f.sql.query(`INSERT INTO job_scanner_tasks(id,workspace_id,website_id,state,payload) VALUES($1,$2,$3,'queued',$4)`,[randomUUID(),owner.user.id,site.id,JSON.stringify({userId:owner.user.id})]);
+    await f.sql.query(`INSERT INTO token_spend_operations(workspace_id,operation_id,website_id,actor_user_id,action,fingerprint,state,resolved_by)
+      VALUES($1,'erased-op',$2,$3,'build',$4,'settled',$3),($5,'surviving-op',$6,$3,'build',$4,'failed',$3)`,[owner.user.id,site.id,owner.user.id,'a'.repeat(64),shared.user.id,ss.id]);
+    await f.sql.query(`INSERT INTO workspace_invitations(id,workspace_id,email,role,token_hash,invited_by,expires_at)
+      VALUES($1,$2,'other@example.com','member',$3,$4,now()+interval '1 day'),($5,$2,'orphan@example.com','member',$6,$7,now()+interval '1 day')`,[randomUUID(),shared.user.id,hashToken(randomToken()),owner.user.id,randomUUID(),hashToken(randomToken()),operator.user.id]);
+    await f.sql.query('INSERT INTO workspace_billing(workspace_id,customer_id,checkout_id) VALUES($1,$2,$3)',[owner.user.id,'cus_erase','cs_erase']);
+    await f.sql.query("INSERT INTO stripe_token_grants(invoice_id,workspace_id,subscription_id,period_start,tokens) VALUES('in_erase',$1,'sub_erase',1,20)",[owner.user.id]);
+    await f.sql.query("INSERT INTO audit_logs(id,user_id,workspace_id,action,target_id) VALUES($1,$2,$3,'legacy.shared.action',$4)",[randomUUID(),owner.user.id,shared.user.id,ss.id]);
+    let cleaned=false;
+    const result=await new PlatformMembers(f.db).deleteAccount(operator.user.id,owner.user.id,'DELETE',async account=>{
+      assert.deepEqual(account,{customerId:'cus_erase',checkoutId:'cs_erase'});cleaned=true;
+    });
+    assert(cleaned);assert.deepEqual(result,{deletedUsers:2,retainedUsers:1});
+    for(const table of ['workspaces','users']) assert.equal((await f.sql.query(`SELECT id FROM ${table} WHERE id=$1`,[owner.user.id])).rows.length,0);
+    for(const table of ['workspace_memberships','workspace_invitations','servicetitan_connections','websites','audit_logs','workspace_billing','stripe_token_grants','token_transactions','token_spend_operations','build_deploy_tasks','job_scanner_tasks']) {
+      assert.equal((await f.sql.query(`SELECT 1 FROM ${table} WHERE workspace_id=$1`,[owner.user.id])).rows.length,0,table);
+    }
+    assert.equal((await f.sql.query('SELECT * FROM website_ownership_requests')).rows.length,0);
+    assert.equal((await f.sql.query('SELECT id FROM users WHERE id=$1',[orphan])).rows.length,0);
+    assert.equal((await f.sql.query('SELECT user_id FROM platform_administrators WHERE user_id=$1',[owner.user.id])).rows.length,0);
+    assert.equal(await f.store.session(owner.token),undefined);assert.equal(await f.store.session(orphanToken),undefined);
+    assert.equal((await f.store.session(shared.token))!.workspaceId,shared.user.id);
+    assert.equal((await f.store.session(shared.token))!.email,'shared@example.com');
+    const history=await accounts.history(shared.user.id,shared.user.id);
+    assert.equal(history.balance,7);assert.equal(history.reconciled,true);
+    assert.equal((await f.sql.query("SELECT user_id FROM audit_logs WHERE action='legacy.shared.action'")).rows[0]!.user_id,null);
+    assert.equal(history.transactions[0]!.actorUserId,null);assert.equal(history.transactions[0]!.actorName,'Deleted user');
+    assert.equal((await f.sql.query("SELECT actor_user_id,resolved_by FROM token_spend_operations WHERE operation_id='surviving-op'")).rows[0]!.actor_user_id,null);
+    assert.equal((await f.sql.query("SELECT invited_by FROM workspace_invitations WHERE email='other@example.com'")).rows[0]!.invited_by,null);
+    assert.equal((await f.sql.query("SELECT id FROM workspace_invitations WHERE email='orphan@example.com'")).rows.length,0);
+    assert.equal((await f.sql.query('SELECT id FROM build_deploy_tasks WHERE actor_user_id=$1',[owner.user.id])).rows.length,0);
+    await assert.rejects(queue.enqueue({userId:owner.user.id,workspaceId:shared.user.id,websiteId:ss.id},14),/foreign key/);
+    await f.store.markWebsiteValidated(shared.user.id,ss.id,shared.user.id,identity,ss.version);
+    await assert.rejects(f.db.transaction(operator.user.id,sql=>sql.query('DELETE FROM token_transactions WHERE workspace_id=$1',[shared.user.id])),/permission denied|append-only/);
+    await assert.rejects(f.db.transaction(shared.user.id,sql=>sql.query('DELETE FROM workspaces WHERE id=$1',[shared.user.id])),/Platform administrator/);
+    assert.equal((await f.sql.query("SELECT target_id FROM audit_logs WHERE action='platform.account.deleted'")).rows[0]!.target_id,owner.user.id);
+  } finally {await f.close();}
+});
+
+test('account deletion requires superadmin confirmation, protects the acting admin, and rolls back on active work or billing failure',async()=>{
+  const f=await fixture();
+  try {
+    const operator=await f.store.login({subject:'erase-check-operator',email:'op@example.com',name:'Operator'});
+    const owner=await f.store.login({subject:'erase-check-owner',email:'own@example.com',name:'Owner'});
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    const members=new PlatformMembers(f.db);
+    await assert.rejects(members.deleteAccount(owner.user.id,owner.user.id,'DELETE'),/Platform administrator/);
+    await assert.rejects(members.deleteAccount(operator.user.id,owner.user.id,'delete'),/Type DELETE/);
+    await assert.rejects(members.deleteAccount(operator.user.id,randomUUID(),'DELETE'),/not found/);
+    await assert.rejects(members.deleteAccount(operator.user.id,operator.user.id,'DELETE'),/last account/);
+    const connection=await f.store.saveConnection(owner.user.id,source);
+    const site=await f.store.saveWebsite(owner.user.id,siteInput(connection.id));
+    const queue=new PostgresBuildQueueStore(f.db);
+    const task=await queue.enqueue({userId:owner.user.id,workspaceId:owner.user.id,websiteId:site.id},12);
+    await queue.claim();
+    await assert.rejects(members.deleteAccount(operator.user.id,owner.user.id,'DELETE'),/work in progress/);
+    await f.sql.query("UPDATE build_deploy_tasks SET state='failed' WHERE id=$1",[task.id]);
+    await f.sql.query("INSERT INTO workspace_billing(workspace_id,customer_id) VALUES($1,'cus_failure')",[owner.user.id]);
+    await assert.rejects(members.deleteAccount(operator.user.id,owner.user.id,'DELETE'),/Billing must be configured/);
+    await assert.rejects(members.deleteAccount(operator.user.id,owner.user.id,'DELETE',async()=>{throw new Error('Stripe unavailable');}),/Stripe unavailable/);
+    assert.equal((await f.sql.query('SELECT id FROM workspaces WHERE id=$1',[owner.user.id])).rows.length,1);
+    assert.equal((await f.store.listWebsites(owner.user.id))[0]!.id,site.id);
+    assert(await f.store.session(owner.token));
+    assert.equal((await f.sql.query("SELECT id FROM audit_logs WHERE action='platform.account.deleted'")).rows.length,0);
+  } finally {await f.close();}
+});
+
+test('delete-account HTTP endpoint is superadmin-only, requires CSRF and explicit confirmation, and clears cached connections',async()=>{
+  const f=await fixture();let server:ReturnType<ReturnType<typeof createSaaSApp>['listen']>|undefined;
+  try {
+    const operator=await f.store.login({subject:'delete-http-admin',email:'admin@example.com',name:'Admin'});
+    const target=await f.store.login({subject:'delete-http-target',email:'target@example.com',name:'Target'});
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    const config:SaaSConfig={databaseUrl:'unused',origin:'http://localhost:3000',googleClientId:'test',googleClientSecret:'test',secureCookies:false,trustProxyHops:0,vault};
+    let cacheCleared=0;
+    const websiteApp=Object.assign(()=>express(),{clearCache:()=>{cacheCleared++;}});
+    const app=createSaaSApp({config,store:f.store,google:{authorization:async()=>'',exchange:async()=>{throw new Error('unused');}},websiteApp});
+    server=app.listen(0,'127.0.0.1');await new Promise<void>(done=>server!.once('listening',done));
+    const address=server.address();assert(address&&typeof address==='object');
+    const url=`http://127.0.0.1:${address.port}/api/admin/accounts/${target.user.id}`;
+    const headers=(token:string)=>({Cookie:`st_session=${token}`,Origin:config.origin,'X-CSRF-Token':csrfToken(token),'Content-Type':'application/json'});
+    const request={method:'DELETE',body:JSON.stringify({confirmation:'DELETE'})};
+    assert.equal((await fetch(url,{...request,headers:{'Content-Type':'application/json'}})).status,401);
+    assert.equal((await fetch(url,{...request,headers:headers(target.token)})).status,403);
+    assert.equal((await fetch(url,{...request,headers:{...headers(operator.token),'X-CSRF-Token':'forged'}})).status,403);
+    assert.equal((await fetch(url,{...request,headers:headers(operator.token),body:'{}'})).status,400);
+    assert.equal((await fetch(url,{...request,headers:headers(operator.token),body:JSON.stringify({confirmation:'DELETE',userId:operator.user.id})})).status,400);
+    const impersonation=vault.signToken(JSON.stringify({actorId:operator.user.id,targetUserId:target.user.id,workspaceId:target.user.id,expiresAt:Date.now()+60_000}),'platform-impersonation');
+    assert.equal((await fetch(url,{...request,headers:{...headers(operator.token),Cookie:`st_session=${operator.token}; st_view_as=${impersonation}`}})).status,403);
+    const response=await fetch(url,{...request,headers:headers(operator.token)});
+    assert.equal(response.status,200);assert.deepEqual(await response.json(),{deletedUsers:1,retainedUsers:0,reloadSession:false});
+    assert.equal(cacheCleared,1);assert.equal(await f.store.session(target.token),undefined);
+    assert.equal((await fetch(url,{...request,headers:headers(operator.token)})).status,404);
+  } finally {if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}await f.close();}
+});
+
+test('deleting a personal account preserves shared-account login, logout, and superadmin actions without recreating the deleted account',async()=>{
+  const f=await fixture();
+  try {
+    const operator=await f.store.login({subject:'shared-delete-admin',email:'admin@example.com',name:'Admin'});
+    const owner=await f.store.login({subject:'shared-delete-owner',email:'owner@example.com',name:'Owner'});
+    const target=await f.store.login({subject:'shared-delete-target',email:'target@example.com',name:'Target'});
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    const invite=await f.store.invite(owner.user.id,owner.user.id,operator.user.email,'member');
+    await f.store.acceptInvitation(operator.user.id,operator.token,invite.token);
+    await f.store.switchWorkspace(operator.user.id,operator.token,operator.user.id);
+    const members=new PlatformMembers(f.db);
+    assert.deepEqual(await members.deleteAccount(operator.user.id,operator.user.id,'DELETE'),{deletedUsers:0,retainedUsers:1});
+    assert.equal((await f.store.session(operator.token))!.workspaceId,owner.user.id);
+    await members.disable(operator.user.id,target.user.id);
+    await members.enable(operator.user.id,target.user.id);
+    await f.store.logout(operator.user.id,operator.token);
+    assert.equal(await f.store.session(operator.token),undefined);
+    const login=await f.store.login({subject:'shared-delete-admin',email:'admin@example.com',name:'Admin'});
+    assert.equal(login.user.id,operator.user.id);assert.equal(login.user.workspaceId,owner.user.id);assert.equal(login.user.role,'member');
+    assert.equal((await f.sql.query('SELECT id FROM workspaces WHERE id=$1',[operator.user.id])).rows.length,0);
+  } finally {await f.close();}
 });

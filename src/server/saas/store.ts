@@ -35,17 +35,20 @@ export class AccountStore {
         SET email=excluded.email, name=excluded.name, avatar_url=excluded.avatar_url, updated_at=now(), last_login_at=now()
         WHERE users.disabled_at IS NULL RETURNING *`, [randomUUID(), identity.subject, identity.email, identity.name, identity.avatarUrl || null])).rows[0];
       if (!row) throw new HttpError('This account is disabled.', 403);
-      await sql.query('INSERT INTO workspaces(id,owner_user_id,name) VALUES($1,$1,$2) ON CONFLICT(owner_user_id) DO NOTHING', [row.id, `${String(row.name).slice(0,180)}'s workspace`]);
-      await sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$1,'owner') ON CONFLICT DO NOTHING", [row.id]);
+      await sql.query('INSERT INTO workspaces(id,owner_user_id,name) SELECT $1,$1,$2 WHERE NOT EXISTS(SELECT 1 FROM workspace_memberships WHERE user_id=$1) ON CONFLICT(owner_user_id) DO NOTHING', [row.id, `${String(row.name).slice(0,180)}'s workspace`]);
+      await sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) SELECT $1,$1,'owner' WHERE EXISTS(SELECT 1 FROM workspaces WHERE id=$1 AND owner_user_id=$1) ON CONFLICT DO NOTHING", [row.id]);
+      const workspace=(await sql.query(`SELECT w.*,m.role FROM workspaces w JOIN workspace_memberships m ON m.workspace_id=w.id
+        JOIN users owner ON owner.id=w.owner_user_id WHERE m.user_id=$1 AND owner.disabled_at IS NULL
+        ORDER BY CASE WHEN w.id=$1 THEN 0 ELSE 1 END,m.created_at,w.id LIMIT 1`,[row.id])).rows[0];
+      if (!workspace) throw new HttpError('No active account is available.',403);
       if (previousToken) await sql.query('DELETE FROM sessions WHERE token_hash=$1', [hashToken(previousToken)]);
       await sql.query('DELETE FROM sessions WHERE expires_at <= now()');
       const token = randomToken();
-      await sql.query("INSERT INTO sessions(token_hash,user_id,workspace_id,expires_at) VALUES($1,$2,$2,now()+interval '7 days')", [hashToken(token), row.id]);
+      await sql.query("INSERT INTO sessions(token_hash,user_id,workspace_id,expires_at) VALUES($1,$2,$3,now()+interval '7 days')", [hashToken(token), row.id, workspace.id]);
       await sql.query("SELECT set_config('app.user_id',$1,true)", [row.id]);
-      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [row.id]);
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [workspace.id]);
       await audit(sql, String(row.id), 'account.login', String(row.id));
-      const workspace = (await sql.query('SELECT * FROM workspaces WHERE id=$1', [row.id])).rows[0]!;
-      return { user: userFrom({ ...row, job_tokens: workspace.job_tokens, workspace_id: workspace.id, workspace_name: workspace.name, role: 'owner' }), token };
+      return { user: userFrom({ ...row, job_tokens: workspace.job_tokens, workspace_id: workspace.id, workspace_name: workspace.name, role: workspace.role }), token };
     });
   }
   async session(token: string): Promise<User | undefined> {
@@ -54,7 +57,11 @@ export class AccountStore {
       const row = (await sql.query(`SELECT u.*,w.id AS workspace_id,w.name AS workspace_name,w.job_tokens,m.role,
         EXISTS(SELECT 1 FROM platform_administrators pa WHERE pa.user_id=u.id) AS is_platform_admin
         FROM sessions s JOIN users u ON u.id=s.user_id
-        JOIN workspaces w ON w.id=CASE WHEN EXISTS(SELECT 1 FROM workspace_memberships active WHERE active.workspace_id=s.workspace_id AND active.user_id=u.id) THEN s.workspace_id ELSE u.id END
+        JOIN workspaces w ON w.id=CASE WHEN EXISTS(SELECT 1 FROM workspace_memberships active WHERE active.workspace_id=s.workspace_id AND active.user_id=u.id)
+          THEN s.workspace_id ELSE (SELECT fallback.workspace_id FROM workspace_memberships fallback
+            JOIN workspaces fw ON fw.id=fallback.workspace_id JOIN users fo ON fo.id=fw.owner_user_id
+            WHERE fallback.user_id=u.id AND fo.disabled_at IS NULL
+            ORDER BY CASE WHEN fallback.workspace_id=u.id THEN 0 ELSE 1 END, fallback.created_at,fallback.workspace_id LIMIT 1) END
         JOIN users owner ON owner.id=w.owner_user_id
         JOIN workspace_memberships m ON m.workspace_id=w.id AND m.user_id=u.id
         WHERE s.token_hash=$1 AND s.expires_at>now() AND u.disabled_at IS NULL AND owner.disabled_at IS NULL`, [hashToken(token)])).rows[0];
@@ -64,8 +71,11 @@ export class AccountStore {
   async logout(userId: string, token: string): Promise<void> {
     await this.db.transaction(userId, async (sql) => {
       await sql.query('DELETE FROM sessions WHERE token_hash=$1 AND user_id=$2', [hashToken(token), userId]);
-      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [userId]);
-      await audit(sql, userId, 'account.logout', userId);
+      const workspace=(await sql.query('SELECT workspace_id FROM workspace_memberships WHERE user_id=$1 ORDER BY workspace_id LIMIT 1',[userId])).rows[0];
+      if (workspace) {
+        await sql.query("SELECT set_config('app.workspace_id',$1,true)", [workspace.workspace_id]);
+        await audit(sql, userId, 'account.logout', userId);
+      }
     });
   }
   async beginLogin(state: string, browser: string, verifier: string, nonce: string, returnTo = '/pricing'): Promise<void> {
@@ -335,10 +345,16 @@ export class AccountStore {
     }
   }
   async assertWebsiteOwnership(userId: string, id: string, workspaceId: string, version: number): Promise<void> {
-    await this.workspaceTransaction(userId,workspaceId,allRoles,async (sql) => {
+    await this.withWebsiteOwnership(userId,id,workspaceId,version,async()=>undefined);
+  }
+  async withWebsiteOwnership<T>(userId: string, id: string, workspaceId: string, version: number, operation: () => Promise<T>): Promise<T> {
+    return this.workspaceTransaction(userId,workspaceId,allRoles,async (sql) => {
       const site = (await sql.query(`SELECT id FROM websites WHERE workspace_id=$1 AND id=$2 AND version=$3
         AND ownership_verified_version=version AND installation_id IS NOT NULL AND validated_at IS NOT NULL`,[workspaceId,id,version])).rows[0];
       if (!site) throw new HttpError('Verify website ownership in Settings before publishing.',409,'website_ownership_required');
+      // Account deletion uses the same workspace lock. Keep it through the
+      // external request so a claim cannot be released while a write is in flight.
+      return operation();
     });
   }
   async requestWebsiteOwnership(userId: string, id: string, workspaceId: string, identity: WebsiteIdentity, version: number, kind: string, message: string): Promise<void> {
@@ -398,7 +414,7 @@ export class AccountStore {
         AND updated_at < now()-interval '5 minutes' FOR UPDATE`, [workspaceId])).rows;
       for (const old of abandonedCopies) {
         await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: TOKEN_ACTIONS[String(old.action) as TokenAction]?.cost || 1,
-          actorUserId: String(old.actor_user_id), websiteId: String(old.website_id), ...(old.job_id == null ? {} : { jobId: Number(old.job_id) }),
+          ...(old.actor_user_id ? { actorUserId: String(old.actor_user_id) } : {}), websiteId: String(old.website_id), ...(old.job_id == null ? {} : { jobId: Number(old.job_id) }),
           reference: `spend-refund:${String(old.operation_id)}:${Number(old.attempt)}`, reason: 'Abandoned AI generation reservation refund' });
         await sql.query("UPDATE token_spend_operations SET state='failed',updated_at=now() WHERE workspace_id=$1 AND operation_id=$2 AND state='reserved'", [workspaceId, old.operation_id]);
       }
@@ -465,7 +481,7 @@ export class AccountStore {
       const row = changed.rows[0]!;
       if (refund) {
         await postTokenTransaction(sql, { workspaceId, kind: 'spend_refund', requestedAmount: TOKEN_ACTIONS[String(row.action) as TokenAction]?.cost || 1,
-          actorUserId: String(row.actor_user_id), websiteId: String(row.website_id), ...(row.job_id == null ? {} : { jobId: Number(row.job_id) }),
+          ...(row.actor_user_id ? { actorUserId: String(row.actor_user_id) } : {}), websiteId: String(row.website_id), ...(row.job_id == null ? {} : { jobId: Number(row.job_id) }),
           reference: `spend-refund:${operationId}:${attempt}`, reason: `Failed ${String(row.action)} operation refund` });
       }
     });

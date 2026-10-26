@@ -208,14 +208,12 @@ uses the generated project story.
 `{"status":"publish"}` and updates the correlated WordPress post. The original
 `PATCH /api/jobs/:jobId/wordpress` route remains available for compatibility.
 
-`POST /api/jobs/:jobId/wordpress/regenerate` accepts optional `force`,
-`attachmentId`, and `aiCopy` fields. Complete AI copy replaces the title,
-excerpt, and project-story body. Title-and-excerpt-only copy is accepted for a
-post already on the current generator and preserves its existing body. An old
-or unversioned post requires complete AI copy before it can be upgraded to the
-current generator version. Supplying an attachment replaces the featured
-image; otherwise the existing featured image is preserved. A manually edited
-post returns HTTP 409 unless `force` is true.
+`POST /api/jobs/:jobId/wordpress/regenerate` accepts optional `force` and
+`attachmentId` fields. Update generates fresh title, HTML body, SEO title, and
+SEO description from the trusted ServiceTitan job details; client-supplied
+`aiCopy` does not replace this newly generated copy. Supplying an attachment
+replaces the featured image; otherwise the existing featured image is preserved.
+A manually edited post returns HTTP 409 unless `force` is true.
 
 The dates are inclusive calendar dates and filter on a job's first appointment. The optional `zip` filter accepts a five-digit ZIP code or ZIP+4. Because the Jobs endpoint ignores a direct ZIP parameter, the app resolves matching locations and scans date- and status-filtered Jobs pages in batches of 500. It stops after finding the requested ZIP results plus one look-ahead job, then paginates those matches. ZIP searches omit an exact `totalCount` to avoid scanning all jobs; the page control reveals the next page when another match exists. Location IDs are cached in process memory for up to 24 hours (at most 50 ZIPs, and only when a ZIP has 500 or fewer locations). No job result lists are cached. A restart clears the location cache. Ranges are capped at 366 days, app page size at 50, and ZIP scans at 10,000 source jobs per request. Deep pages may require re-scanning earlier Jobs pages.
 
@@ -223,7 +221,7 @@ The dates are inclusive calendar dates and filter on a job's first appointment. 
 
 Hosted accounts display their available job tokens in the workspace header. Generating copy costs one token. Build costs one token for the combined copy generation and draft creation. Update costs one token for fresh copy generation and updating the existing post. Publishing a draft, changing post status, and reading data are free. The active workspace shares one balance across its team and websites. Client-supplied balances, costs, and user IDs do not control spending. Local development mode is unmetered.
 
-Apply all migrations, including `005_token_ledger.sql`, and the runtime-role grants in [the ledger setup guide](docs/token-ledger.md) before starting the updated server. New workspaces start with zero tokens. Platform administrators allocate or correct tokens through **Token admin**, which records an audited ledger transaction; direct balance updates are rejected. When `ENABLE_TEST_TOKENS=true`, workspace owners can also add one free token at a time on Add Tokens; disable this setting before paid use.
+Apply all migrations, including `005_token_ledger.sql`, and the runtime-role grants in [the ledger setup guide](docs/token-ledger.md) before starting the updated server. New workspaces start with zero tokens. Platform administrators allocate or correct tokens through **Token admin**, which records an audited ledger transaction; direct balance updates are rejected. When `ENABLE_TEST_TOKENS=true`, workspace owners can add a positive whole number of free test tokens on Add Tokens (one token when the amount is omitted); the endpoint accepts only a numeric `amount`, rejects unexpected fields, and always credits the authenticated workspace; disable this setting before paid use.
 
 Paid provider operations hold a database row lock for the account. On provider success, the server decrements the balance and records an audit entry in the same transaction, committing before returning success. Provider failures roll back without a charge, and concurrent requests cannot overspend. Do not configure a database idle-in-transaction timeout shorter than the provider request duration. External provider changes cannot be atomically committed with PostgreSQL: a server/database failure after provider success but before commit requires administrative reconciliation; automatic refunds or retries cannot establish whether the external change occurred.
 
@@ -366,3 +364,7 @@ Full source records are not stored in scanner task payloads: only IDs, bounded t
 ### Exclusive WordPress ownership
 
 SaaS requires migration `014_website_ownership.sql` and companion plugin **1.20.3**. Existing websites must verify ownership again before publishing. A verified installation belongs to one workspace; duplicate connections offer access requests or a platform-reviewed dispute, without revealing owner identity. See [deployment, request review, and transfer restrictions](docs/website-ownership.md) before rollout.
+
+### Superadmin account deletion
+
+On `/admin/members`, superadmins can use **Delete Account** and type **DELETE** to confirm permanent erasure. The account’s records and users without other accounts are removed; shared users retain their other accounts. Apply migration `015_account_deletion.sql` and the request-deletion grant before deployment. See [account deletion behavior and deployment](docs/account-deletion.md).

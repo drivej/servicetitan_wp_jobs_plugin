@@ -63,6 +63,11 @@ export class PostgresDatabase implements Database {
       (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
        tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);
     if (ledgerTriggers.rows[0]?.count !== 5) throw new Error('Required token ledger integrity triggers are missing. Run migrations first.');
+    const deletionReady=await this.pool.query(`SELECT
+      has_table_privilege(current_user,'website_ownership_requests','DELETE') AND
+      (SELECT count(*)=2 FROM pg_trigger WHERE tgname IN ('account_delete_guard','user_delete_guard') AND tgenabled='O') AND
+      (SELECT count(*)=2 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name IN ('build_deploy_tasks','job_scanner_tasks') AND column_name='actor_user_id') AS ready`);
+    if (!deletionReady.rows[0]?.ready) throw new Error('Account deletion migration or permissions are missing. Run migration 015 and grant DELETE on website_ownership_requests.');
     const ownershipIndexes=await this.pool.query(`SELECT count(*)::integer AS count FROM pg_index WHERE
       indexrelid IN ('websites_installation_owner'::regclass,'websites_canonical_owner'::regclass) AND indisunique AND indisvalid`);
     if (ownershipIndexes.rows[0]?.count !== 2) throw new Error('Required website ownership unique indexes are missing. Run migration 014.');
@@ -85,7 +90,16 @@ export async function migrate(sql: Sql, directory = resolve('migrations')): Prom
       if (previous.checksum !== checksum) throw new Error(`Applied migration was modified: ${name}`);
       continue;
     }
+    // Replacing the populated ledger -> website FK in 015 validates existing
+    // references as the migration owner. FORCE RLS otherwise hides valid sites
+    // when that owner has no tenant session. Preserve the migration checksum.
+    // These ALTERs share the caller's transaction: ordinary roles retain RLS,
+    // the owner exception is restored before commit, and failures roll it back.
+    const restoreWebsiteForce = name === '015_account_deletion.sql'
+      && (await sql.query("SELECT relforcerowsecurity FROM pg_class WHERE oid='websites'::regclass")).rows[0]?.relforcerowsecurity === true;
+    if (restoreWebsiteForce) await sql.query('ALTER TABLE websites NO FORCE ROW LEVEL SECURITY');
     await sql.query(source);
+    if (restoreWebsiteForce) await sql.query('ALTER TABLE websites FORCE ROW LEVEL SECURITY');
     await sql.query('INSERT INTO schema_migrations(name, checksum) VALUES ($1, $2)', [name, checksum]);
   }
 }

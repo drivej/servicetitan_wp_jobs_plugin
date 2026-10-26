@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAndDeploy, type BuildProviders } from './build-deploy.js';
 import { BuildQueueWorker, FileBuildQueueStore } from './build-queue.js';
+import { REQUIRED_WORDPRESS_PLUGIN_VERSION } from './wordpress.js';
+import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version.js';
 import { createApp } from './app.js';
 
 function fixture() {
@@ -23,14 +25,14 @@ function fixture() {
     },
     copyGenerator: { generate: async () => {
       events.push('generate');
-      return { title: 'Drain Clearing in Torrance, CA', bodyHtml: '<p>The company completed drain clearing in Torrance, California, to address a reported kitchen blockage.</p><p>The technician assessed the reported issue and identified the affected drain line.</p><p>The documented drain clearing addressed the reported blockage. Contact the company for drain service in Torrance.</p>' };
+      return { seoTitle: 'Drain Clearing in Torrance', seoDescription: 'Documented drain clearing in Torrance addressed a reported kitchen blockage with technician work recorded for the property.', title: 'Drain Clearing in Torrance, CA', bodyHtml: '<p>The company completed drain clearing in Torrance, California, to address a reported kitchen blockage.</p><p>The technician assessed the reported issue and identified the affected drain line.</p><p>The documented drain clearing addressed the reported blockage. Contact the company for drain service in Torrance.</p>' };
     } },
     wordpress: {
-      getPluginStatus: async () => ({ state: 'current', requiredVersion: '1.19.2', seoGeneratorVersion: 6 }),
+      getPluginStatus: async () => ({ state: 'current', requiredVersion: REQUIRED_WORDPRESS_PLUGIN_VERSION, seoGeneratorVersion: SEO_GENERATOR_VERSION }),
       getStatus: async () => ({ state: 'not_found', label: 'None' }), getStatuses: async () => ({}),
       pushJob: async (job, images, status, copy) => {
         assert.equal(job.id, 42); assert.equal(images.length, 1); assert.equal(images[0]?.id, 'first');
-        assert.equal(status, 'draft'); assert(copy.bodyHtml); events.push('push:draft');
+        assert.equal(status, 'draft'); assert(copy.bodyHtml); assert.equal(copy.seoTitle, 'Drain Clearing in Torrance'); assert.match(copy.seoDescription || '', /Documented drain clearing/); events.push('push:draft');
         return { state: 'exists', label: 'Draft', postStatus: 'draft', postId: 10 };
       },
       regenerateJob: async () => { throw new Error('Unexpected rebuild'); }, updateStatus: async () => { throw new Error('Unexpected status change'); },
@@ -56,8 +58,8 @@ test('missing images, existing posts, unknown status and invalid copy cannot pub
   providers.wordpress.getStatus = async () => ({ state: 'unknown', label: 'Unknown' });
   await assert.rejects(buildAndDeploy(42, providers), /Unable to verify/);
   const invalid = fixture();
-  invalid.providers.copyGenerator.generate = async () => ({ title: 'Incomplete copy', bodyHtml: '<p>Short.</p>' });
-  await assert.rejects(buildAndDeploy(42, invalid.providers), /3–5 short paragraphs/);
+  invalid.providers.copyGenerator.generate = async () => ({ title: 'Incomplete copy', bodyHtml: '<script>Unsafe generated HTML cannot be published.</script>', seoTitle: 'Drain Clearing in Torrance', seoDescription: 'Documented drain clearing in Torrance addressed a reported kitchen blockage at the property.' });
+  await assert.rejects(buildAndDeploy(42, invalid.providers), /body must use p tags/);
   assert(!invalid.events.includes('push:draft'));
 });
 

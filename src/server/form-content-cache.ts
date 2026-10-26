@@ -7,6 +7,8 @@ type GetPage = (params: Record<string, string | number>) => Promise<unknown>;
 type FormIndex = { byJob: Map<number, NonNullable<WorkContent['formFindings']>>; unavailable: boolean };
 const cache = new Map<string, { expiresAt: number; request: Promise<FormIndex> }>();
 
+export const clearFormContentCache = (): void => { cache.clear(); };
+
 /** A small recent-window index shared by a workspace/integration, never a scan per job. */
 export async function getRecentFormContent(config: ServiceTitanConfig, jobId: number, getPage: GetPage): Promise<WorkContent> {
   const key = createHash('sha256').update(JSON.stringify([config.contentScope || 'local', config.apiBaseUrl, config.tenantId, config.clientId, config.clientSecret, config.appKey])).digest('hex');

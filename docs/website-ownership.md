@@ -22,7 +22,7 @@ The conflict screen lets a signed-in workspace owner/admin submit access or disp
 
 Access requests appear under **Team settings → Website requests** in the connected workspace. Its owner/admin reviews the requester and uses the existing **Invite teammates** flow. Invitation creation does not send email: the administrator shares the generated link using the existing UI. Email-bound acceptance, role restrictions, expiry, revocation, and workspace switching continue unchanged. Requests never add members automatically. Requesters do not see existing owner identity.
 
-Platform administrators can review disputes (and access requests) in their own Team settings. Dispute records do not grant access or release a claim. There is no outgoing email notification, automated adjudication, status resolution, or ownership transfer endpoint in this change. Requests remain as review records; repeats do not overwrite their evidence. The existing application had no website deletion, disconnect, or ownership transfer route, so no automatic claim-release mechanism is introduced.
+Platform administrators can review disputes (and access requests) in their own Team settings. Dispute records do not grant access or release a claim. There is no outgoing email notification, automated adjudication, status resolution, or ownership transfer endpoint in this change. Requests remain as review records; repeats do not overwrite their evidence. Standalone website disconnect and ownership transfer remain unavailable. Migration 015 adds a separate, explicitly confirmed superadmin account-deletion flow that erases the account’s website row and releases its ownership claim; see [account deletion](account-deletion.md).
 
 ## Decisions before rollout
 

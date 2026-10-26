@@ -10,7 +10,7 @@ import { csrfToken, randomToken } from './crypto.js';
 import type { GoogleLogin } from './google.js';
 import type { WebsiteAppFactory } from './providers.js';
 import { AccountStore, type User } from './store.js';
-import { ServiceTitanClient } from '../service-titan.js';
+import { clearServiceTitanCaches, ServiceTitanClient } from '../service-titan.js';
 import { WordPressClient } from '../wordpress.js';
 import { WordPressRequestError } from '../wordpress-error.js';
 import { connectionInput, HttpError, record, textField, uuid, websiteInput, websiteUrl } from './validation.js';
@@ -356,6 +356,19 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.status(204).end();
     } catch (error) { next(error); }
   });
+  app.delete('/api/admin/accounts/:workspaceId', async (req,res,next) => {
+    try {
+      if (res.locals.impersonation) throw new HttpError('Exit user view before deleting an account.',403);
+      const actor=res.locals.actor as User;
+      const workspaceId=uuid(req.params.workspaceId);
+      const body=record(req.body,['confirmation']);
+      const result=await platformMembers.deleteAccount(actor.id,workspaceId,body.confirmation,
+        billing ? account=>billing.deleteAccountCustomer(account) : undefined);
+      websiteApp.clearCache?.();
+      clearServiceTitanCaches();
+      res.json({ ...result, reloadSession: workspaceId===(res.locals.user as User).workspaceId });
+    } catch(error) { next(error); }
+  });
   app.post('/api/admin/members/:memberId/enable', async (req, res, next) => {
     try { await platformMembers.enable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
   });
@@ -365,9 +378,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.post('/api/tokens/test-credit', async (req, res, next) => {
     try {
       if (!config.testTokensEnabled) throw new HttpError('Test tokens are disabled.', 403);
-      const rawAmount = req.body?.amount;
-      const amount = rawAmount === undefined ? 1 : Number(rawAmount);
-      if (!Number.isSafeInteger(amount) || amount < 1 || amount > 2_147_483_647) throw new HttpError('Enter a positive whole token amount.');
+      const body = record(req.body ?? {}, ['amount']);
+      const amount = body.amount === undefined ? 1 : body.amount;
+      if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 1 || amount > 2_147_483_647) throw new HttpError('Enter a positive whole token amount.');
       const user = res.locals.user as User;
       res.json({ jobTokens: await store.addTestJobToken(user.id, amount, user.workspaceId) });
     } catch (error) { next(error); }

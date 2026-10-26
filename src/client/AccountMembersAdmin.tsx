@@ -1,4 +1,4 @@
-import { Button, Chip, TextField } from '@mui/material';
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
 import { LoadingModal } from './LoadingModal';
@@ -19,6 +19,8 @@ export function AccountMembersAdmin() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [startingViewAs, setStartingViewAs] = useState('');
+  const [deleteTarget,setDeleteTarget]=useState<Account>();
+  const [deleteConfirmation,setDeleteConfirmation]=useState('');
   useEffect(() => {
     let active = true;
     setLoading(true); setError('');
@@ -45,6 +47,24 @@ export function AccountMembersAdmin() {
     finally { setBusy(''); }
   };
 
+  const deleteAccount = async () => {
+    if (!deleteTarget || deleteConfirmation!=='DELETE' || busy) return;
+    const account=deleteTarget;
+    setBusy(`delete:${account.workspaceId}`);setError('');setMessage('');
+    try {
+      const response=await accountFetch(`/api/admin/accounts/${account.workspaceId}`,{
+        method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation:deleteConfirmation}),
+      });
+      const body=await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to delete account.');
+      setDeleteTarget(undefined);setDeleteConfirmation('');
+      if (body.reloadSession) { window.location.assign('/admin/members');return; }
+      setMessage(`${account.name} was permanently deleted. ${body.deletedUsers} users removed; ${body.retainedUsers} users retained because they belong to other accounts.`);
+      setRevision(value=>value+1);
+    } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to delete account.'); }
+    finally { setBusy(''); }
+  };
+
   const startViewAs = async (memberId: string, workspaceId: string) => {
     if (!memberId || !workspaceId) return;
     setStartingViewAs(memberId); setError('');
@@ -63,7 +83,7 @@ export function AccountMembersAdmin() {
       <label>Name or email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
       <Button type="submit" disabled={loading}>Search</Button>
     </form>
-    {error && <p className='notice error' role='alert'>{error}</p>}
+    {error && !deleteTarget && <p className='notice error' role='alert'>{error}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
     {loading && <p role='status'>Loading members…</p>}
     {page && !loading && <>
@@ -71,6 +91,7 @@ export function AccountMembersAdmin() {
         <header className='account-member-card-header'>
           <h2>{account.websites.length ? account.websites.map((website,index) => <span key={website.url}>{index > 0 && ' · '}<a href={website.url} target='_blank' rel='noreferrer'>{website.url.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a></span>) : account.name}</h2>
           {!account.websites.length && <p className='field-help'>Website not configured</p>}
+          <Button color='error' disabled={Boolean(busy) || Boolean(startingViewAs)} onClick={()=>{setDeleteTarget(account);setDeleteConfirmation('');setError('');}}>Delete Account</Button>
         </header>
         <table className='account-member-table'>
           <caption className='visually-hidden'>Members of {account.websites[0]?.url || account.name}</caption>
@@ -82,6 +103,21 @@ export function AccountMembersAdmin() {
       {page.accounts.length === 0 && <p>No accounts found.</p>}
       <div className='account-actions'>{after && <Button onClick={() => setAfter('')}>First page</Button>}{page.nextCursor && <Button onClick={() => setAfter(page.nextCursor!)}>Next accounts</Button>}</div>
     </>}
+    <Dialog open={Boolean(deleteTarget)} onClose={()=>{if(!busy){setDeleteTarget(undefined);setDeleteConfirmation('');setError('');}}} aria-labelledby='delete-account-title' aria-describedby='delete-account-description'>
+      <DialogTitle id='delete-account-title'>Permanently delete account?</DialogTitle>
+      <DialogContent>
+        <p><strong>{deleteTarget?.name}</strong>{deleteTarget?.websites.map(site=><span key={site.url}> · {site.url}</span>)}</p>
+        <p id='delete-account-description'>This is destructive and cannot be undone. All account information, website connections, saved credentials, invitations, tokens, history, and queued jobs will be permanently deleted. The website will be available to connect to another account.</p>
+        <p>Users who do not belong to other accounts will also be deleted and signed out. Users with other accounts will retain those accounts.</p>
+        <p>Connected Stripe billing will be removed and subscriptions canceled. Published WordPress posts will remain on the website.</p>
+        <TextField autoFocus fullWidth margin='normal' label='Type DELETE to confirm' value={deleteConfirmation} disabled={Boolean(busy)} onChange={event=>setDeleteConfirmation(event.target.value)} slotProps={{htmlInput:{autoComplete:'off'}}}/>
+        {error && <p className='notice error' role='alert'>{error}</p>}
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={Boolean(busy)} onClick={()=>{setDeleteTarget(undefined);setDeleteConfirmation('');setError('');}}>Cancel</Button>
+        <Button color='error' variant='contained' disabled={Boolean(busy) || deleteConfirmation!=='DELETE'} onClick={()=>void deleteAccount()}>{busy ? 'Deleting…' : 'Permanently Delete Account'}</Button>
+      </DialogActions>
+    </Dialog>
   </main>;
 }
 

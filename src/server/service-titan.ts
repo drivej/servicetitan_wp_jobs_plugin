@@ -10,7 +10,7 @@ import { publicFetch } from './saas/public-fetch.js';
 
 import type { ApiHealthCheck, ApiHealthReport } from '../shared/api-health.js';
 
-import { getRecentFormContent } from './form-content-cache.js';
+import { clearFormContentCache, getRecentFormContent } from './form-content-cache.js';
 import { invoiceWorkContent, jobDescriptionPreview, objectValue, safeWorkText } from './work-content.js';
 import type { WorkContent } from '../shared/work-content.js';
 
@@ -85,6 +85,10 @@ const ZIP_SCAN_MAX_PAGES = 20;
 const ZIP_SCAN_MAX_JOBS = ZIP_SCAN_PAGE_SIZE * ZIP_SCAN_MAX_PAGES;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const zipLocationsCache = new Map<string, { expiresAt: number; request: Promise<Set<number>> }>();
+
+export function clearServiceTitanCaches(): void {
+  tagCatalogCache.clear(); zipLocationsCache.clear(); clearFormContentCache();
+}
 
 export class ServiceTitanClient implements JobsProvider {
   private readonly api: AxiosInstance;
