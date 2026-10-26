@@ -223,9 +223,9 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
               </a>
             </nav>
           )}
-          {!administration && <Button className='account-menu-signout' type='button' variant='text' disabled={busy} onClick={onSignOut}>
+          <Button className='account-menu-signout' type='button' variant='text' disabled={busy} onClick={onSignOut}>
             {impersonating ? 'Exit user view' : 'Sign out'}
-          </Button>}
+          </Button>
         </div>
       )}
     </div>
