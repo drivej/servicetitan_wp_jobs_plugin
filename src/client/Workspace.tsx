@@ -1,3 +1,4 @@
+import { serviceTitanActions } from './serviceTitanActions';
 import { WebsiteOwnershipConflict } from './WebsiteOwnership';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import { Avatar, Button, IconButton, TextField } from '@mui/material';
@@ -264,7 +265,7 @@ const ConnectionCheckMessage = ({ check }: { check: ConnectionCheck }) => (
       )}
     </span>
   </p>
-  {check.report && <ul aria-label='ServiceTitan endpoint results'>{check.report.checks.map((result) => <li key={result.name}><strong>{result.name}: {result.state === 'available' ? 'Available' : result.state === 'unavailable' ? 'Unavailable' : 'Not checked'}</strong> — {result.message}{result.statusCode ? ` (HTTP ${result.statusCode})` : ''}</li>)}</ul>}
+  {check.kind === 'servicetitan' && !check.success && serviceTitanActions(check.report).length > 0 && <div><h3>Actions required</h3><ul aria-label='ServiceTitan actions required'>{serviceTitanActions(check.report).map(result => <li key={result.name}><strong>{result.name}:</strong> {result.action} <small>API endpoint: <code>{result.endpoint}</code></small></li>)}</ul></div>}
   </div>
 );
 
@@ -679,6 +680,7 @@ export function Workspace({ children }: { children: ReactNode }) {
     }
   };
 
+  const ownershipReverification = Boolean(websites[0]?.wordpressConfigured && !websites[0]?.ownershipClaimed && !onboarding?.websiteReady);
   const settingsWebsite = websites.find((site) => site.id === selected) || websites[0];
   const settingsConnection = connections.find((connection) => connection.id === settingsWebsite?.connectionId) || connections[0];
   const onboardingConnection = editingConnection || connections.find((connection) => connection.id === websites[0]?.connectionId) || connections[0];
@@ -1141,8 +1143,8 @@ export function Workspace({ children }: { children: ReactNode }) {
         <main className='app-page'>
           <PageHeader
             eyebrow='Onboarding'
-            title={onboardingStage === 1 ? 'Connect your WordPress website' : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'}
-            description={onboardingStage === 1 ? 'Install the companion plugin, add WordPress access, and test both connections.' : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test the required API endpoints.' : 'Invite teammates to share this workspace, or skip this step and start working.'}
+            title={onboardingStage === 1 ? (ownershipReverification ? 'Verify your existing WordPress website' : 'Connect your WordPress website') : onboardingStage === 2 ? 'Connect ServiceTitan' : 'Invite your team'}
+            description={onboardingStage === 1 ? (ownershipReverification ? 'Your saved connection needs an ownership check before you can continue.' : 'Install the companion plugin, add WordPress access, and test both connections.') : onboardingStage === 2 ? 'Enter your ServiceTitan API credentials and test the required API endpoints.' : 'Invite teammates to share this workspace, or skip this step and start working.'}
           />
           {message && (
             <p className='notice' role='status'>
@@ -1177,8 +1179,8 @@ export function Workspace({ children }: { children: ReactNode }) {
                 {onboardingStage === 1 && (
                   <section className='panel account-panel onboarding-step'>
                     <p className='eyebrow'>Step 1 of 3</p>
-                    <h2>Install the plugin and connect WordPress</h2>
-                    <p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p>
+                    <h2>{ownershipReverification ? 'Confirm ownership using your saved connection' : 'Install the plugin and connect WordPress'}</h2>
+                    {ownershipReverification ? <p className='notice'>We now verify website ownership so a WordPress installation can belong to only one account. Your website and credentials are saved. Update the companion plugin on your WordPress website, then select Verify website ownership below. Leave the password blank to use the saved credentials. The connected WordPress user must be an administrator.</p> : <p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p>}
                     <div className='onboarding-plugin-download'>
                       <Button component='a' variant='contained' size='large' className='onboarding-download-button' startIcon={<DownloadRoundedIcon />} href='/downloads/job-showcase-for-servicetitan-1.20.3.zip' download>
                         Download WordPress plugin 1.20.3
@@ -1187,7 +1189,8 @@ export function Workspace({ children }: { children: ReactNode }) {
                         Upload this ZIP in WordPress under <strong>Plugins → Add New Plugin → Upload Plugin</strong>, then install and activate it. <a href='/wordpress-plugin'>Full installation instructions</a>
                       </p>
                     </div>
-                    <div className='onboarding-password-instructions'>
+                    <details className='onboarding-password-instructions' open={!ownershipReverification}>
+                      <summary>{ownershipReverification ? 'Need to replace your saved WordPress credentials?' : 'Set up WordPress credentials'}</summary>
                       <h3>Generate your WordPress API password</h3>
                       <p>
                         You must generate this code in your own WordPress admin. WordPress calls it an <strong>Application Password</strong>.
@@ -1203,7 +1206,7 @@ export function Workspace({ children }: { children: ReactNode }) {
                           Copy the generated password and paste it into <strong>WordPress Application Password</strong> below. Enter your existing WordPress login username for that same account. Use the username you already use to sign in to WordPress; do not create a new username for this app.
                         </li>
                       </ol>
-                    </div>
+                    </details>
                     {websites[0] && (
                       <p>
                         {websites[0].name} · {websites[0].wordpressConfigured ? 'Credentials saved' : 'Credentials needed'} <Button onClick={() => setEditingWebsite(websites[0])}>Edit</Button>
@@ -1243,7 +1246,7 @@ export function Workspace({ children }: { children: ReactNode }) {
                       <p className='field-help'>
                         Use a generated Application Password, not your normal WordPress password. The saved password stays on the server; leave the field blank to keep it or enter a replacement. <a href='/help/wordpress-credentials'>Credential help</a>
                       </p>
-                      <ConnectionTestButton type='submit' disabled={busy} busy={busy} busyLabel='Testing WordPress…' />
+                      <ConnectionTestButton type='submit' disabled={busy} busy={busy} busyLabel='Testing WordPress…' label={ownershipReverification ? 'Verify website ownership' : 'Test Connection'} />
                     </form>
                     {(validationSuccess || validationError) && (
                       <div className='connection-feedback'>

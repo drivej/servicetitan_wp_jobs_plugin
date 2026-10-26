@@ -91,7 +91,7 @@ export function AccountMembersAdmin() {
         <header className='account-member-card-header'>
           <h2>{account.websites.length ? account.websites.map((website,index) => <span key={website.url}>{index > 0 && ' · '}<a href={website.url} target='_blank' rel='noreferrer'>{website.url.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a></span>) : account.name}</h2>
           {!account.websites.length && <p className='field-help'>Website not configured</p>}
-          <Button color='error' disabled={Boolean(busy) || Boolean(startingViewAs)} onClick={()=>{setDeleteTarget(account);setDeleteConfirmation('');setError('');}}>Delete Account</Button>
+          <Button className='account-member-delete' color='error' disabled={Boolean(busy) || Boolean(startingViewAs)} onClick={()=>{setDeleteTarget(account);setDeleteConfirmation('');setError('');}}>Delete Account</Button>
         </header>
         <table className='account-member-table'>
           <caption className='visually-hidden'>Members of {account.websites[0]?.url || account.name}</caption>
