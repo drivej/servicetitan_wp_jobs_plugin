@@ -5,7 +5,7 @@ import { LoadingModal } from './LoadingModal';
 
 interface Website { name: string; url: string; }
 interface Member { id: string; name: string; email: string; disabled: boolean; isPlatformAdmin: boolean; role: string; }
-interface Account { workspaceId: string; name: string; websites: Website[]; members: Member[]; }
+interface Account { paused: boolean; pausePending: 'pause' | 'resume' | null; workspaceId: string; name: string; websites: Website[]; members: Member[]; }
 interface Page { accounts: Account[]; nextCursor: string | null; }
 
 export function AccountMembersAdmin() {
@@ -45,6 +45,20 @@ export function AccountMembersAdmin() {
       setRevision(value => value + 1);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update member access.'); }
     finally { setBusy(''); }
+  };
+
+  const changeAccountPause = async (account: Account) => {
+    const paused=account.pausePending ? account.pausePending==='pause' : !account.paused;
+    if (!account.pausePending && !window.confirm(paused
+      ? `Pause ${account.name}? Future Stripe collection and token renewals will stop. Pending subscription checkouts will close and unpaid subscription invoices will be voided. Existing members keep access and tokens; new members cannot join. Completed payments are not refunded and payments already processing may complete.`
+      : `Resume ${account.name}? Future billing and token renewals will follow the existing subscription schedule, and new members can join again.`)) return;
+    setBusy(`pause:${account.workspaceId}`);setError('');setMessage('');
+    try {
+      const response=await accountFetch(`/api/admin/accounts/${account.workspaceId}/pause`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})});
+      if (!response.ok) {const body=await response.json();throw new Error(body.error || 'Unable to change account status.');}
+      setMessage(`${account.name} ${paused?'paused':'resumed'}.`);
+    } catch(reason) {setError(reason instanceof Error?reason.message:'Unable to change account status.');}
+    finally {setBusy('');setRevision(value=>value+1);}
   };
 
   const deleteAccount = async () => {
@@ -91,7 +105,11 @@ export function AccountMembersAdmin() {
         <header className='account-member-card-header'>
           <h2>{account.websites.length ? account.websites.map((website,index) => <span key={website.url}>{index > 0 && ' · '}<a href={website.url} target='_blank' rel='noreferrer'>{website.url.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a></span>) : account.name}</h2>
           {!account.websites.length && <p className='field-help'>Website not configured</p>}
+          <div className='account-member-card-actions'>
+          <Button disabled={Boolean(busy) || Boolean(startingViewAs)} onClick={()=>void changeAccountPause(account)}>{account.pausePending ? `Retry ${account.pausePending}` : account.paused ? 'Resume account' : 'Pause account'}</Button>
           <Button className='account-member-delete' color='error' disabled={Boolean(busy) || Boolean(startingViewAs)} onClick={()=>{setDeleteTarget(account);setDeleteConfirmation('');setError('');}}>Delete Account</Button>
+          </div>
+          {account.paused && <p className='field-help'>{account.pausePending ? 'Paused · Billing change pending; Stripe payments may continue until completed.' : 'Paused'}</p>}
         </header>
         <table className='account-member-table'>
           <caption className='visually-hidden'>Members of {account.websites[0]?.url || account.name}</caption>

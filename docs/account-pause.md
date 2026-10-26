@@ -1,6 +1,6 @@
 # Account pause
 
-Account owners can open **Tokens → Plans** (or the Settings billing link), confirm **Pause account**, and later select **Resume account**. Admins and members cannot change billing. Superadmin impersonation cannot pause or resume a customer account.
+Account owners and account admins can open **Tokens → Plans** (or the Settings billing link), confirm **Pause account**, and later select **Resume account**. Basic members cannot pause or resume. Subscription purchases and billing-portal access remain owner-only. Superadmins can pause or resume any account from its card on **Account members**, including accounts they do not belong to. Superadmin impersonation cannot pause or resume a customer account.
 
 Pause preserves existing members, saved tokens, account data, website ownership, and normal use of those tokens. It immediately blocks invitations and joining through existing links. Existing invitations remain valid until their normal expiry and can be accepted after resume. Stripe payment collection is paused indefinitely with `pause_collection.behavior=void`; paused periods are not billed later. Pending subscription checkouts are expired and unpaid open subscription invoices are voided; draft subscription invoices are deleted. Payments already completed are not refunded, and payments already processing may complete.
 

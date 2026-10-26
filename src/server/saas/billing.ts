@@ -62,24 +62,39 @@ export class BillingService {
     return (await this.stripe.subscriptions.list({ customer, status: 'all', limit: 100 })).data.filter((s) => ['active', 'trialing'].includes(s.status));
   }
   private requireUnpaused(row: Record<string, unknown>) {
-    if (row.paused_at || row.pause_action) throw new HttpError('This account is paused. Resume it before starting a subscription.',409);
+    if (row.paused_at || row.pause_action) throw new HttpError('This account is paused. Ask an account admin to resume it before starting a subscription.',409);
   }
-  async setPaused(user: User, paused: boolean): Promise<void> {
+  private async pauseScope<T>(user: User, workspaceId: string, action: (sql: Sql, row: Record<string, unknown>) => Promise<T>): Promise<T> {
+    return this.db.transaction(user.id,async sql=>{
+      const workspace=(await sql.query('SELECT id,paused_at FROM workspaces WHERE id=$1 FOR UPDATE',[workspaceId])).rows[0];
+      const allowed=(await sql.query(`SELECT 1 FROM users u JOIN workspaces w ON w.id=$2 JOIN users owner ON owner.id=w.owner_user_id
+        LEFT JOIN workspace_memberships m ON m.workspace_id=w.id AND m.user_id=u.id
+        WHERE u.id=$1 AND u.disabled_at IS NULL AND (
+          EXISTS(SELECT 1 FROM platform_administrators a WHERE a.user_id=u.id) OR
+          (m.role IN ('owner','admin') AND owner.disabled_at IS NULL))`,[user.id,workspaceId])).rows[0];
+      if (!workspace || !allowed) throw new HttpError('Only account admins and superadmins can pause or resume accounts.',403);
+      await sql.query('INSERT INTO workspace_billing(workspace_id) VALUES($1) ON CONFLICT DO NOTHING',[workspaceId]);
+      const row=(await sql.query('SELECT * FROM workspace_billing WHERE workspace_id=$1',[workspaceId])).rows[0]!;
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)",[user.workspaceId]);
+      return action(sql,{...row,paused_at:workspace.paused_at});
+    });
+  }
+  async setPaused(user: User, paused: boolean, workspaceId = user.workspaceId): Promise<void> {
     this.assertMode();
     const action = paused ? 'pause' : 'resume';
     // Commit the intent first, so an API timeout or process crash stays fail-closed.
-    await this.owned(user,true,async(sql,row)=>{
+    await this.pauseScope(user,workspaceId,async(sql,row)=>{
       if (row.pause_action && row.pause_action!==action) throw new HttpError('Finish the pending billing change before changing account status.',409);
       if (row.pause_action || Boolean(row.paused_at)===paused) return;
       const requestId=randomUUID();
       if (paused) {
-        await sql.query('UPDATE workspaces SET paused_at=now() WHERE id=$1',[user.workspaceId]);
-        await sql.query('INSERT INTO workspace_pause_periods(id,workspace_id) VALUES($1,$2)',[requestId,user.workspaceId]);
+        await sql.query('UPDATE workspaces SET paused_at=now() WHERE id=$1',[workspaceId]);
+        await sql.query('INSERT INTO workspace_pause_periods(id,workspace_id) VALUES($1,$2)',[requestId,workspaceId]);
       }
-      await sql.query('UPDATE workspace_billing SET pause_action=$2,pause_request_id=$3 WHERE workspace_id=$1',[user.workspaceId,action,requestId]);
+      await sql.query('UPDATE workspace_billing SET pause_action=$2,pause_request_id=$3 WHERE workspace_id=$1',[workspaceId,action,requestId]);
     });
     try {
-      await this.owned(user,true,async(sql,row)=>{
+      await this.pauseScope(user,workspaceId,async(sql,row)=>{
         if (!row.pause_action) return; // Another retry already synchronized it.
         if (row.pause_action!==action) throw new HttpError('Account status changed. Refresh billing.',409);
         const key=String(row.pause_request_id);
@@ -115,11 +130,11 @@ export class BillingService {
           }
         }
         if (!paused) {
-          await sql.query('UPDATE workspace_pause_periods SET ended_at=now() WHERE workspace_id=$1 AND ended_at IS NULL',[user.workspaceId]);
-          await sql.query('UPDATE workspaces SET paused_at=NULL WHERE id=$1',[user.workspaceId]);
+          await sql.query('UPDATE workspace_pause_periods SET ended_at=now() WHERE workspace_id=$1 AND ended_at IS NULL',[workspaceId]);
+          await sql.query('UPDATE workspaces SET paused_at=NULL WHERE id=$1',[workspaceId]);
         }
-        await sql.query('UPDATE workspace_billing SET pause_action=NULL,pause_request_id=NULL,checkout_id=NULL,checkout_key=NULL,checkout_price=NULL,checkout_expires_at=NULL WHERE workspace_id=$1',[user.workspaceId]);
-        await sql.query(`INSERT INTO audit_logs(id,user_id,workspace_id,action,target_id) VALUES($1,$2,$3,$4,$3)`,[randomUUID(),user.id,user.workspaceId,paused?'account.paused':'account.resumed']);
+        await sql.query('UPDATE workspace_billing SET pause_action=NULL,pause_request_id=NULL,checkout_id=NULL,checkout_key=NULL,checkout_price=NULL,checkout_expires_at=NULL WHERE workspace_id=$1',[workspaceId]);
+        await sql.query(`INSERT INTO audit_logs(id,user_id,workspace_id,action,target_id) VALUES($1,$2,$3,$4,$5)`,[randomUUID(),user.id,user.workspaceId,paused?'account.paused':'account.resumed',workspaceId]);
       });
     } catch {
       throw new HttpError('The account remains paused while the billing change is pending. Stripe has not confirmed completion; payments may still be collected. Retry the pending change.',503);
@@ -137,7 +152,7 @@ export class BillingService {
       const subscriptions = row.customer_id ? await this.subscriptions(String(row.customer_id)) : [];
       const subscription = subscriptions[0];
       const testPlan = this.config.testTokensEnabled && user.role === 'owner' ? await this.freePlan() : null;
-      return { paused: Boolean(row.paused_at), pausePending: row.pause_action || null, plans, testPlan, canManage: user.role === 'owner', hasCustomer: Boolean(row.customer_id), subscription: subscription ? {
+      return { paused: Boolean(row.paused_at), pausePending: row.pause_action || null, canPause: ['owner','admin'].includes(user.role) || user.isPlatformAdmin === true, plans, testPlan, canManage: user.role === 'owner', hasCustomer: Boolean(row.customer_id), subscription: subscription ? {
         status: subscription.status, cancelAtPeriodEnd: subscription.cancel_at_period_end,
         priceId: subscription.items.data[0]?.price.id,
       } : null };

@@ -61,7 +61,7 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     </section>
     {role !== 'member' && <section className="panel account-panel team-invites-panel" aria-labelledby="team-invites-heading">
       <h2 id="team-invites-heading">Invite teammates</h2>
-      {team?.paused && <p className="notice">This account is paused. The owner must resume it before anyone can be invited or accept an invitation. Existing members keep their access.</p>}
+      {team?.paused && <p className="notice">This account is paused. An account admin must resume it before anyone can be invited or accept an invitation. Existing members keep their access.</p>}
       <form className="account-form" onSubmit={(event) => void createInvite(event)}>
         <label>Google account email<TextField variant="outlined" size="small" fullWidth name="email" type="email" required placeholder="teammate@company.com" slotProps={{ htmlInput: { maxLength: 254 } }}/></label>
         <label>Role<Select size="small" variant='outlined' sx={{ width: '100%' }} name="role" aria-label="Role" defaultValue="member"><MenuItem value="member">Member</MenuItem>{role === 'owner' && <MenuItem value="admin">Admin</MenuItem>}</Select></label>

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { accountFetch } from './api';
 import { LoadingModal } from './LoadingModal';
 interface Plan { id: string; name: string; amount: number; currency: string; tokens: number; maxTokens: number; interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number; }
-interface Billing { paused: boolean; pausePending: 'pause' | 'resume' | null; plans: Plan[]; testPlan: Plan | null; canManage: boolean; hasCustomer: boolean; subscription: { status: string; cancelAtPeriodEnd: boolean; priceId: string } | null; }
+interface Billing { canPause: boolean; paused: boolean; pausePending: 'pause' | 'resume' | null; plans: Plan[]; testPlan: Plan | null; canManage: boolean; hasCustomer: boolean; subscription: { status: string; cancelAtPeriodEnd: boolean; priceId: string } | null; }
 const billingPeriod = (plan: Plan) => plan.intervalCount === 1 ? plan.interval : `${plan.intervalCount} ${plan.interval}s`;
 async function result<T>(response: Response): Promise<T> {
   const body = await response.json();
@@ -66,10 +66,11 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
     {pauseError && <p className='notice error' role='alert'>{pauseError} {failedPause !== null && <Button disabled={busy} onClick={()=>void changePause(failedPause)}>Retry billing change</Button>}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
     {billing && <>
+      {!billing.canPause && <p>Account admins and superadmins manage account pause and resume.</p>}
       <h2>Account status: {billing.paused ? 'Paused' : 'Active'}</h2>
       {billing.paused && <p className='notice'>Existing members retain access and saved tokens. Monthly token renewals are stopped, and new users cannot be invited or join. {billing.pausePending ? 'The billing change is still pending; Stripe payments may continue until it succeeds.' : 'Stripe payment collection is paused.'}</p>}
-      {billing.pausePending && <p className='notice' role='status'>The {billing.pausePending} request needs to finish. {billing.canManage && <Button disabled={busy} onClick={()=>void changePause(billing.pausePending==='pause')}>Retry {billing.pausePending}</Button>}</p>}
-      {billing.canManage && !billing.pausePending && <Button disabled={busy} onClick={()=>billing.paused?void changePause(false):setConfirmPause(true)}>{billing.paused?'Resume account':'Pause account'}</Button>}
+      {billing.pausePending && <p className='notice' role='status'>The {billing.pausePending} request needs to finish. {billing.canPause && <Button disabled={busy} onClick={()=>void changePause(billing.pausePending==='pause')}>Retry {billing.pausePending}</Button>}</p>}
+      {billing.canPause && !billing.pausePending && <Button disabled={busy} onClick={()=>billing.paused?void changePause(false):setConfirmPause(true)}>{billing.paused?'Resume account':'Pause account'}</Button>}
       {!billing.canManage && <p>The workspace owner manages subscriptions and billing.</p>}
       {billing.subscription && <p>Subscription: <strong>{billing.paused ? (billing.pausePending ? 'Billing change pending' : 'Payment collection paused') : billing.subscription.status.replaceAll('_', ' ')}</strong>{billing.subscription.cancelAtPeriodEnd ? ' · Cancels at the end of the billing period.' : ''}</p>}
       {!billing.subscription && !billing.paused && <p className='notice' role='status'>This workspace has no active subscription. Complete Checkout to open Jobs.</p>}

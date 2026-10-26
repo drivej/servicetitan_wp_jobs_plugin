@@ -2131,7 +2131,8 @@ td strong {
 .account-member-cards { display: grid; gap: 20px; margin: 24px 0; }
 .account-member-card { padding: 20px; min-width: 0; }
 .account-member-card-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 16px; margin-bottom: 16px; }
-.account-member-card-header .account-member-delete { grid-column: 2; grid-row: 1; white-space: nowrap; }
+.account-member-card-header .account-member-card-actions { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 280px; }
+.account-member-card-actions button { white-space: nowrap; }
 .account-member-card-header .field-help { grid-column: 1; margin: 0; }
 .account-member-card-header h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
 .account-member-card-header a { color: inherit; text-decoration: none; }
@@ -2143,6 +2144,7 @@ td strong {
 .account-member-table th, .account-member-table td { padding: 10px 8px; text-align: left; white-space: normal; }
 .account-member-table .member-email { overflow-wrap: anywhere; }
 @media (max-width: 680px) {
+  .account-member-card-header .account-member-card-actions { max-width: 145px; }
   .account-member-table, .account-member-table tbody { display: block; }
   .account-member-table colgroup, .account-member-table thead { display: none; }
   .account-member-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 0; border-top: 1px solid #e4ebef; }

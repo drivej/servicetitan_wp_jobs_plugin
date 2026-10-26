@@ -568,6 +568,15 @@ test('billing HTTP preserves raw webhook signatures and protects checkout with s
     assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":true}'})).status,204);
     assert.equal((await f.store.team(owner.user.id,owner.user.workspaceId)).paused,true);
     assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":false}'})).status,204);
+    const operator=await f.store.login({subject:'pause-http-super',email:'pause-http-super@example.com',name:'Superadmin'});
+    const targetUrl=base+`/api/admin/accounts/${owner.user.workspaceId}/pause`;
+    assert.equal((await fetch(targetUrl,{method:'POST',headers,body:'{"paused":true}'})).status,403);
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    const operatorHeaders={...headers,Cookie:`st_session=${operator.token}`,'X-CSRF-Token':csrfToken(operator.token)};
+    assert.equal((await fetch(targetUrl,{method:'POST',headers:{...operatorHeaders,'X-CSRF-Token':'wrong'},body:'{"paused":true}'})).status,403);
+    assert.equal((await fetch(targetUrl,{method:'POST',headers:operatorHeaders,body:'{"paused":true}'})).status,204);
+    assert.equal((await fetch(targetUrl,{method:'POST',headers:operatorHeaders,body:'{"paused":false}'})).status,204);
+
 
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -1186,13 +1195,13 @@ test('deleting a personal account preserves shared-account login, logout, and su
   } finally {await f.close();}
 });
 
-test('owners pause Stripe renewals and team additions, retain tokens/access, and resume without backfilling paused invoices',async()=>{
+test('account owners pause Stripe renewals and team additions, retain tokens/access, and resume without backfilling paused invoices',async()=>{
   const f=await fixture();
   try {
     const owner=await f.store.login({subject:'pause-owner',email:'pause-owner@example.com',name:'Owner'});
     const member=await f.store.login({subject:'pause-member',email:'pause-member@example.com',name:'Member'});
     const guest=await f.store.login({subject:'pause-guest',email:'pause-guest@example.com',name:'Guest'});
-    const invite=await f.store.invite(owner.user.id,owner.user.workspaceId,member.user.email,'admin');
+    const invite=await f.store.invite(owner.user.id,owner.user.workspaceId,member.user.email,'member');
     await f.store.acceptInvitation(member.user.id,member.token,invite.token);
     const pending=await f.store.invite(owner.user.id,owner.user.workspaceId,guest.user.email,'member');
     await f.sql.query("INSERT INTO workspace_billing(workspace_id,customer_id,checkout_id) VALUES($1,'cus_pause','cs_pause')",[owner.user.workspaceId]);
@@ -1214,8 +1223,8 @@ test('owners pause Stripe renewals and team additions, retain tokens/access, and
     const plan={id:'price_pause',name:'Monthly',amount:1000,currency:'usd',tokens:20,maxTokens:200,interval:'month' as const,intervalCount:1};
     await billing.creditInvoice('cus_pause','in_before','sub_pause',1,plan);
     const currentMember=(await f.store.session(member.token))!;
-    await assert.rejects(billing.setPaused(currentMember,true),/owner/);
-    await assert.rejects(billing.setPaused({...guest.user,workspaceId:owner.user.workspaceId},true),/owner/);
+    await assert.rejects(billing.setPaused(currentMember,true),/admins/);
+    await assert.rejects(billing.setPaused({...guest.user,workspaceId:owner.user.workspaceId},true),/admins/);
     // A timeout must retain durable pause intent even if Stripe already applied it.
     fail=true;
     await assert.rejects(billing.setPaused(owner.user,true),/pending/);
@@ -1256,4 +1265,36 @@ test('owners pause Stripe renewals and team additions, retain tokens/access, and
     await f.store.acceptInvitation(guest.user.id,guest.token,pending.token);
     assert.equal((await f.store.session(guest.token))!.workspaceId,owner.user.workspaceId);
   } finally {await f.close();}
+});
+
+test('pause authorization allows account admins and independent superadmins but rejects basic members and forged roles',async()=>{
+  const f=await fixture();
+  try {
+    const owner=await f.store.login({subject:'pause-auth-owner',email:'pause-auth-owner@example.com',name:'Owner'});
+    const admin=await f.store.login({subject:'pause-auth-admin',email:'pause-auth-admin@example.com',name:'Admin'});
+    const member=await f.store.login({subject:'pause-auth-member',email:'pause-auth-member@example.com',name:'Member'});
+    const operator=await f.store.login({subject:'pause-auth-super',email:'pause-auth-super@example.com',name:'Superadmin'});
+    for(const [account,role] of [[admin,'admin'],[member,'member']] as const) {
+      const invite=await f.store.invite(owner.user.id,owner.user.workspaceId,account.user.email,role);
+      await f.store.acceptInvitation(account.user.id,account.token,invite.token);
+    }
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    const billing=new BillingService(f.db,{secretKey:'sk_test_example',webhookSecret:'whsec_example',prices:[],development:true,maxTokens:200},'http://localhost:3000');
+    const adminUser=(await f.store.session(admin.token))!,memberUser=(await f.store.session(member.token))!;
+    assert.equal((await billing.summary(adminUser)).canPause,true);
+    assert.equal((await billing.summary(adminUser)).canManage,false,'subscription ownership rules stay unchanged');
+    assert.equal((await billing.summary(memberUser)).canPause,false);
+    await assert.rejects(billing.setPaused({...memberUser,role:'owner',isPlatformAdmin:true},true),/admins/);
+    await assert.rejects(billing.setPaused(adminUser,true,operator.user.workspaceId),/admins/);
+    await billing.setPaused(adminUser,true);
+    await assert.rejects(billing.setPaused(memberUser,false),/admins/);
+    await billing.setPaused(adminUser,false);
+    await billing.setPaused(operator.user,true,owner.user.workspaceId);
+    assert.equal((await f.store.team(owner.user.id,owner.user.workspaceId)).paused,true);
+    await billing.setPaused(operator.user,false,owner.user.workspaceId);
+    await f.sql.query('DELETE FROM platform_administrators WHERE user_id=$1',[operator.user.id]);
+    await assert.rejects(billing.setPaused({...operator.user,isPlatformAdmin:true},true,owner.user.workspaceId),/admins/);
+    await f.store.changeMember(owner.user.id,owner.user.workspaceId,admin.user.id,'member');
+    await assert.rejects(billing.setPaused(adminUser,true),/admins/,'role demotion must take effect despite a stale session object');
+  }finally{await f.close();}
 });

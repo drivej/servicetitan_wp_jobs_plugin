@@ -43,7 +43,7 @@ export class PlatformMembers {
     const cursor = after ? uuid(after) : null;
     return this.db.transaction(actorId, async (sql) => {
       await this.requireAdmin(sql, actorId);
-      const rows = (await sql.query(`SELECT w.id,w.name FROM workspaces w
+      const rows = (await sql.query(`SELECT w.id,w.name,w.paused_at,b.pause_action FROM workspaces w LEFT JOIN workspace_billing b ON b.workspace_id=w.id
         WHERE ($1::uuid IS NULL OR w.id>$1)
           AND ($2='' OR EXISTS (
             SELECT 1 FROM workspace_memberships sm JOIN users su ON su.id=sm.user_id
@@ -60,7 +60,7 @@ export class PlatformMembers {
       const websites = workspaceIds.length ? (await sql.query(`SELECT workspace_id,name,url FROM websites
         WHERE workspace_id=ANY($1::uuid[]) ORDER BY name,url`, [workspaceIds])).rows : [];
       return { accounts: page.map((row) => ({
-        workspaceId: String(row.id), name: String(row.name),
+        workspaceId: String(row.id), name: String(row.name), paused: Boolean(row.paused_at), pausePending: row.pause_action || null,
         websites: websites.filter((website) => website.workspace_id === row.id).map((website) => ({
           name: String(website.name), url: String(website.url),
         })),

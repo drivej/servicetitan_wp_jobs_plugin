@@ -366,6 +366,18 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.status(204).end();
     } catch (error) { next(error); }
   });
+  app.post('/api/admin/accounts/:workspaceId/pause',async(req,res,next)=>{
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.',503);
+      if (res.locals.impersonation) throw new HttpError('Exit user view before changing account billing.',403);
+      const actor=res.locals.actor as User;
+      await platformMembers.requirePlatformAdmin(actor.id);
+      const body=record(req.body,['paused']);
+      if (typeof body.paused!=='boolean') throw new HttpError('Choose whether to pause or resume the account.');
+      await billing.setPaused(actor,body.paused,uuid(req.params.workspaceId));
+      res.status(204).end();
+    } catch(error) { next(error); }
+  });
   app.delete('/api/admin/accounts/:workspaceId', async (req,res,next) => {
     try {
       if (res.locals.impersonation) throw new HttpError('Exit user view before deleting an account.',403);
