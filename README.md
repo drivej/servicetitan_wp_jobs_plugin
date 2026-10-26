@@ -368,3 +368,8 @@ SaaS requires migration `014_website_ownership.sql` and companion plugin **1.20.
 ### Superadmin account deletion
 
 On `/admin/members`, superadmins can use **Delete Account** and type **DELETE** to confirm permanent erasure. The account’s records and users without other accounts are removed; shared users retain their other accounts. Apply migration `015_account_deletion.sql` and the request-deletion grant before deployment. See [account deletion behavior and deployment](docs/account-deletion.md).
+
+
+### Pause an account
+
+The account owner can select **Pause account** under **Tokens → Plans**, also linked from Settings. Existing members keep access and saved tokens. Pausing stops future Stripe payment collection and token renewals, expires pending subscription checkouts, and blocks invitations and joining through existing invitation links. **Resume account** restores future billing on the existing schedule with no catch-up tokens. Failed billing changes remain visibly pending for retry. Apply migration **016_account_pause.sql** and new runtime grants before deployment; see [account pause details](docs/account-pause.md).

@@ -997,6 +997,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       ) : settingsPage ? (
         <main className='app-page'>
           <PageHeader eyebrow='Configuration' title='Settings' description='Review your saved integrations and test each connection from this page.' />
+          {!isLocal && user.role === 'owner' && <p><Button component='a' href='/add-tokens/plans'>Manage billing or pause account</Button></p>}
           {message && (
             <p className='notice' role='status'>
               {message}

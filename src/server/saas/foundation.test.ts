@@ -122,7 +122,7 @@ test('PostgreSQL account isolation, sessions, OAuth replay and protected HTTP wo
   try {
     await t.test('migrations are repeatable without recreating or overwriting tables', async () => {
       await f.sql.query('BEGIN'); await migrate(f.sql); await f.sql.query('COMMIT');
-      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 15);
+      assert.equal((await f.sql.query('SELECT * FROM schema_migrations')).rows.length, 16);
     });
     const alice = await f.store.login({ subject: 'google-alice', email: 'same@example.com', name: 'Alice' });
     const bob = await f.store.login({ subject: 'google-bob', email: 'same@example.com', name: 'Bob' });
@@ -558,6 +558,17 @@ test('billing HTTP preserves raw webhook signatures and protects checkout with s
     assert.equal((await fetch(base + '/api/billing/checkout', { method: 'POST' })).status, 401);
     assert.equal((await fetch(base + '/api/billing/checkout', { method: 'POST', headers: { Cookie: `st_session=${owner.token}`, Origin: config.origin } })).status, 403);
     assert.equal((await fetch(base + '/api/billing/portal', { method: 'POST', headers: { Cookie: `st_session=${owner.token}`, Origin: config.origin, 'X-CSRF-Token': csrfToken(owner.token), 'X-Workspace-ID': randomUUID() } })).status, 409);
+    const pauseUrl=base+'/api/billing/pause';
+    const headers={Cookie:`st_session=${owner.token}`,Origin:config.origin,'X-CSRF-Token':csrfToken(owner.token),'Content-Type':'application/json'};
+    assert.equal((await fetch(pauseUrl,{method:'POST'})).status,401);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers:{Cookie:headers.Cookie,Origin:config.origin,'Content-Type':'application/json'},body:'{"paused":true}'})).status,403);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":"true"}'})).status,400);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":true,"workspaceId":"forged"}'})).status,400);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers:{...headers,'X-Workspace-ID':randomUUID()},body:'{"paused":true}'})).status,409);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":true}'})).status,204);
+    assert.equal((await f.store.team(owner.user.id,owner.user.workspaceId)).paused,true);
+    assert.equal((await fetch(pauseUrl,{method:'POST',headers,body:'{"paused":false}'})).status,204);
+
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await f.close();
@@ -1172,5 +1183,77 @@ test('deleting a personal account preserves shared-account login, logout, and su
     const login=await f.store.login({subject:'shared-delete-admin',email:'admin@example.com',name:'Admin'});
     assert.equal(login.user.id,operator.user.id);assert.equal(login.user.workspaceId,owner.user.id);assert.equal(login.user.role,'member');
     assert.equal((await f.sql.query('SELECT id FROM workspaces WHERE id=$1',[operator.user.id])).rows.length,0);
+  } finally {await f.close();}
+});
+
+test('owners pause Stripe renewals and team additions, retain tokens/access, and resume without backfilling paused invoices',async()=>{
+  const f=await fixture();
+  try {
+    const owner=await f.store.login({subject:'pause-owner',email:'pause-owner@example.com',name:'Owner'});
+    const member=await f.store.login({subject:'pause-member',email:'pause-member@example.com',name:'Member'});
+    const guest=await f.store.login({subject:'pause-guest',email:'pause-guest@example.com',name:'Guest'});
+    const invite=await f.store.invite(owner.user.id,owner.user.workspaceId,member.user.email,'admin');
+    await f.store.acceptInvitation(member.user.id,member.token,invite.token);
+    const pending=await f.store.invite(owner.user.id,owner.user.workspaceId,guest.user.email,'member');
+    await f.sql.query("INSERT INTO workspace_billing(workspace_id,customer_id,checkout_id) VALUES($1,'cus_pause','cs_pause')",[owner.user.workspaceId]);
+    const subscription={id:'sub_pause',status:'active',pause_collection:null as unknown,items:{data:[{price:{id:'price_pause'}}]}};
+    const sessions=[{id:'cs_pause',status:'open',mode:'subscription'},{id:'cs_other',status:'open',mode:'payment'}];
+    const invoices=[{id:'in_open',status:'open',parent:{subscription_details:{subscription:'sub_pause'}}},{id:'in_draft',status:'draft',parent:{subscription_details:{subscription:'sub_pause'}}}];
+    const collection=<T,>(data:T[])=>({data,async *[Symbol.asyncIterator](){yield* data;}});
+    const keys:string[]=[];let fail=false;
+    const stripe={
+      prices:{retrieve:async()=>({id:'price_pause',active:true,type:'recurring',recurring:{interval:'month',interval_count:1,usage_type:'licensed'},billing_scheme:'per_unit',unit_amount:1000,currency:'usd',metadata:{token_count:'20'},product:'prod_pause'})},
+      subscriptions:{list:()=>collection([subscription]),update:async(_id:string,body:{pause_collection:unknown},options:{idempotencyKey:string})=>{
+        keys.push(options.idempotencyKey);subscription.pause_collection=body.pause_collection;
+        if(fail){fail=false;throw new Error('Network failure after Stripe applied the change');}return subscription;
+      }},
+      checkout:{sessions:{retrieve:async(id:string)=>sessions.find(s=>s.id===id),list:()=>collection(sessions.filter(s=>s.status==='open')),expire:async(id:string)=>{sessions.find(s=>s.id===id)!.status='expired';}}},
+      invoices:{list:({status}:{status:string})=>collection(invoices.filter(i=>i.status===status)),voidInvoice:async(id:string)=>{invoices.find(i=>i.id===id)!.status='void';},del:async(id:string)=>{invoices.find(i=>i.id===id)!.status='deleted';}},
+    } as unknown as Stripe;
+    const billing=new BillingService(f.db,{secretKey:'sk_test_example',webhookSecret:'whsec_example',prices:['price_pause'],development:true,maxTokens:200},'http://localhost:3000',stripe);
+    const plan={id:'price_pause',name:'Monthly',amount:1000,currency:'usd',tokens:20,maxTokens:200,interval:'month' as const,intervalCount:1};
+    await billing.creditInvoice('cus_pause','in_before','sub_pause',1,plan);
+    const currentMember=(await f.store.session(member.token))!;
+    await assert.rejects(billing.setPaused(currentMember,true),/owner/);
+    await assert.rejects(billing.setPaused({...guest.user,workspaceId:owner.user.workspaceId},true),/owner/);
+    // A timeout must retain durable pause intent even if Stripe already applied it.
+    fail=true;
+    await assert.rejects(billing.setPaused(owner.user,true),/pending/);
+    assert.equal((await billing.summary(owner.user)).pausePending,'pause');
+    assert.equal((await f.store.team(owner.user.id,owner.user.workspaceId)).paused,true);
+    await assert.rejects(f.store.invite(owner.user.id,owner.user.workspaceId,'new@example.com','member'),/paused/);
+    await assert.rejects(f.store.acceptInvitation(guest.user.id,guest.token,pending.token),/paused/);
+    await assert.rejects(f.sql.query("INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,'member')",[owner.user.workspaceId,guest.user.id]),/paused/);
+    await billing.creditInvoice('cus_pause','in_during','sub_pause',2,plan);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,20);
+    await billing.setPaused(owner.user,true);
+    assert.equal(keys[0],keys[1],'retry must reuse the durable Stripe key');
+    assert.deepEqual(subscription.pause_collection,{behavior:'void'});
+    assert.equal(sessions[0]!.status,'expired');assert.equal(sessions[1]!.status,'open');
+    assert.deepEqual(invoices.map(i=>i.status),['void','deleted']);
+    assert.equal((await billing.summary(owner.user)).pausePending,null);
+    assert.equal(await billing.hasActiveProduct(currentMember),true,'existing members keep access');
+    const keyCount=keys.length;await billing.setPaused(owner.user,true);assert.equal(keys.length,keyCount,'completed pause is idempotent');
+    // Token spending and team removals remain available while paused.
+    const siteId=randomUUID();
+    await f.sql.query("INSERT INTO websites(id,workspace_id,name,url) VALUES($1,$2,'Paused site','https://pause.example.com')",[siteId,owner.user.workspaceId]);
+    await f.store.spendJobToken(member.user.id,siteId,'ai_generation',async()=>({ok:true}),owner.user.workspaceId);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,19);
+    await assert.rejects(billing.checkout(owner.user,'price_pause'),/paused/);
+    fail=true;await assert.rejects(billing.setPaused(owner.user,false),/pending/);
+    assert.equal((await billing.summary(owner.user)).paused,true,'failed resume must not reopen membership or grants');
+    await assert.rejects(billing.setPaused(owner.user,true),/pending billing change/);
+    await billing.setPaused(owner.user,false);
+    assert.equal(subscription.pause_collection,'');
+    assert.equal((await f.store.team(owner.user.id,owner.user.workspaceId)).paused,false);
+    await billing.creditInvoice('cus_pause','in_during','sub_pause',2,plan);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,19,'replaying a suppressed invoice after resume must not grant tokens');
+    await f.sql.query('UPDATE workspace_pause_periods SET started_at=to_timestamp(100),ended_at=to_timestamp(200) WHERE workspace_id=$1',[owner.user.workspaceId]);
+    await billing.creditInvoice('cus_pause','in_delayed','sub_pause',150,plan);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,19,'unseen delayed invoices from paused periods stay blocked');
+    await billing.creditInvoice('cus_pause','in_after','sub_pause',201,plan);
+    assert.equal((await f.store.session(owner.token))!.jobTokens,39);
+    await f.store.acceptInvitation(guest.user.id,guest.token,pending.token);
+    assert.equal((await f.store.session(guest.token))!.workspaceId,owner.user.workspaceId);
   } finally {await f.close();}
 });

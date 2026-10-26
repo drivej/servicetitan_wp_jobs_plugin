@@ -8,7 +8,7 @@ import { accountFetch } from './api';
 export type TeamRole = 'owner' | 'admin' | 'member';
 interface Member { id: string; name: string; email: string; role: TeamRole; }
 interface Invitation { id: string; email: string; role: TeamRole; expiresAt: string; }
-interface Team { members: Member[]; invitations: Invitation[]; }
+interface Team { paused: boolean; members: Member[]; invitations: Invitation[]; }
 async function result<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
   const body = await response.json();
@@ -61,11 +61,12 @@ export function TeamSettings({ role, workspaceId }: { role: TeamRole; workspaceI
     </section>
     {role !== 'member' && <section className="panel account-panel team-invites-panel" aria-labelledby="team-invites-heading">
       <h2 id="team-invites-heading">Invite teammates</h2>
+      {team?.paused && <p className="notice">This account is paused. The owner must resume it before anyone can be invited or accept an invitation. Existing members keep their access.</p>}
       <form className="account-form" onSubmit={(event) => void createInvite(event)}>
         <label>Google account email<TextField variant="outlined" size="small" fullWidth name="email" type="email" required placeholder="teammate@company.com" slotProps={{ htmlInput: { maxLength: 254 } }}/></label>
         <label>Role<Select size="small" variant='outlined' sx={{ width: '100%' }} name="role" aria-label="Role" defaultValue="member"><MenuItem value="member">Member</MenuItem>{role === 'owner' && <MenuItem value="admin">Admin</MenuItem>}</Select></label>
         <p className="field-help">Invitations expire after 7 days and must be accepted using the invited Google email. Creating a new invite for the same email replaces its previous link.</p>
-        <Button type="submit" variant="contained" className="primary" disabled={busy}>{busy ? 'Creating invitation…' : 'Create invitation'}</Button>
+        <Button type="submit" variant="contained" className="primary" disabled={busy || !team || team.paused}>{busy ? 'Creating invitation…' : 'Create invitation'}</Button>
       </form>
       {invite && <section className="team-invitation-created" aria-labelledby="team-invitation-created-title">
         <p className="eyebrow">Next step · Send the invitation</p>

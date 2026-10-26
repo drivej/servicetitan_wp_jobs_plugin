@@ -181,6 +181,16 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.json(await billing.summary(res.locals.user as User));
     } catch (error) { next(error); }
   });
+  app.post('/api/billing/pause', async (req,res,next)=>{
+    try {
+      if (!billing) throw new HttpError('Billing is not configured.',503);
+      if (res.locals.impersonation) throw new HttpError('Exit user view before changing account billing.',403);
+      const body=record(req.body,['paused']);
+      if (typeof body.paused!=='boolean') throw new HttpError('Choose whether to pause or resume the account.');
+      await billing.setPaused(res.locals.user as User,body.paused);
+      res.status(204).end();
+    } catch(error) { next(error); }
+  });
   app.get('/api/onboarding/status', async (_req, res, next) => {
     try {
       const user = res.locals.user as User;

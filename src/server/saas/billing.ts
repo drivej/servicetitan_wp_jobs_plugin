@@ -47,18 +47,83 @@ export class BillingService {
   }
   private async owned<T>(user: User, ownerOnly: boolean, action: (sql: Sql, row: Record<string, unknown>) => Promise<T>): Promise<T> {
     return this.db.transaction(user.id, async (sql) => {
-      const workspace = (await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [user.workspaceId])).rows[0];
+      const workspace = (await sql.query('SELECT id,paused_at FROM workspaces WHERE id=$1 FOR UPDATE', [user.workspaceId])).rows[0];
       const member = (await sql.query(`SELECT m.role FROM workspace_memberships m JOIN users u ON u.id=m.user_id
         JOIN workspaces w ON w.id=m.workspace_id JOIN users owner ON owner.id=w.owner_user_id
         WHERE m.workspace_id=$1 AND m.user_id=$2 AND u.disabled_at IS NULL AND owner.disabled_at IS NULL`, [user.workspaceId, user.id])).rows[0];
       if (!workspace || !member || (ownerOnly && member.role !== 'owner')) throw new HttpError('Only the workspace owner can manage billing.', 403);
       await sql.query('INSERT INTO workspace_billing(workspace_id) VALUES($1) ON CONFLICT DO NOTHING', [user.workspaceId]);
       const row = (await sql.query('SELECT * FROM workspace_billing WHERE workspace_id=$1', [user.workspaceId])).rows[0]!;
-      return action(sql, row);
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)",[user.workspaceId]);
+      return action(sql, { ...row, paused_at: workspace.paused_at });
     });
   }
   private async subscriptions(customer: string) {
     return (await this.stripe.subscriptions.list({ customer, status: 'all', limit: 100 })).data.filter((s) => ['active', 'trialing'].includes(s.status));
+  }
+  private requireUnpaused(row: Record<string, unknown>) {
+    if (row.paused_at || row.pause_action) throw new HttpError('This account is paused. Resume it before starting a subscription.',409);
+  }
+  async setPaused(user: User, paused: boolean): Promise<void> {
+    this.assertMode();
+    const action = paused ? 'pause' : 'resume';
+    // Commit the intent first, so an API timeout or process crash stays fail-closed.
+    await this.owned(user,true,async(sql,row)=>{
+      if (row.pause_action && row.pause_action!==action) throw new HttpError('Finish the pending billing change before changing account status.',409);
+      if (row.pause_action || Boolean(row.paused_at)===paused) return;
+      const requestId=randomUUID();
+      if (paused) {
+        await sql.query('UPDATE workspaces SET paused_at=now() WHERE id=$1',[user.workspaceId]);
+        await sql.query('INSERT INTO workspace_pause_periods(id,workspace_id) VALUES($1,$2)',[requestId,user.workspaceId]);
+      }
+      await sql.query('UPDATE workspace_billing SET pause_action=$2,pause_request_id=$3 WHERE workspace_id=$1',[user.workspaceId,action,requestId]);
+    });
+    try {
+      await this.owned(user,true,async(sql,row)=>{
+        if (!row.pause_action) return; // Another retry already synchronized it.
+        if (row.pause_action!==action) throw new HttpError('Account status changed. Refresh billing.',409);
+        const key=String(row.pause_request_id);
+        if (row.customer_id) {
+          const customer=String(row.customer_id);
+          if (paused && row.checkout_id) {
+            const session=await this.stripe.checkout.sessions.retrieve(String(row.checkout_id));
+            if (session.status==='open') await this.stripe.checkout.sessions.expire(session.id);
+          }
+          // Expire all open subscription checkouts, including an earlier retry's session.
+          if (paused) {
+            for await (const session of this.stripe.checkout.sessions.list({customer,status:'open',limit:100})) {
+              if (session.mode==='subscription') await this.stripe.checkout.sessions.expire(session.id);
+            }
+          }
+          const subscriptions=[];
+          for await (const subscription of this.stripe.subscriptions.list({customer,status:'all',limit:100})) {
+            if (!['canceled','incomplete_expired'].includes(subscription.status)) subscriptions.push(subscription);
+          }
+          for (const subscription of subscriptions) {
+            await this.stripe.subscriptions.update(subscription.id,{pause_collection:paused?{behavior:'void'}:''},{idempotencyKey:`account-${key}-${subscription.id}`});
+          }
+          if (paused) {
+            // Stripe continues retries for pre-pause invoices unless explicitly voided.
+            for (const status of ['open','draft'] as const) {
+              for await (const invoice of this.stripe.invoices.list({customer,status,limit:100})) {
+                const subscription=objectId(invoice.parent?.subscription_details?.subscription);
+                if (!subscription || !subscriptions.some(item=>item.id===subscription)) continue;
+                if (status==='draft') await this.stripe.invoices.del(invoice.id);
+                else await this.stripe.invoices.voidInvoice(invoice.id,{},{idempotencyKey:`account-${key}-void-${invoice.id}`});
+              }
+            }
+          }
+        }
+        if (!paused) {
+          await sql.query('UPDATE workspace_pause_periods SET ended_at=now() WHERE workspace_id=$1 AND ended_at IS NULL',[user.workspaceId]);
+          await sql.query('UPDATE workspaces SET paused_at=NULL WHERE id=$1',[user.workspaceId]);
+        }
+        await sql.query('UPDATE workspace_billing SET pause_action=NULL,pause_request_id=NULL,checkout_id=NULL,checkout_key=NULL,checkout_price=NULL,checkout_expires_at=NULL WHERE workspace_id=$1',[user.workspaceId]);
+        await sql.query(`INSERT INTO audit_logs(id,user_id,workspace_id,action,target_id) VALUES($1,$2,$3,$4,$3)`,[randomUUID(),user.id,user.workspaceId,paused?'account.paused':'account.resumed']);
+      });
+    } catch {
+      throw new HttpError('The account remains paused while the billing change is pending. Stripe has not confirmed completion; payments may still be collected. Retry the pending change.',503);
+    }
   }
   async hasActiveProduct(user: User): Promise<boolean> {
     return this.owned(user, false, async (_sql, row) => {
@@ -72,7 +137,7 @@ export class BillingService {
       const subscriptions = row.customer_id ? await this.subscriptions(String(row.customer_id)) : [];
       const subscription = subscriptions[0];
       const testPlan = this.config.testTokensEnabled && user.role === 'owner' ? await this.freePlan() : null;
-      return { plans, testPlan, canManage: user.role === 'owner', hasCustomer: Boolean(row.customer_id), subscription: subscription ? {
+      return { paused: Boolean(row.paused_at), pausePending: row.pause_action || null, plans, testPlan, canManage: user.role === 'owner', hasCustomer: Boolean(row.customer_id), subscription: subscription ? {
         status: subscription.status, cancelAtPeriodEnd: subscription.cancel_at_period_end,
         priceId: subscription.items.data[0]?.price.id,
       } : null };
@@ -86,6 +151,7 @@ export class BillingService {
     // Reserve a durable attempt before calling Stripe. Retries reuse the same
     // idempotency key, even after an API timeout or database rollback.
     const attempt = await this.owned(user, true, async (sql, row) => {
+      this.requireUnpaused(row);
       const reservationExpires = Number(new Date(String(row.checkout_expires_at)));
       const reuseReservation = Boolean(row.checkout_key && reservationExpires > Date.now() && row.checkout_price === plan.id);
       if (row.checkout_id) {
@@ -101,12 +167,14 @@ export class BillingService {
     });
     // Persist customer mapping before Checkout can emit a paid-invoice event.
     const customer = await this.owned(user, true, async (sql, row) => {
+      this.requireUnpaused(row);
       if (row.customer_id) return String(row.customer_id);
       const created = await this.stripe.customers.create({ metadata: { workspace_id: user.workspaceId } }, { idempotencyKey: `workspace-customer:${user.workspaceId}` });
       await sql.query('UPDATE workspace_billing SET customer_id=$2 WHERE workspace_id=$1', [user.workspaceId, created.id]);
       return created.id;
     });
     return this.owned(user, true, async (sql, row) => {
+      this.requireUnpaused(row);
       if (row.checkout_key !== attempt.key) throw new HttpError('Checkout changed. Please try again.', 409);
       if ((await this.subscriptions(customer)).length) throw new HttpError('This workspace already has a subscription. Use Manage billing.', 409);
       if (row.checkout_id) {
@@ -189,8 +257,17 @@ export class BillingService {
       const billing = (await sql.query('SELECT workspace_id FROM workspace_billing WHERE customer_id=$1', [customer])).rows[0];
       if (!billing) return; // Not a subscription belonging to this application.
       const workspaceId = String(billing.workspace_id);
-      const workspace=(await sql.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
+      const workspace=(await sql.query('SELECT id,paused_at FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId])).rows[0];
       if (!workspace) return; // Account deletion may have won the workspace lock.
+      if (workspace.paused_at) {
+        await sql.query('INSERT INTO workspace_paused_invoices(invoice_id,workspace_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[invoiceId,workspaceId]);
+        return;
+      }
+      if ((await sql.query('SELECT 1 FROM workspace_paused_invoices WHERE invoice_id=$1',[invoiceId])).rows.length) return;
+      // Delayed/replayed paid events for paused renewal periods must stay suppressed
+      // after resume. A webhook retry must never backfill skipped monthly tokens.
+      if ((await sql.query(`SELECT 1 FROM workspace_pause_periods WHERE workspace_id=$1
+        AND to_timestamp($2)>=started_at AND (ended_at IS NULL OR to_timestamp($2)<ended_at)`,[workspaceId,periodStart])).rows.length) return;
       const inserted = await sql.query(`INSERT INTO stripe_token_grants(invoice_id,workspace_id,subscription_id,period_start,tokens)
         VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING invoice_id`, [invoiceId, workspaceId, subscriptionId, periodStart, plan.tokens]);
       if (!inserted.rows.length) return;

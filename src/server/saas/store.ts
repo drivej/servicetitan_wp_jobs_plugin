@@ -148,6 +148,7 @@ export class AccountStore {
   }
   async team(userId: string, workspaceId: string) {
     return this.workspaceTransaction(userId, workspaceId, allRoles, async (sql, role) => ({
+      paused: Boolean((await sql.query('SELECT paused_at FROM workspaces WHERE id=$1',[workspaceId])).rows[0]?.paused_at),
       members: (await sql.query(`SELECT u.id,u.name,u.email,m.role FROM workspace_memberships m JOIN users u ON u.id=m.user_id WHERE m.workspace_id=$1 ORDER BY m.created_at,u.id`, [workspaceId])).rows,
       invitations: role === 'member' ? [] : (await sql.query(`SELECT id,email,role,expires_at AS "expiresAt" FROM workspace_invitations WHERE workspace_id=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC`, [workspaceId])).rows,
     }));
@@ -157,6 +158,7 @@ export class AccountStore {
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError('Enter a valid email address.');
     if (!['admin','member'].includes(role)) throw new HttpError('Choose Admin or Member.');
     return this.workspaceTransaction(userId, workspaceId, ['owner','admin'], async (sql, actorRole) => {
+      if ((await sql.query('SELECT paused_at FROM workspaces WHERE id=$1',[workspaceId])).rows[0]?.paused_at) throw new HttpError('This account is paused. Resume it before inviting users.',409);
       if (actorRole !== 'owner' && role !== 'member') throw new HttpError('Only the owner can invite admins.', 403);
       const existing = (await sql.query(`SELECT 1 FROM workspace_memberships m JOIN users u ON u.id=m.user_id WHERE m.workspace_id=$1 AND lower(u.email)=$2`, [workspaceId, email])).rows[0];
       if (existing) throw new HttpError('That person is already on this team.', 409);
@@ -216,6 +218,7 @@ export class AccountStore {
       const invite = (await sql.query(`SELECT i.* FROM workspace_invitations i JOIN workspaces w ON w.id=i.workspace_id JOIN users owner ON owner.id=w.owner_user_id
         WHERE i.token_hash=$1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now() AND owner.disabled_at IS NULL`, [hashToken(token)])).rows[0];
       if (!invite) throw new HttpError('Invitation is invalid or expired.',404);
+      if ((await sql.query('SELECT paused_at FROM workspaces WHERE id=$1',[workspaceId])).rows[0]?.paused_at) throw new HttpError('This account is paused. Ask its owner to resume it before joining.',409);
       const user = (await sql.query('SELECT email FROM users WHERE id=$1 AND disabled_at IS NULL', [userId])).rows[0];
       if (!user || String(user.email).toLowerCase() !== invite.email) throw new HttpError('Sign in with the Google email address this invitation was sent to.',403);
       await sql.query(`INSERT INTO workspace_memberships(workspace_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(workspace_id,user_id) DO NOTHING`, [workspaceId,userId,invite.role]);

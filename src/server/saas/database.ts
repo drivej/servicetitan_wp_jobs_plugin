@@ -63,6 +63,12 @@ export class PostgresDatabase implements Database {
       (tgrelid='token_transactions'::regclass AND tgname IN ('token_ledger_immutable','token_ledger_no_truncate','token_ledger_insert','token_ledger_apply') OR
        tgrelid='workspaces'::regclass AND tgname='token_balance_check') AND tgenabled='O'`);
     if (ledgerTriggers.rows[0]?.count !== 5) throw new Error('Required token ledger integrity triggers are missing. Run migrations first.');
+    await this.pool.query('SELECT paused_at FROM workspaces LIMIT 0');
+    await this.pool.query('SELECT pause_action,pause_request_id FROM workspace_billing LIMIT 0');
+    const pauseReady=await this.pool.query(`SELECT
+      (SELECT bool_and(has_table_privilege(current_user,t,p)) FROM unnest(ARRAY['workspace_pause_periods','workspace_paused_invoices']) t CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) p) AND
+      (SELECT count(*)=2 FROM pg_trigger WHERE tgrelid IN ('workspace_memberships'::regclass,'workspace_invitations'::regclass) AND tgname IN ('paused_membership_guard','paused_invitation_guard') AND tgenabled='O') AS ready`);
+    if (!pauseReady.rows[0]?.ready) throw new Error('Account pause migration or runtime permissions are missing. Apply migration 016 and its grants.');
     const deletionReady=await this.pool.query(`SELECT
       has_table_privilege(current_user,'website_ownership_requests','DELETE') AND
       (SELECT count(*)=2 FROM pg_trigger WHERE tgname IN ('account_delete_guard','user_delete_guard') AND tgenabled='O') AND

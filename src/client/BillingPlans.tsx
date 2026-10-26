@@ -1,9 +1,9 @@
-import { Button } from '@mui/material';
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { accountFetch } from './api';
 import { LoadingModal } from './LoadingModal';
 interface Plan { id: string; name: string; amount: number; currency: string; tokens: number; maxTokens: number; interval: 'day' | 'week' | 'month' | 'year'; intervalCount: number; }
-interface Billing { plans: Plan[]; testPlan: Plan | null; canManage: boolean; hasCustomer: boolean; subscription: { status: string; cancelAtPeriodEnd: boolean; priceId: string } | null; }
+interface Billing { paused: boolean; pausePending: 'pause' | 'resume' | null; plans: Plan[]; testPlan: Plan | null; canManage: boolean; hasCustomer: boolean; subscription: { status: string; cancelAtPeriodEnd: boolean; priceId: string } | null; }
 const billingPeriod = (plan: Plan) => plan.intervalCount === 1 ? plan.interval : `${plan.intervalCount} ${plan.interval}s`;
 async function result<T>(response: Response): Promise<T> {
   const body = await response.json();
@@ -13,7 +13,11 @@ async function result<T>(response: Response): Promise<T> {
 export function BillingPlans({ workspaceId }: { workspaceId: string }) {
   const [billing, setBilling] = useState<Billing>();
   const [error, setError] = useState('');
-  const [pendingAction, setPendingAction] = useState<'checkout' | 'portal' | null>(null);
+  const [message,setMessage]=useState('');
+  const [pauseError,setPauseError]=useState('');
+  const [failedPause,setFailedPause]=useState<boolean | null>(null);
+  const [confirmPause,setConfirmPause]=useState(false);
+  const [pendingAction, setPendingAction] = useState<'checkout' | 'portal' | 'pause' | 'resume' | null>(null);
   const opening = useRef(false);
   const busy = pendingAction !== null;
   const [revision, setRevision] = useState(0);
@@ -41,17 +45,34 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
       window.location.assign(url);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open billing.'); opening.current = false; setPendingAction(null); }
   };
+  const changePause = async (paused: boolean) => {
+    if (opening.current) return;
+    opening.current=true; setPendingAction(paused?'pause':'resume'); setError(''); setPauseError(''); setFailedPause(null); setMessage('');
+    try {
+      const response=await accountFetch('/api/billing/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})});
+      if (!response.ok) await result(response);
+      setConfirmPause(false);
+      setMessage(paused?'Account paused. Future payments, token renewals, and new members are stopped.':'Account resumed. Future payments and token renewals follow your existing subscription schedule.');
+    } catch(reason) { setPauseError(reason instanceof Error?reason.message:'Unable to change account status.'); setFailedPause(paused); setConfirmPause(false); }
+    finally { opening.current=false;setPendingAction(null);setRevision(value=>value+1); }
+  };
   const checkout = new URLSearchParams(window.location.search).get('checkout');
   const availablePlans = billing ? [...billing.plans, ...(billing.testPlan ? [billing.testPlan] : [])] : [];
   return <section className='billing-plans' aria-label='Subscription plans' aria-busy={busy}>
-    <LoadingModal open={busy || (!billing && !error)} label={busy ? pendingAction === 'portal' ? 'Opening billing' : 'Opening Checkout' : 'Loading subscription plans'} />
+    <LoadingModal open={busy || (!billing && !error)} label={busy ? pendingAction === 'pause' ? 'Pausing account' : pendingAction === 'resume' ? 'Resuming account' : pendingAction === 'portal' ? 'Opening billing' : 'Opening Checkout' : 'Loading subscription plans'} />
     {checkout === 'success' && <p className='notice' role='status'>Checkout finished. Your balance updates after payment is confirmed. <Button onClick={() => { setRevision((v) => v + 1); window.dispatchEvent(new Event('job-tokens-changed')); }}>Refresh balance</Button></p>}
     {checkout === 'canceled' && <p className='notice'>Checkout canceled. Choose a plan below to start again.</p>}
     {error && <p className='notice error' role='alert'>{error} <Button disabled={busy} onClick={() => setRevision((v) => v + 1)}>Retry</Button></p>}
+    {pauseError && <p className='notice error' role='alert'>{pauseError} {failedPause !== null && <Button disabled={busy} onClick={()=>void changePause(failedPause)}>Retry billing change</Button>}</p>}
+    {message && <p className='notice' role='status'>{message}</p>}
     {billing && <>
+      <h2>Account status: {billing.paused ? 'Paused' : 'Active'}</h2>
+      {billing.paused && <p className='notice'>Existing members retain access and saved tokens. Monthly token renewals are stopped, and new users cannot be invited or join. {billing.pausePending ? 'The billing change is still pending; Stripe payments may continue until it succeeds.' : 'Stripe payment collection is paused.'}</p>}
+      {billing.pausePending && <p className='notice' role='status'>The {billing.pausePending} request needs to finish. {billing.canManage && <Button disabled={busy} onClick={()=>void changePause(billing.pausePending==='pause')}>Retry {billing.pausePending}</Button>}</p>}
+      {billing.canManage && !billing.pausePending && <Button disabled={busy} onClick={()=>billing.paused?void changePause(false):setConfirmPause(true)}>{billing.paused?'Resume account':'Pause account'}</Button>}
       {!billing.canManage && <p>The workspace owner manages subscriptions and billing.</p>}
-      {billing.subscription && <p>Subscription: <strong>{billing.subscription.status.replaceAll('_', ' ')}</strong>{billing.subscription.cancelAtPeriodEnd ? ' · Cancels at the end of the billing period.' : ''}</p>}
-      {!billing.subscription && <p className='notice' role='status'>This workspace has no active subscription. Complete Checkout to open Jobs.</p>}
+      {billing.subscription && <p>Subscription: <strong>{billing.paused ? (billing.pausePending ? 'Billing change pending' : 'Payment collection paused') : billing.subscription.status.replaceAll('_', ' ')}</strong>{billing.subscription.cancelAtPeriodEnd ? ' · Cancels at the end of the billing period.' : ''}</p>}
+      {!billing.subscription && !billing.paused && <p className='notice' role='status'>This workspace has no active subscription. Complete Checkout to open Jobs.</p>}
       {billing.canManage && billing.hasCustomer && <Button disabled={busy} onClick={() => void redirect('portal')}>Manage billing</Button>}
       <div className='billing-plan-grid'>{availablePlans.map((plan) => <article className='panel account-panel' key={plan.id}>
         {plan.id === billing.testPlan?.id && <p className='eyebrow'>Testing</p>}
@@ -60,9 +81,18 @@ export function BillingPlans({ workspaceId }: { workspaceId: string }) {
         <p><strong>{plan.tokens.toLocaleString()}</strong> job tokens every {billingPeriod(plan)}</p>
         <p>Unused tokens roll over, up to {plan.maxTokens.toLocaleString()} total.</p>
         {plan.id === billing.testPlan?.id && <p className='field-help'>Uses Stripe Checkout. Tokens arrive after Stripe confirms the zero-cost invoice.</p>}
-        {billing.subscription?.priceId === plan.id ? <p className='notice'>Current plan</p> : !billing.subscription && billing.canManage ? <Button variant='contained' className='primary' disabled={busy} onClick={() => void redirect('checkout', plan.id)}>{plan.id === billing.testPlan?.id ? 'Start free test subscription' : 'Subscribe'}</Button> : null}
+        {billing.subscription?.priceId === plan.id ? <p className='notice'>Current plan</p> : !billing.subscription && billing.canManage && !billing.paused && !billing.pausePending ? <Button variant='contained' className='primary' disabled={busy} onClick={() => void redirect('checkout', plan.id)}>{plan.id === billing.testPlan?.id ? 'Start free test subscription' : 'Subscribe'}</Button> : null}
       </article>)}</div>
       <p className='field-help'>Tokens are added after Stripe confirms each subscription invoice. Plan changes are not available yet.</p>
     </>}
+    <Dialog open={confirmPause} onClose={()=>{if(!busy)setConfirmPause(false);}} aria-labelledby='pause-account-title'>
+      <DialogTitle id='pause-account-title'>Pause this account?</DialogTitle>
+      <DialogContent>
+        <p>Future Stripe payments and monthly token renewals will stop. Open subscription invoices will be voided and pending subscription checkouts will be closed.</p>
+        <p>Existing members keep their access and saved tokens. New invitations and joining through existing invitation links are blocked until you resume.</p>
+        <p>Payments already completed are not refunded. A payment already processing may still complete. Resume at any time to restore future payments on your existing billing schedule; paused periods do not receive catch-up tokens.</p>
+      </DialogContent>
+      <DialogActions><Button disabled={busy} onClick={()=>setConfirmPause(false)}>Keep account active</Button><Button disabled={busy} variant='contained' onClick={()=>void changePause(true)}>Pause account</Button></DialogActions>
+    </Dialog>
   </section>;
 }
