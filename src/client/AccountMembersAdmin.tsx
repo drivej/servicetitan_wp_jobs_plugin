@@ -1,4 +1,4 @@
-import { Button, TextField } from '@mui/material';
+import { Button, Chip, TextField } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
 import { LoadingModal } from './LoadingModal';
@@ -32,19 +32,16 @@ export function AccountMembersAdmin() {
     return () => { active = false; };
   }, [query, after, revision]);
 
-  const disable = async (member: Member) => {
-    const ownsWorkspace = member.role === 'owner';
-    if (!window.confirm(`Disable ${member.name} (${member.email})? They will lose access to every workspace and be signed out.${ownsWorkspace ? ' Members of workspaces they own will also lose access.' : ''}`)) return;
+  const toggleAccess = async (member: Member) => {
+    const enabling = member.disabled;
+    if (!enabling && !window.confirm(`Disable ${member.email}? They will lose access to every workspace and be signed out.${member.role === 'owner' ? ' Members of workspaces they own will also lose access.' : ''}`)) return;
     setBusy(member.id); setError(''); setMessage('');
     try {
-      const response = await accountFetch(`/api/admin/members/${member.id}/disable`, { method: 'POST' });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new Error(body.error || 'Unable to disable member.');
-      }
-      setMessage(`${member.name} has been disabled.`);
-      setRevision((value) => value + 1);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to disable member.'); }
+      const response = await accountFetch(`/api/admin/members/${member.id}/${enabling ? 'enable' : 'disable'}`, { method: 'POST' });
+      if (!response.ok) { const body = await response.json(); throw new Error(body.error || 'Unable to update member access.'); }
+      setMessage(`${member.email} has been ${enabling ? 'enabled' : 'disabled'}.`);
+      setRevision(value => value + 1);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update member access.'); }
     finally { setBusy(''); }
   };
 
@@ -61,24 +58,26 @@ export function AccountMembersAdmin() {
   return <main className='app-page'>
     <LoadingModal open={Boolean(startingViewAs)} label='Opening account workspace' />
     <p className='eyebrow'>Platform administration</p><h1>Account members</h1>
-    <p className='intro'>Accounts are grouped by workspace, with administrators first. Disabling a member ends their sessions and blocks new sign-ins.</p>
+    <p className='intro'>Each card shows an account’s configured website and members. Disabling a member ends their sessions and blocks new sign-ins.</p>
     <form className='account-actions' onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((value) => value + 1); }}>
       <label>Name or email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
-      <Button disabled={loading}>Search</Button>
+      <Button type="submit" disabled={loading}>Search</Button>
     </form>
     {error && <p className='notice error' role='alert'>{error}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
     {loading && <p role='status'>Loading members…</p>}
     {page && !loading && <>
-      <div className='account-groups'>{page.accounts.map((account) => <section className='account-group' key={account.workspaceId}>
-        <header className='account-group-header'>
-          <h2>{account.name}</h2>
-          {account.websites.map((website) => <small key={website.url}>{website.name}: <a href={website.url} target='_blank' rel='noreferrer'>{website.url}</a></small>)}
+      <div className='account-member-cards'>{page.accounts.map(account => <section className='panel account-member-card' key={account.workspaceId}>
+        <header className='account-member-card-header'>
+          <h2>{account.websites.length ? account.websites.map((website,index) => <span key={website.url}>{index > 0 && ' · '}<a href={website.url} target='_blank' rel='noreferrer'>{website.url.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a></span>) : account.name}</h2>
+          {!account.websites.length && <p className='field-help'>Website not configured</p>}
         </header>
-        <ul className='account-resource-list'>
-          {account.members.filter((member) => member.role !== 'member').map((member) => <AccountMemberRow key={member.id} member={member} workspaceId={account.workspaceId} isAccountAdmin onViewAs={startViewAs} onDisable={disable} busy={busy} startingViewAs={startingViewAs} />)}
-          {account.members.filter((member) => member.role === 'member').map((member) => <AccountMemberRow key={member.id} member={member} workspaceId={account.workspaceId} onViewAs={startViewAs} onDisable={disable} busy={busy} startingViewAs={startingViewAs} />)}
-        </ul>
+        <table className='account-member-table'>
+          <caption className='visually-hidden'>Members of {account.websites[0]?.url || account.name}</caption>
+          <colgroup><col /><col className='member-role-column' /><col className='member-status-column' /><col className='member-action-column' /><col className='member-action-column' /></colgroup>
+          <thead><tr><th scope='col'>Email</th><th scope='col'>Role</th><th scope='col'>Status</th><th scope='col'><span className='visually-hidden'>View account</span></th><th scope='col'><span className='visually-hidden'>Change access</span></th></tr></thead>
+          <tbody>{account.members.map(member => <AccountMemberRow key={member.id} member={member} workspaceId={account.workspaceId} onViewAs={startViewAs} onToggleAccess={toggleAccess} busy={busy} startingViewAs={startingViewAs} />)}</tbody>
+        </table>
       </section>)}</div>
       {page.accounts.length === 0 && <p>No accounts found.</p>}
       <div className='account-actions'>{after && <Button onClick={() => setAfter('')}>First page</Button>}{page.nextCursor && <Button onClick={() => setAfter(page.nextCursor!)}>Next accounts</Button>}</div>
@@ -86,21 +85,21 @@ export function AccountMembersAdmin() {
   </main>;
 }
 
-function AccountMemberRow({ member, workspaceId, isAccountAdmin = false, onViewAs, onDisable, busy, startingViewAs }: {
+function AccountMemberRow({ member, workspaceId, onViewAs, onToggleAccess, busy, startingViewAs }: {
   member: Member;
   workspaceId: string;
-  isAccountAdmin?: boolean;
   onViewAs: (memberId: string, workspaceId: string) => Promise<void>;
-  onDisable: (member: Member) => Promise<void>;
+  onToggleAccess: (member: Member) => Promise<void>;
   busy: string;
   startingViewAs: string;
 }) {
-  const protectedMember = member.isPlatformAdmin;
-  return <li className={isAccountAdmin ? 'account-admin-row' : 'account-member-row'}>
-    <div><strong>{member.name}{isAccountAdmin ? ' · Account admin' : ''}</strong><small>{member.email} · {member.disabled ? 'Disabled' : 'Active'}{member.isPlatformAdmin ? ' · Platform admin' : ''}{!isAccountAdmin ? ` · ${member.role}` : ''}</small></div>
-    <div className='account-actions'>
-      {!member.disabled && <Button disabled={Boolean(startingViewAs)} onClick={() => void onViewAs(member.id, workspaceId)}>{startingViewAs === member.id ? 'Opening…' : 'View as'}</Button>}
-      {!member.disabled && <Button disabled={Boolean(busy) || protectedMember} title={protectedMember ? 'Platform administrators cannot be disabled here' : undefined} onClick={() => void onDisable(member)}>{busy === member.id ? 'Disabling…' : 'Disable'}</Button>}
-    </div>
-  </li>;
+  const protectedMember = member.isPlatformAdmin && !member.disabled;
+  const role = member.isPlatformAdmin ? 'Super admin' : member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : 'Member';
+  return <tr>
+    <td data-label='Email' className='member-email'>{member.email}</td>
+    <td data-label='Role'>{role}</td>
+    <td data-label='Status'><Chip size='small' label={member.disabled ? 'Inactive' : 'Active'} color={member.disabled ? 'default' : 'success'} variant={member.disabled ? 'outlined' : 'filled'} /></td>
+    <td><Button disabled={member.disabled || Boolean(startingViewAs) || Boolean(busy)} aria-label={`View as ${member.email}`} onClick={() => void onViewAs(member.id, workspaceId)}>{startingViewAs === member.id ? 'Opening…' : 'View as'}</Button></td>
+    <td><Button disabled={Boolean(busy) || Boolean(startingViewAs) || protectedMember} title={protectedMember ? 'Superadmins cannot be disabled here' : undefined} aria-label={`${member.disabled ? 'Enable' : 'Disable'} ${member.email}`} onClick={() => void onToggleAccess(member)}>{busy === member.id ? 'Updating…' : member.disabled ? 'Enable' : 'Disable'}</Button></td>
+  </tr>;
 }

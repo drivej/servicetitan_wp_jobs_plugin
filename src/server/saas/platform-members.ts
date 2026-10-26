@@ -73,6 +73,20 @@ export class PlatformMembers {
     });
   }
 
+  async enable(actorId: string, memberId: string): Promise<void> {
+    await this.db.transaction(actorId, async sql => {
+      await this.requireAdmin(sql, actorId);
+      const target = (await sql.query('SELECT disabled_at FROM users WHERE id=$1 FOR UPDATE', [memberId])).rows[0];
+      if (!target) throw new HttpError('Member not found.',404);
+      if (target.disabled_at === null) return;
+      await sql.query('UPDATE users SET disabled_at=NULL,updated_at=now() WHERE id=$1', [memberId]);
+      // Disabling revoked sessions; enabling never restores those old sessions.
+      await sql.query("SELECT set_config('app.workspace_id',$1,true)", [actorId]);
+      await sql.query(`INSERT INTO audit_logs(id,user_id,action,target_id,workspace_id)
+        VALUES($1,$2,'platform.member.enable',$3,$2)`, [randomUUID(),actorId,memberId]);
+    });
+  }
+
   async disable(actorId: string, memberId: string): Promise<void> {
     if (actorId === memberId) throw new HttpError('You cannot disable your own account.', 409);
     return this.db.transaction(actorId, async (sql) => {

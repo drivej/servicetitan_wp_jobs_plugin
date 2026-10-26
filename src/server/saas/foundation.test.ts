@@ -678,7 +678,7 @@ test('platform administration is distinct from workspace roles and adjustments a
   } finally { await f.close(); }
 });
 
-test('platform administrators can list roles and disable members', async () => {
+test('platform administrators can list account cards, disable and re-enable members', async () => {
   const f = await fixture();
   try {
     const operator = await f.store.login({ subject: 'members-operator', email: 'operator@example.com', name: 'Operator' });
@@ -690,15 +690,28 @@ test('platform administrators can list roles and disable members', async () => {
     await assert.rejects(members.list(member.user.id), /Platform administrator/);
     await assert.rejects(members.disable(member.user.id, operator.user.id), /Platform administrator/);
     const page = await members.list(operator.user.id, 'member@example.com');
-    assert.equal(page.members.length, 1);
-    assert(page.members[0]!.roles.some((role) => role.workspaceId === owner.user.id && role.role === 'member'));
+    const account = page.accounts.find(account => account.workspaceId === owner.user.workspaceId);
+    assert(account);
+    assert(account.members.some(row => row.id === member.user.id && row.role === 'member'));
+    const connection = await f.store.saveConnection(owner.user.id, source);
+    await f.store.saveWebsite(owner.user.id, siteInput(connection.id));
+    assert.equal((await members.list(operator.user.id, 'owner@example.com')).accounts.find(account => account.workspaceId === owner.user.workspaceId)?.websites[0]?.url, 'https://example.com');
     await assert.rejects(members.disable(operator.user.id, operator.user.id), /own account/);
     await members.disable(operator.user.id, member.user.id);
-    assert.equal((await members.list(operator.user.id, 'member@example.com')).members[0]!.disabled, true);
+    assert.equal((await members.list(operator.user.id, 'member@example.com')).accounts.flatMap(account => account.members).find(row => row.id === member.user.id)?.disabled, true);
     assert.equal(await f.store.session(member.token), undefined);
     await assert.rejects(f.store.login({ subject: 'members-target', email: 'member@example.com', name: 'Member' }), /disabled/);
     const audit = (await f.sql.query("SELECT target_id FROM audit_logs WHERE action='platform.member.disable' AND user_id=$1", [operator.user.id])).rows;
     assert.equal(audit[0]?.target_id, member.user.id);
+    await assert.rejects(members.enable(owner.user.id, member.user.id), /Platform administrator/);
+    await members.enable(operator.user.id, member.user.id);
+    await members.enable(operator.user.id, member.user.id);
+    assert.equal((await members.list(operator.user.id, 'member@example.com')).accounts.flatMap(account => account.members).find(row => row.id === member.user.id)?.disabled, false);
+    assert.equal(await f.store.session(member.token), undefined, 'enabling must not restore revoked sessions');
+    const enabled = await f.store.login({ subject: 'members-target', email: 'member@example.com', name: 'Member' });
+    assert(enabled.token !== member.token);
+    const enableAudit = await f.sql.query("SELECT target_id FROM audit_logs WHERE action='platform.member.enable' AND user_id=$1", [operator.user.id]);
+    assert.equal(enableAudit.rows.length, 1);
   } finally { await f.close(); }
 });
 
@@ -839,4 +852,29 @@ test('Job Scanner bills one scan token, replays settled results, and refunds sid
     assert.equal((await f.store.session(owner.token))?.jobTokens,0);
     await assert.rejects(f.store.spendJobToken(owner.user.id,site.id,'build',async()=>{throw new Error('must not run');},owner.user.workspaceId,6,'scanner-extra','build'),/No job tokens/);
   }finally{await f.close();}
+});
+
+test('enable-member HTTP endpoint requires superadmin session and CSRF',async()=>{
+  const f=await fixture();
+  const config:SaaSConfig={databaseUrl:'unused',origin:'http://localhost:3000',googleClientId:'test',googleClientSecret:'test',secureCookies:false,trustProxyHops:0,vault};
+  const app=createSaaSApp({config,store:f.store,google:{authorization:async()=>'',exchange:async()=>{throw new Error('unused');}},websiteApp:()=>express()});
+  const server=app.listen(0,'127.0.0.1');
+  try{
+    await new Promise<void>(resolve=>server.once('listening',resolve));
+    const operator=await f.store.login({subject:'enable-operator',email:'enable-operator@example.com',name:'Operator'});
+    const regular=await f.store.login({subject:'enable-regular',email:'enable-regular@example.com',name:'Regular'});
+    const target=await f.store.login({subject:'enable-target',email:'enable-target@example.com',name:'Target'});
+    await f.sql.query('INSERT INTO platform_administrators(user_id) VALUES($1)',[operator.user.id]);
+    await new PlatformMembers(f.db).disable(operator.user.id,target.user.id);
+    const address=server.address();assert(address&&typeof address==='object');
+    const endpoint=`http://127.0.0.1:${address.port}/api/admin/members/${target.user.id}/enable`;
+    const headers=(token:string)=>({Cookie:`st_session=${token}`,Origin:config.origin,'X-CSRF-Token':csrfToken(token)});
+    assert.equal((await fetch(endpoint,{method:'POST'})).status,401);
+    assert.equal((await fetch(endpoint,{method:'POST',headers:headers(regular.token)})).status,403);
+    assert.equal((await fetch(endpoint,{method:'POST',headers:{Cookie:`st_session=${operator.token}`}})).status,403);
+    assert.equal((await fetch(endpoint,{method:'POST',headers:headers(operator.token)})).status,204);
+    assert.equal(await f.store.session(target.token),undefined);
+    const login=await f.store.login({subject:'enable-target',email:'enable-target@example.com',name:'Target'});
+    assert(login.user.id===target.user.id);
+  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await f.close();}
 });

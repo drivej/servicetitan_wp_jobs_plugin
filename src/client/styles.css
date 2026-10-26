@@ -2127,3 +2127,22 @@ td strong {
 .scanner-result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .scanner-result-heading h2 { margin: 0; font-size: 1.15rem; }
 .scanner-rating { flex-shrink: 0; padding: 5px 10px; border-radius: 8px; color: #186d4c; background: #e2eedb; }
+
+.account-member-cards { display: grid; gap: 20px; margin: 24px 0; }
+.account-member-card { padding: 20px; min-width: 0; }
+.account-member-card-header h2 { margin: 0 0 16px; font-size: 1.15rem; overflow-wrap: anywhere; }
+.account-member-card-header a { color: inherit; text-decoration: none; }
+.account-member-card-header a:hover { text-decoration: underline; }
+.account-member-table { width: 100%; table-layout: fixed; }
+.account-member-table .member-role-column { width: 110px; }
+.account-member-table .member-status-column { width: 110px; }
+.account-member-table .member-action-column { width: 100px; }
+.account-member-table th, .account-member-table td { padding: 10px 8px; text-align: left; white-space: normal; }
+.account-member-table .member-email { overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .account-member-table, .account-member-table tbody { display: block; }
+  .account-member-table colgroup, .account-member-table thead { display: none; }
+  .account-member-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 0; border-top: 1px solid #e4ebef; }
+  .account-member-table td { display: block; border: 0; padding: 0; }
+  .account-member-table .member-email { flex-basis: 100%; }
+}

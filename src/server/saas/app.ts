@@ -354,6 +354,9 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       res.status(204).end();
     } catch (error) { next(error); }
   });
+  app.post('/api/admin/members/:memberId/enable', async (req, res, next) => {
+    try { await platformMembers.enable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
+  });
   app.post('/api/admin/members/:memberId/disable', async (req, res, next) => {
     try { await platformMembers.disable((res.locals.user as User).id, uuid(req.params.memberId)); res.status(204).end(); } catch (error) { next(error); }
   });
