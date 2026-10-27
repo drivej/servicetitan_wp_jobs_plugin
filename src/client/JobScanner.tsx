@@ -36,6 +36,7 @@ export function JobScanner() {
   const isActive = activeScan(scan);
   const pushed = scan?.selected.filter(item=>item.build?.state==='succeeded' && item.build.result?.state==='exists') || [];
   const pushedIds = pushed.map(item=>item.jobId).join(',');
+  const draftsNotCreated = scan && !isActive ? Math.max(0, scan.candidates.length - pushed.length) : 0;
   useEffect(()=>{
     const controller=new AbortController();
     const ids=pushedIds ? pushedIds.split(',').map(Number) : [];
@@ -117,7 +118,7 @@ export function JobScanner() {
     {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
     {error && <p className='notice error' role='alert'>{error}</p>}
     <div className='scanner-summary' role='status'>
-      {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {pushed.length} {pushed.length===1?'draft':'drafts'} ready · {scan.candidates.length}/5 strong candidates · {scan.scanned} jobs checked</p> : <p>Find up to 5 strong jobs and prepare WordPress drafts, one at a time.</p>}
+      {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {isActive ? `${pushed.length}/5 drafts ready` : `${pushed.length} ${pushed.length===1?'draft':'drafts'} ready`} · {scan.candidates.length} strong candidates found{draftsNotCreated > 0 && <> · {draftsNotCreated} {draftsNotCreated===1?'candidate did':'candidates did'} not produce a draft</>} · {scan.scanned} jobs checked</p> : <p>Prepare up to 5 WordPress drafts, one at a time. If a candidate fails, the scanner looks for another.</p>}
       {scan?.error && <p className='notice error'>{scan.error}</p>}
       {scan?.stopReason==='limits' && <p className='field-help'>Search limit reached.</p>}
       {scan && !isActive && !pushed.length && scan.state==='succeeded' && <p>No drafts were created. {scan.stopReason==='canceled'?'Completed work has been preserved.':'No available jobs could be built in this scan.'}</p>}

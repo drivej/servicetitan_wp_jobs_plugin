@@ -404,3 +404,17 @@ test('maps connection failures to an unknown, non-pushable status', async () => 
   assert.equal(status.state, 'unknown');
   assert.match(status.message || '', /connection failed/i);
 });
+
+test('replacing an image on a current-version draft never sends a publish status',async()=>{
+  const requests:Array<{url:string;init?:RequestInit}>=[];
+  const client=new WordPressClient(config,async(input,init)=>{
+    requests.push({url:String(input),...(init?{init}:{})});
+    const body=requests.length===1?{statuses:{'123456':{state:'exists',label:'Draft',postId:77,postStatus:'draft',seoVersion:SEO_GENERATOR_VERSION,seoModified:false}}}:requests.length===2?{id:808}:{id:77,slug:'servicetitan-job-123456',status:'draft',link:'https://wordpress.example/jobs/servicetitan-job-123456'};
+    return new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}});
+  });
+  const result=await client.regenerateJob(job,false,image,approvedCopy);
+  const payload=JSON.parse(String(requests[2]!.init?.body));
+  assert.equal(payload.featured_media,808);assert.equal('status' in payload,false);
+  assert.equal(result.postStatus,'draft');assert.equal(result.featuredImageAttachmentId,image.id);
+  assert.equal(requests.length,3);
+});

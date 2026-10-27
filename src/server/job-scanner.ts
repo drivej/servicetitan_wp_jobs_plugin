@@ -3,7 +3,7 @@ import type { BuildProviders } from './build-deploy.js';
 import type { BuildQueueStore, BuildScope } from './build-queue.js';
 import type { JobScorer } from './job-scorer.js';
 import type { ScannerTask } from '../shared/job-scanner.js';
-import { SCANNER_MAX_JOBS, SCANNER_MAX_RATINGS, SCANNER_MIN_SCORE, SCANNER_MAX_CANDIDATES } from '../shared/job-scanner.js';
+import { SCANNER_MAX_JOBS, SCANNER_MAX_RATINGS, SCANNER_MIN_SCORE, SCANNER_MAX_DRAFTS } from '../shared/job-scanner.js';
 import { HttpError } from './saas/validation.js';
 import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
@@ -83,7 +83,8 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
         await new Promise(resolve=>setTimeout(resolve,1000));
       }
       if(await canceled()){task.stopReason='canceled';break outer;}
-      if(task.candidates.length>=SCANNER_MAX_CANDIDATES){task.stopReason='five_candidates';break outer;}
+      const draftsReady=task.selected.filter(item=>item.build?.state==='succeeded' && item.build.result?.state==='exists').length;
+      if(draftsReady>=SCANNER_MAX_DRAFTS){task.stopReason='five_drafts';break outer;}
     }
     await store.save(task);
     if(!jobs.hasMore){task.stopReason='exhausted';break;}

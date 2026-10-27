@@ -32,7 +32,7 @@ function providers(ids:number[], existing:number[] = []) {
   };
   return {p,charges};
 }
-async function fileFixture(autoBuild = true) {
+async function fileFixture(autoBuild = true, failedJobs: number[] = []) {
   const dir=await mkdtemp(join(tmpdir(),'job-scanner-'));
   const store=new FileScannerStore(join(dir,'scans.json'));const queue=new FileBuildQueueStore(join(dir,'builds.json'));
   const completed:number[]=[];
@@ -42,26 +42,52 @@ async function fileFixture(autoBuild = true) {
     // for this completion before requesting details for a subsequent job.
     for(const item of await listById(scope,ids))if(item.state==='queued'){
       const build=(await queue.claim())!;assert.equal(build.id,item.id);
-      build.state='succeeded';build.result={state:'exists',label:'Draft',postStatus:'draft',postId:build.jobId};await queue.save(build);completed.push(build.jobId);
+      if(failedJobs.includes(build.jobId)){build.state='failed';build.error='Image unavailable';}
+      else {build.state='succeeded';build.result={state:'exists',label:'Draft',postStatus:'draft',postId:build.jobId};}
+      await queue.save(build);completed.push(build.jobId);
     }
     return listById(scope,ids);
   };
   return {dir,store,queue,completed,close:()=>rm(dir,{recursive:true,force:true})};
 }
 
-test('scanner stops at five strong candidates and waits for each durable draft before checking the next job',async()=>{
+test('scanner stops at five successful drafts and waits for each durable draft before checking the next job',async()=>{
   const f=await fileFixture();try{
     const s=scope();await f.store.enqueue(s,randomUUID());const task=(await f.store.claim())!;
     const {p,charges}=providers([99,...Array.from({length:15},(_,i)=>i+1)],[99]);let ratings=0;
     const getDetails=p.serviceTitan.getJobDetails.bind(p.serviceTitan);
     p.serviceTitan.getJobDetails=async id=>{assert.equal(f.completed.length,id-1,'prior draft must finish before the next job is checked');return getDetails(id);};
     await executeScan(task,p,{rate:async()=>({score:70+ratings++,reason:'Specific documented repair and outcome.'})},f.store,f.queue);
-    assert.equal(task.scanned,6);assert.equal(task.rated,5);assert.equal(task.stopReason,'five_candidates');
+    assert.equal(task.scanned,6);assert.equal(task.rated,5);assert.equal(task.stopReason,'five_drafts');
     assert.deepEqual(task.selected.map(item=>item.jobId),[1,2,3,4,5]);assert.equal(task.state,'succeeded');assert.equal(task.scanFeeCharged,true);
     assert.deepEqual(charges,['job_scan']);assert.equal(TOKEN_ACTIONS.job_scan.cost,1);assert.equal(TOKEN_ACTIONS.build.cost,1);
     assert.equal((await f.queue.list(s,task.selected.map(item=>item.jobId))).length,5);
     const result=await scannerApi(s,f.store,f.queue).latest();assert.equal(result?.state,'succeeded');assert(result?.selected.every(item=>item.build?.result?.postStatus==='draft'));
     assert(!JSON.stringify(result).includes(s.userId));
+  }finally{await f.close();}
+});
+
+test('failed candidates are replaced until five drafts succeed, without building a sixth draft',async()=>{
+  const f=await fileFixture(true,[1,3]);try{
+    const s=scope();await f.store.enqueue(s,randomUUID());const task=(await f.store.claim())!;
+    await executeScan(task,providers([1,2,3,4,5,6,7,8]).p,{rate:async()=>({score:80,reason:'Useful repair details.'})},f.store,f.queue);
+    assert.equal(task.stopReason,'five_drafts');assert.equal(task.candidates.length,7);
+    assert.deepEqual(task.selected.filter(item=>item.build?.state==='succeeded').map(item=>item.jobId),[2,4,5,6,7]);
+    assert.deepEqual(f.completed,[1,2,3,4,5,6,7]);assert.equal(task.scanned,7);
+  }finally{await f.close();}
+});
+
+test('repeated build failures still stop at the rating limit or source exhaustion',async()=>{
+  const f=await fileFixture(true,Array.from({length:50},(_,i)=>i+1));try{
+    const s=scope();await f.store.enqueue(s,randomUUID());const task=(await f.store.claim())!;
+    const {p}=providers([]);
+    p.serviceTitan.getScannerJobs=async(page)=>({data:Array.from({length:25},(_,i)=>summary((page-1)*25+i+1)),page,pageSize:25,hasMore:true});
+    const scorer={rate:async()=>({score:80,reason:'Useful repair details.'})};
+    await executeScan(task,p,scorer,f.store,f.queue);
+    assert.equal(task.stopReason,'limits');assert.equal(task.rated,40);assert.equal(task.selected.length,40);
+    await f.store.enqueue(s,randomUUID());const next=(await f.store.claim())!;
+    await executeScan(next,providers([41,42]).p,scorer,f.store,f.queue);
+    assert.equal(next.stopReason,'exhausted');assert.equal(next.selected.length,2);
   }finally{await f.close();}
 });
 
@@ -219,18 +245,18 @@ test('queued build cancellation prevents the worker from claiming that draft',as
 test('sequential scan uses real draft builds and spends the scan plus each build in order',async()=>{
   const f=await fileFixture(false);try{
     const s=scope();await f.store.enqueue(s,randomUUID());const task=(await f.store.claim())!;
-    const {p,charges}=providers([1,2]);const pushed:number[]=[];
-    p.serviceTitan.getJobImage=async(_job,id)=>({id,fileName:'photo.jpg',contentType:'image/jpeg',bytes:new Uint8Array([1,2,3])});
+    const {p,charges}=providers([1,2,3]);const pushed:number[]=[];
+    p.serviceTitan.getJobImage=async(job,id)=>{if(job===1)throw new Error('Image unavailable');return{id,fileName:'photo.jpg',contentType:'image/jpeg',bytes:new Uint8Array([1,2,3])};};
     p.copyGenerator.generate=async()=>({title:'Valve Service in Rome, GA',bodyHtml:'<p>A technician inspected a leaking valve in Rome, Georgia, and documented the replacement work.</p>',seoTitle:'Valve Service in Rome',seoDescription:'A documented valve service visit in Rome, Georgia, addressed a leaking valve with a replacement recorded in the technician notes.'});
     p.wordpress.pushJob=async(job,_images,status)=>{assert.equal(status,'draft');pushed.push(job.id);return{state:'exists',label:'Draft',postStatus:'draft',postId:job.id};};
     const {BuildQueueWorker}=await import('./build-queue.js');const {buildAndDeploy}=await import('./build-deploy.js');
     const worker=new BuildQueueWorker(f.queue,build=>buildAndDeploy(build.jobId,p,build.id));
     const list=f.queue.listById.bind(f.queue);
     f.queue.listById=async(scope,ids)=>{await worker.runOnce();return list(scope,ids);};
-    let evaluated=0;
-    await executeScan(task,p,{rate:async()=>{assert.equal(pushed.length,evaluated);evaluated++;return{score:80,reason:'Useful project details.'};}},f.store,f.queue);
-    assert.deepEqual(pushed,[1,2]);assert.deepEqual(charges,['job_scan','build','build']);
-    assert.equal(task.selected.every(item=>item.build?.result?.postStatus==='draft'),true);
+    await executeScan(task,p,{rate:async()=>({score:80,reason:'Useful project details.'})},f.store,f.queue);
+    assert.deepEqual(pushed,[2,3]);assert.deepEqual(charges,['job_scan','build','build']);
+    assert.equal(task.selected[0]!.build?.state,'failed');
+    assert.equal(task.selected.slice(1).every(item=>item.build?.result?.postStatus==='draft'),true);
   }finally{await f.close();}
 });
 
