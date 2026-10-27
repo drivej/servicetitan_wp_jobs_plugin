@@ -4,10 +4,10 @@ import type { BuildScope } from './build-queue.js';
 import type { Database } from './saas/database.js';
 import type { ScannerStore, StoredScannerTask } from './job-scanner.js';
 const interrupted = 'Scan interrupted. Check any queued drafts in WordPress and token history before starting another scan.';
-const initialTask = (scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): StoredScannerTask => ({ ...scope, id, ...(zip ? {zip} : {}), ...(dateRange ? {dateRange} : {}), state: 'queued', createdAt: new Date().toISOString(), updatedAt: Date.now(), scanned: 0, rated: 0, candidates: [], selected: [] });
+const initialTask = (scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}): StoredScannerTask => ({ ...scope, id, ...(zip ? {zip} : {}), ...(dateRange ? {dateRange} : {}), state: 'queued', createdAt: new Date().toISOString(), updatedAt: Date.now(), scanned: 0, rated: 0, candidates: [], selected: [] });
 export class PostgresScannerStore implements ScannerStore {
   constructor(private readonly db: Database) {}
-  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}) {
+  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}) {
     return this.db.transaction(undefined, async sql => {
       const previous = (await sql.query('SELECT payload FROM job_scanner_tasks WHERE id=$1 AND workspace_id=$2 AND website_id=$3', [id,scope.workspaceId,scope.websiteId])).rows[0];
       if (previous) return previous.payload as StoredScannerTask;
@@ -68,7 +68,7 @@ export class FileScannerStore implements ScannerStore {
       return value;
     }); this.tail = result.catch(() => undefined); return result;
   }
-  enqueue(scope: BuildScope,id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}) { return this.access(tasks => {
+  enqueue(scope: BuildScope,id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}) { return this.access(tasks => {
     const previous = tasks.find(task => task.workspaceId===scope.workspaceId && task.websiteId===scope.websiteId && (task.id===id || ['queued','running','drafting'].includes(task.state)));
     if (previous) return structuredClone(previous);
     const task = initialTask(scope,id,zip,dateRange); tasks.push(task); return structuredClone(task);

@@ -2,6 +2,7 @@ export interface JobFilters {
   start: string;
   end: string;
   zip: string;
+  useDateRange?: boolean;
 }
 
 export interface JobsSearchState {
@@ -19,6 +20,7 @@ export const parseJobsSearch = (search: string, defaults: JobFilters): JobsSearc
       start: params.get('start') || defaults.start,
       end: params.get('end') || defaults.end,
       zip: params.get('zip')?.trim() || '',
+      ...(params.get('allDates')==='true'?{useDateRange:false}:{}),
     },
     page: positiveInteger(params.get('page'), 1),
     pageSize: positiveInteger(params.get('pageSize'), DEFAULT_JOBS_PAGE_SIZE, 50),
@@ -32,6 +34,7 @@ export const jobsListUrl = (state: JobsSearchState, page = state.page): string =
     page: String(page),
     pageSize: String(state.pageSize),
   });
+  if (state.filters.useDateRange===false) params.set('allDates','true');
   if (state.filters.zip) params.set('zip', state.filters.zip);
   return `/jobs?${params.toString()}`;
 };

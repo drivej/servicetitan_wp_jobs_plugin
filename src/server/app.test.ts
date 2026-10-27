@@ -109,6 +109,14 @@ test('applies pagination defaults', () => {
   assert.equal(query.pageSize, 25);
 });
 
+test('allDates removes date bounds but preserves ZIP validation and page limits',()=>{
+  assert.deepEqual(parseJobsQuery({allDates:'true',zip:'01234',start:'invalid',end:'invalid'}),{allDates:true,startDate:'',endDateExclusive:'',page:1,pageSize:25,zip:'01234'});
+  assert.throws(()=>parseJobsQuery({allDates:'true',zip:'bad'}),/ZIP code/);
+  assert.throws(()=>parseJobsQuery({allDates:'true',pageSize:'51'}),/between 1 and 50/);
+  assert.throws(()=>parseJobsQuery({allDates:['true']}),/true or false/);
+  assert.throws(()=>parseJobsQuery({allDates:'false'}),/start is required/);
+});
+
 test('accepts an optional ZIP-code jobs filter', () => {
   const query = parseJobsQuery({ start: '2026-08-01', end: '2026-08-07', zip: '07001' });
   assert.equal(query.zip, '07001');

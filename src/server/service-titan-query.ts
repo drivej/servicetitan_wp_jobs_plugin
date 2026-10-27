@@ -1,4 +1,5 @@
 interface ServiceTitanJobsListQuery {
+  allDates?: boolean;
   startDate: string;
   endDateExclusive: string;
   page: number;
@@ -8,8 +9,7 @@ interface ServiceTitanJobsListQuery {
 const COMPLETED_JOB_STATUS = 'Completed';
 
 export const serviceTitanJobsListParams = (query: ServiceTitanJobsListQuery) => ({
-  firstAppointmentStartsOnOrAfter: query.startDate,
-  firstAppointmentStartsBefore: query.endDateExclusive,
+  ...(query.allDates ? {sort:'-CreatedOn'} : {firstAppointmentStartsOnOrAfter:query.startDate,firstAppointmentStartsBefore:query.endDateExclusive}),
   jobStatus: COMPLETED_JOB_STATUS,
   page: query.page,
   pageSize: query.pageSize,

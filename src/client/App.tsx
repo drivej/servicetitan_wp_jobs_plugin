@@ -3,7 +3,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { JobScanner, type JobScannerHandle } from './JobScanner';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Pagination, Paper, TextField } from '@mui/material';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Switch, IconButton, Pagination, Paper, TextField } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
@@ -78,6 +78,7 @@ export function App() {
       setError('');
       try {
         const params = new URLSearchParams({ start: search.filters.start, end: search.filters.end, page: String(search.page), pageSize: String(search.pageSize) });
+        if (search.filters.useDateRange===false) params.set('allDates','true');
         if (search.filters.zip) params.set('zip', search.filters.zip);
         const response = await apiFetch(`/api/jobs?${params}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
         const body = await readApiResponse<JobsResponse | { error?: string }>(response, 'Unable to load jobs.');
@@ -375,16 +376,17 @@ export function App() {
       )}
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
-        {/* <h2 id='filters-heading'>Date range</h2> */}
+        <FormControlLabel control={<Switch checked={draftRange.useDateRange!==false} onChange={event=>setDraftRange(current=>({...current,useDateRange:event.target.checked}))}/>} label='Use date range'/>
+        {draftRange.useDateRange===false && <p className='field-help'>Newest completed jobs first, working back through time.</p>}
         <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
           <div className='job-search-date-range'>
             <label>
               <span>Start date</span>
-              <TextField fullWidth name='start' type='date' required size='small' value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
+              <TextField fullWidth name='start' type='date' required={draftRange.useDateRange!==false} disabled={draftRange.useDateRange===false} size='small' value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
             </label>
             <label>
               <span>End date</span>
-              <TextField fullWidth name='end' type='date' required size='small' value={draftRange.end} slotProps={{ htmlInput: { min: draftRange.start } }} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
+              <TextField fullWidth name='end' type='date' required={draftRange.useDateRange!==false} disabled={draftRange.useDateRange===false} size='small' value={draftRange.end} slotProps={{ htmlInput: { min: draftRange.start } }} onChange={(event) => setDraftRange((current) => ({ ...current, end: event.target.value }))} />
             </label>
           </div>
           <label>
@@ -435,7 +437,7 @@ export function App() {
           )}
         </div>
 
-        {!loading && !error && result?.data.length === 0 && <div className='notice'>No jobs were found in this appointment date range.</div>}
+        {!loading && !error && result?.data.length === 0 && <div className='notice'>No jobs matched this search.</div>}
 
         {!error && result && result.data.length > 0 && (
           <div className='table-wrap'>

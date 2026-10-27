@@ -7,7 +7,7 @@ export interface ScannerTask {
   state: 'queued' | 'running' | 'drafting' | 'succeeded' | 'failed';
   createdAt: string;
   zip?: string;
-  dateRange?: {startDate:string;endDateExclusive:string};
+  dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean};
   scanned: number;
   rated: number;
   candidates: ScannerCandidate[];

@@ -24,7 +24,7 @@ import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 interface CreateAppOptions {
   jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
-  scanner?: { history(page:number):Promise<ScannerTask[]>; get(id:string):Promise<ScannerTask>; latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
+  scanner?: { history(page:number):Promise<ScannerTask[]>; get(id:string):Promise<ScannerTask>; latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -167,8 +167,8 @@ export const createApp = ({
       let operationId: string;
       try { operationId = uuid(request.get('Idempotency-Key')); } catch { throw new HttpError('A valid Idempotency-Key is required.',400); }
       const zip=optionalZip(typeof request.body?.zip==='string' ? request.body.zip.trim() : request.body?.zip);
-      const range=request.body?.start!==undefined || request.body?.end!==undefined ? parseJobsQuery({start:request.body.start,end:request.body.end,zip}) : undefined;
-      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId,zip,range ? {startDate:range.startDate,endDateExclusive:range.endDateExclusive} : undefined) });
+      const range=request.body?.allDates!==undefined || request.body?.start!==undefined || request.body?.end!==undefined ? parseJobsQuery({start:request.body.start,end:request.body.end,zip,allDates:request.body.allDates}) : undefined;
+      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId,zip,range ? {startDate:range.startDate,endDateExclusive:range.endDateExclusive,...(range.allDates?{allDates:true}:{})} : undefined) });
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {
@@ -289,6 +289,8 @@ export const createApp = ({
 class ValidationError extends Error {}
 
 export const parseJobsQuery = (query: Record<string, unknown>): JobsQuery => {
+  if(query.allDates!==undefined && ![true,false,'true','false'].includes(query.allDates as string))throw new ValidationError('allDates must be true or false.');
+  if(query.allDates===true || query.allDates==='true')return {allDates:true,startDate:'',endDateExclusive:'',page:positiveInteger(query.page,'page',1,Number.MAX_SAFE_INTEGER),pageSize:positiveInteger(query.pageSize,'pageSize',DEFAULT_PAGE_SIZE,MAX_PAGE_SIZE),...(optionalZip(query.zip)?{zip:optionalZip(query.zip)!}:{})};
   const start = singleValue(query.start, 'start');
   const end = singleValue(query.end, 'end');
   if (!DATE_PATTERN.test(start) || !DATE_PATTERN.test(end)) throw new ValidationError('Start and end must be valid dates in YYYY-MM-DD format.');

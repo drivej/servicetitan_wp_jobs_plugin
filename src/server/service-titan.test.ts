@@ -4,6 +4,10 @@ import { test } from 'node:test';
 import { prepareHistoryItems, ServiceTitanClient } from './service-titan.js';
 import { filterJobsByLocationIds, serviceTitanJobsListParams } from './service-titan-query.js';
 
+test('unbounded searches request newest jobs first without appointment date constraints',()=>{
+  assert.deepEqual(serviceTitanJobsListParams({allDates:true,startDate:'',endDateExclusive:'',page:2,pageSize:25}),{sort:'-CreatedOn',jobStatus:'Completed',page:2,pageSize:25,includeTotal:true});
+});
+
 test('requests only completed ServiceTitan jobs before pagination', () => {
   assert.deepEqual(serviceTitanJobsListParams({
     startDate: '2026-08-01T00:00:00.000Z',

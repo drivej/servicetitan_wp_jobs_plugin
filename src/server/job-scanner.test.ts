@@ -121,6 +121,18 @@ test('scanner uses the shared appointment search and only evaluates completed ma
   }finally{await f.close();}
 });
 
+test('all-date scout runs preserve the shared unbounded query and ZIP filter',async()=>{
+  const f=await fileFixture();try{
+    const s=scope(),dateRange={startDate:'',endDateExclusive:'',allDates:true};
+    await scannerApi(s,f.store,f.queue).start(randomUUID(),'30161',dateRange);
+    const task=(await f.store.claim())!;assert.deepEqual(task.dateRange,dateRange);
+    const {p}=providers([]);
+    p.serviceTitan.getJobs=async query=>{assert.deepEqual(query,{...dateRange,zip:'30161',page:1,pageSize:25});return{data:[summary(1)],page:1,pageSize:25,hasMore:false};};
+    await executeScan(task,p,{rate:async()=>({score:80,reason:'Useful details.'})},f.store,f.queue);
+    assert.deepEqual(f.completed,[1]);
+  }finally{await f.close();}
+});
+
 test('scan history is paginated, scoped, and reopening a saved scan never queues or charges work',async()=>{
   const f=await fileFixture();try{
     const s=scope(),api=scannerApi(s,f.store,f.queue),ids:string[]=[];

@@ -37,7 +37,7 @@ interface ServiceTitanAttachment extends Record<string, unknown> {
   url?: string;
 }
 
-export interface JobsQuery { startDate: string; endDateExclusive: string; page: number; pageSize: number; zip?: string; }
+export interface JobsQuery { allDates?: boolean; startDate: string; endDateExclusive: string; page: number; pageSize: number; zip?: string; }
 export interface JobListItem extends WorkContent {
   id: number;
   jobNumber: string;
@@ -538,7 +538,7 @@ export class ServiceTitanClient implements JobsProvider {
     let hasMore = true;
     while (hasMore && matchingJobs.length < targetCount) {
       if (page > ZIP_SCAN_MAX_PAGES) {
-        throw new ServiceTitanRequestError('This date range has too many jobs to safely filter by ZIP. Narrow the date range and try again.', 422);
+        throw new ServiceTitanRequestError('This search has too many jobs to safely filter by ZIP. Narrow the date range and try again.', 422);
       }
       const response = await this.getJobsPage(
         { ...query, page, pageSize: ZIP_SCAN_PAGE_SIZE },

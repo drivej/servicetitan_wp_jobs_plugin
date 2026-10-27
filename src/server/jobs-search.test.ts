@@ -5,6 +5,14 @@ import { jobDetailsUrl, jobsListUrl, parseJobsSearch } from '../client/jobsSearc
 
 const defaults = { start: '2026-09-01', end: '2026-09-07', zip: '' };
 
+test('date-free searches retain their mode, ZIP, and saved date inputs across pagination',()=>{
+  const search=parseJobsSearch('?allDates=true&zip=01234',defaults);
+  assert.equal(search.filters.useDateRange,false);
+  assert.equal(search.filters.start,defaults.start);
+  const restored=parseJobsSearch(jobsListUrl(search,2).split('?')[1]!,defaults);
+  assert.equal(restored.filters.useDateRange,false);assert.equal(restored.filters.zip,'01234');assert.equal(restored.page,2);
+});
+
 test('reads job filters and pagination from the URL', () => {
   assert.deepEqual(
     parseJobsSearch('?start=2026-08-01&end=2026-08-31&zip=90712&page=3&pageSize=10', defaults),

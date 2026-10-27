@@ -64,5 +64,8 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     const stoppedBody=await stopped.json();assert.equal(stoppedBody.scan.stopReason,'canceled');assert.equal(stoppedBody.scan.scanFeeCharged,undefined);
     assert.equal(stoppedBody.scan.userId,undefined);assert.equal(await scanners.claim(),undefined);
 
+    balance=6;const unboundedResponse=await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({allDates:true,zip:'01234'})});
+    assert.equal(unboundedResponse.status,202);const unbounded=await unboundedResponse.json();
+    assert.deepEqual(unbounded.scan.dateRange,{startDate:'',endDateExclusive:'',allDates:true});assert.equal(unbounded.scan.zip,'01234');
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(dir,{recursive:true,force:true});}
 });

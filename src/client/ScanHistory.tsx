@@ -33,11 +33,11 @@ export function ScanHistory({open,onClose,onSelect}:{open:boolean;onClose:()=>vo
       {scans.map(scan=>{
         const drafts=scan.selected.filter(item=>item.build?.state==='succeeded' && item.build.result?.state==='exists').length;
         const state=scan.stopReason==='canceled'?'Canceled':scan.state==='succeeded'?'Complete':scan.state==='failed'?'Stopped':'In progress';
-        const end=scan.dateRange ? new Date(Date.parse(scan.dateRange.endDateExclusive)-86400000).toISOString().slice(0,10) : '';
+        const end=scan.dateRange?.startDate ? new Date(Date.parse(scan.dateRange.endDateExclusive)-86400000).toISOString().slice(0,10) : '';
         return <Button key={scan.id} variant='outlined' fullWidth onClick={()=>onSelect(scan.id)} sx={{display:'block',textAlign:'left',textTransform:'none',mb:1.5}}>
           <strong>{new Date(scan.createdAt).toLocaleString()} · {state}</strong><br/>
           {drafts} {drafts===1?'draft':'drafts'} created · {scan.scanned} jobs checked<br/>
-          {scan.dateRange ? `${scan.dateRange.startDate.slice(0,10)} to ${end}` : 'All dates'} · {scan.zip ? `ZIP ${scan.zip}` : 'All ZIP codes'}
+          {scan.dateRange?.startDate ? `${scan.dateRange.startDate.slice(0,10)} to ${end}` : 'All dates'} · {scan.zip ? `ZIP ${scan.zip}` : 'All ZIP codes'}
         </Button>;
       })}
       {loading && <p role='status'>Loading previous scans…</p>}

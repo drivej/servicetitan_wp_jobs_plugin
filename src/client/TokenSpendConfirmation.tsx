@@ -8,7 +8,7 @@ interface PendingConfirmation {
   resolve: (confirmed: boolean) => void;
 }
 const actionCopy: Record<TokenAction, { title: string; benefit: string; approve: string }> = {
-  job_scan: { title: 'Find your next great posts', benefit: 'AI Job Scout searches completed jobs using your selected dates and ZIP code, skips jobs already in WordPress, and prepares up to five drafts for your review. You choose what to publish.', approve: 'Approve scan & drafts' },
+  job_scan: { title: 'Find your next great posts', benefit: 'AI Job Scout searches completed jobs using your current search filters, skips jobs already in WordPress, and prepares up to five drafts for your review. You choose what to publish.', approve: 'Approve scan & drafts' },
   ai_generation: { title: 'Bring this job to life', benefit: 'Create fresh post copy from your job’s details, ready for you to review.', approve: 'Spend 1 token & generate' },
   build: { title: 'Make your next great post', benefit: 'Turn this job into a WordPress draft, ready for your review.', approve: 'Spend 1 token & build' },
   update: { title: 'Give this post a fresh spark', benefit: 'Generate fresh copy and update your WordPress post.', approve: 'Spend 1 token & update' },

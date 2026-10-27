@@ -8,7 +8,7 @@ import { HttpError } from './saas/validation.js';
 import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
 export interface ScannerStore {
-  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<StoredScannerTask>;
+  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}): Promise<StoredScannerTask>;
   history(scope: BuildScope, page: number): Promise<StoredScannerTask[]>;
   latest(scope: BuildScope): Promise<StoredScannerTask | undefined>;
   claim(): Promise<StoredScannerTask | undefined>;
@@ -131,7 +131,7 @@ export function scannerApi(scope: BuildScope, store: ScannerStore, queue: BuildQ
       if(task.cancelRequested)for(const item of task.selected)await queue.cancelQueued(scope,item.buildTaskId,task.id);
       return publicScan(await settleScan(task,store,queue));
     },
-    start: async (id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}) => {
+    start: async (id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}) => {
       const task = await latest();
       if (task && (['queued','running','drafting'].includes(task.state) || task.selected.some(item => item.build && ['queued','running'].includes(item.build.state)))) return publicScan(task);
       return publicScan(await store.enqueue(scope,id,zip,dateRange));
