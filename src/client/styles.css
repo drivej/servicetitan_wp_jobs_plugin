@@ -137,13 +137,10 @@ h2 {
   font-weight: 500;
   line-height: 1.05;
 }
-h1 {
-  font-size: clamp(2.7rem, 7vw, 5.4rem);
-  letter-spacing: -0.055em;
-}
+h1,
 .page-title {
-  font-size: clamp(2.25rem, 5vw, 3.5rem);
-  letter-spacing: -0.045em;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  letter-spacing: -0.035em;
 }
 h2 {
   font-size: clamp(1.65rem, 3vw, 2.25rem);
@@ -2238,3 +2235,6 @@ td strong {
   .jobs-table .scan-history-subheader th { display: block; width: 100%; }
   .jobs-table tbody[aria-label] { margin-bottom: 16px; }
 }
+
+.account-members-search-form { grid-template-columns: minmax(0, 1fr) auto; }
+@media(max-width:700px) { .account-members-search-form { grid-template-columns: 1fr; } }

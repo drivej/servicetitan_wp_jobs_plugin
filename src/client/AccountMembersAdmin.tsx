@@ -1,6 +1,7 @@
-import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField } from '@mui/material';
 import { useEffect, useState, type FormEvent } from 'react';
 import { accountFetch } from './api';
+import { PageHeader } from './PageHeader';
 import { LoadingModal } from './LoadingModal';
 
 interface Website { name: string; url: string; }
@@ -91,12 +92,13 @@ export function AccountMembersAdmin() {
 
   return <main className='app-page'>
     <LoadingModal open={Boolean(startingViewAs)} label='Opening account workspace' />
-    <p className='eyebrow'>Platform administration</p><h1>Account members</h1>
-    <p className='intro'>Each card shows an account’s configured website and members. Disabling a member ends their sessions and blocks new sign-ins.</p>
-    <form className='account-actions' onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((value) => value + 1); }}>
-      <label>Name or email<TextField variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
-      <Button type="submit" disabled={loading}>Search</Button>
+    <PageHeader eyebrow='Platform administration' title='Account members'/>
+    <Paper component='section' variant='outlined' className='panel'>
+    <form className='job-search-form account-members-search-form' onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setQuery(search); setAfter(''); setRevision((value) => value + 1); }}>
+      <label><span>Name or email</span><TextField fullWidth placeholder="Search members" variant="outlined" size="small" value={search} slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(event) => setSearch(event.target.value)} /></label>
+      <div className='job-search-actions'><Button variant='contained' className='primary' type='submit' disabled={loading}>Search</Button></div>
     </form>
+    </Paper>
     {error && !deleteTarget && <p className='notice error' role='alert'>{error}</p>}
     {message && <p className='notice' role='status'>{message}</p>}
     {loading && <p role='status'>Loading members…</p>}
