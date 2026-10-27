@@ -2215,7 +2215,7 @@ td strong {
 
 .job-search-actions { margin-bottom: 0; display: flex; align-items: center; gap: 10px; align-self: end; flex-wrap: wrap; }
 .job-search-actions .MuiButton-root { white-space: nowrap; }
-.job-search-actions > .MuiButton-root, .job-search-actions > .MuiIconButton-root { height: 40px; box-sizing: border-box; }
+.job-search-actions > .MuiButton-root, .job-search-actions > .MuiIconButton-root { height: 40px; box-sizing: border-box; border-radius: 9px; }
 .job-search-actions > .MuiIconButton-root { width: 40px; }
 .job-search-actions .job-scout-button { background: #6541a5; color: #fff; }
 .job-search-actions .job-scout-button:hover { background: #513187; }
@@ -2227,7 +2227,7 @@ td strong {
 .job-search-dates-toggle > label { display: block; margin-bottom: 7px; color: #46524b; font-size: 0.8rem; font-weight: 750; }
 .job-search-switch-control { height: 40px; display: flex; align-items: center; }
 
-.job-search-actions .scout-history-button { background: #6541a5; color: #fff; border-radius: 4px; }
+.job-search-actions .scout-history-button { background: #6541a5; color: #fff; }
 .job-search-actions .scout-history-button:hover { background: #513187; }
 
 .jobs-table .scan-history-subheader th { padding: 16px; background: #f1edf8; color: #403257; text-transform: none; letter-spacing: normal; font-size: 0.9rem; text-align: left; }

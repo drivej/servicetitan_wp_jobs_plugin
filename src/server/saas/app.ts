@@ -99,7 +99,8 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
       const identity = await google.exchange(new URL(req.originalUrl, config.origin), state, attempt.nonce, attempt.verifier);
       const result = await store.login(identity, cookieValue(req.headers.cookie, sessionName));
       res.cookie(sessionName, result.token, { ...cookieOptions, maxAge: 7 * 86_400_000 });
-      res.redirect(attempt.returnTo === '/invite' ? '/invite' : '/pricing');
+      const signedInUser = await store.session(result.token);
+      res.redirect(signedInUser?.isPlatformAdmin ? '/admin/members' : attempt.returnTo === '/invite' ? '/invite' : '/pricing');
     } catch {
       // Provider errors may contain tokens/codes; never log them or put them in the redirect.
       res.redirect('/?login=failed');
