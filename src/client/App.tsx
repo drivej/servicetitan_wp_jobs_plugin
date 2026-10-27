@@ -373,7 +373,7 @@ export function App() {
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
-        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';const next={...search,filters:draftRange,page:1};setSearch(next);if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
+        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
           <div className='job-search-date-range'>
             <label>
               <span>Start date</span>
