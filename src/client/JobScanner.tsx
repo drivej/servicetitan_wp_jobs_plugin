@@ -132,8 +132,13 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     {!searchFilters && <TextField label='ZIP code' placeholder='All ZIP codes' value={zip} onChange={event=>setZip(event.target.value)} disabled={busy || isActive} size='small' helperText='Optional. Only jobs at matching service locations will be evaluated.' sx={{maxWidth:360}}/>}
     {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
     {error && <p className='notice error' role='alert'>{error}</p>}
-    {visible && visibleScan && scan && <div className='scanner-summary' role='status'>
+    {visible && visibleScan && scan && <div className='scanner-summary'>
+      <div className='scanner-progress-actions'>
+      <div role='status'>
       {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {isActive ? `${pushed.length}/5 drafts ready` : `${pushed.length} ${pushed.length===1?'draft':'drafts'} ready`} · {scan.candidates.length} strong candidates found{draftsNotCreated > 0 && <> · {draftsNotCreated} {draftsNotCreated===1?'candidate did':'candidates did'} not produce a draft</>} · {scan.scanned} jobs checked</p> : <p>Prepare up to 5 WordPress drafts, one at a time. If a candidate fails, the scanner looks for another.</p>}
+      </div>
+      {isActive && <Button color='error' variant='outlined' title='Queued work will stop. A draft already building may finish; completed drafts and their token charges remain.' disabled={canceling || Boolean(scan.cancelRequested)} onClick={()=>void cancelScan()}>{canceling || scan.cancelRequested?'Canceling…':'Cancel Scan'}</Button>}
+      </div>
       {scan?.error && <p className='notice error'>{scan.error}</p>}
       {scan?.stopReason==='limits' && <p className='field-help'>Search limit reached.</p>}
       {scan && !isActive && !pushed.length && scan.state==='succeeded' && <p>No drafts were created. {scan.stopReason==='canceled'?'Completed work has been preserved.':'No available jobs could be built in this scan.'}</p>}
@@ -165,10 +170,6 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
         </tbody>
       </table></div>
     </section>}
-    {visible && isActive && <div className='scanner-cancel'>
-      <Button color='error' variant='outlined' disabled={canceling || Boolean(scan?.cancelRequested)} onClick={()=>void cancelScan()}>{canceling || scan?.cancelRequested?'Canceling…':'Cancel job scan'}</Button>
-      <p className='field-help'>Queued work will stop. A draft already building may finish; completed drafts and their token charges remain.</p>
-    </div>}
     {tokenSpendDialog}
   </section>;
 }
