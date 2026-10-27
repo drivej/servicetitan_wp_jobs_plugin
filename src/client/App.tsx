@@ -3,7 +3,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { JobScanner, type JobScannerHandle } from './JobScanner';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Switch, IconButton, Pagination, Paper, TextField } from '@mui/material';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Switch, IconButton, Pagination, Paper, TextField } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
@@ -376,10 +376,12 @@ export function App() {
       )}
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
-        <FormControlLabel control={<Switch checked={draftRange.useDateRange!==false} onChange={event=>setDraftRange(current=>({...current,useDateRange:event.target.checked}))}/>} label='Use date range'/>
-        {draftRange.useDateRange===false && <p className='field-help'>Newest completed jobs first, working back through time.</p>}
         <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
           <div className='job-search-date-range'>
+            <div className='job-search-dates-toggle'>
+              <label htmlFor='job-search-use-dates'>Use Dates</label>
+              <div className='job-search-switch-control'><Switch slotProps={{input:{id:'job-search-use-dates'}}} checked={draftRange.useDateRange!==false} onChange={event=>setDraftRange(current=>({...current,useDateRange:event.target.checked}))}/></div>
+            </div>
             <label>
               <span>Start date</span>
               <TextField fullWidth name='start' type='date' required={draftRange.useDateRange!==false} disabled={draftRange.useDateRange===false} size='small' value={draftRange.start} slotProps={{ htmlInput: { max: draftRange.end } }} onChange={(event) => setDraftRange((current) => ({ ...current, start: event.target.value }))} />
