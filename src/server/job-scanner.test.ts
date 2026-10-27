@@ -139,8 +139,15 @@ test('scan history is paginated, scoped, and reopening a saved scan never queues
     for(let i=0;i<23;i++){
       const scan=await api.start(randomUUID(),'30161');ids.push(scan.id);
       const task=(await f.store.claim())!;await executeScan(task,providers([]).p,{rate:async()=>{throw new Error('unused');}},f.store,f.queue);
+      task.selected=Array.from({length:5},(_,job)=>({jobId:i*5+job+1,title:'Saved draft',score:80,reason:'Useful details',buildTaskId:randomUUID(),build:{id:randomUUID(),jobId:i*5+job+1,state:'succeeded',result:{state:'exists',label:'Draft',postStatus:'draft'}}}));
+      await f.store.save(task);
     }
-    assert.equal((await api.history(1)).length,20);assert.equal((await api.history(2)).length,3);
+    assert.equal((await api.history(1)).length,5);assert.equal((await api.history(2)).length,5);assert.equal((await api.history(5)).length,3);
+    const firstPage=await api.history(1),secondPage=await api.history(2);
+    assert(firstPage.every(scan=>scan.selected.length===5));assert(secondPage.every(scan=>scan.selected.length===5));
+    const pages=await Promise.all([1,2,3,4,5].map(page=>api.history(page)));
+    assert.equal(new Set(pages.flat().map(scan=>scan.id)).size,23,'complete scan groups must not overlap or split across pages');
+    assert.equal(pages.flat().length,23);assert.deepEqual(await api.history(6),[]);
     assert.equal((await api.history(1))[0]!.id,ids.at(-1));
     assert.deepEqual(await scannerApi({...s,websiteId:randomUUID()},f.store,f.queue).history(1),[]);
     await assert.rejects(scannerApi({...s,websiteId:randomUUID()},f.store,f.queue).get(ids[0]!),/Scan not found/);

@@ -2229,3 +2229,12 @@ td strong {
 
 .job-search-actions .scout-history-button { background: #6541a5; color: #fff; border-radius: 4px; }
 .job-search-actions .scout-history-button:hover { background: #513187; }
+
+.jobs-table .scan-history-subheader th { padding: 16px; background: #f1edf8; color: #403257; text-transform: none; letter-spacing: normal; font-size: 0.9rem; text-align: left; }
+.scan-history-date { display: block; margin-top: 5px; color: #625975; font-weight: 400; }
+.scan-history-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; flex-wrap: wrap; }
+@media(max-width:920px) {
+  .jobs-table tbody tr.scan-history-subheader { display: block; padding: 0; }
+  .jobs-table .scan-history-subheader th { display: block; width: 100%; }
+  .jobs-table tbody[aria-label] { margin-bottom: 16px; }
+}
