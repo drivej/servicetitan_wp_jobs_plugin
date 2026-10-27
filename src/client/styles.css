@@ -2215,6 +2215,8 @@ td strong {
 
 .job-search-actions { margin-bottom: 7px; display: flex; align-items: center; gap: 10px; align-self: end; flex-wrap: wrap; }
 .job-search-actions .MuiButton-root { white-space: nowrap; }
+.job-search-actions > .MuiButton-root, .job-search-actions > .MuiIconButton-root { height: 40px; box-sizing: border-box; }
+.job-search-actions > .MuiIconButton-root { width: 40px; }
 .job-search-actions .job-scout-button { background: #6541a5; color: #fff; }
 .job-search-actions .job-scout-button:hover { background: #513187; }
 
