@@ -24,7 +24,7 @@ import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 interface CreateAppOptions {
   jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
-  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
+  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string, zip?: string): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -160,7 +160,7 @@ export const createApp = ({
       if (response.locals.user && response.locals.user.jobTokens < 1) throw new HttpError('At least one token is required to start a scan.',402);
       let operationId: string;
       try { operationId = uuid(request.get('Idempotency-Key')); } catch { throw new HttpError('A valid Idempotency-Key is required.',400); }
-      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId) });
+      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId,optionalZip(typeof request.body?.zip==='string' ? request.body.zip.trim() : request.body?.zip)) });
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {

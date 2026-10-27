@@ -5,7 +5,7 @@ import { startJobScan } from './scannerApi';
 
 test('scanner entry points reuse the scoped request key on failure and clear it after success',async()=>{
   const originalWindow=globalThis.window,originalFetch=globalThis.fetch;
-  const storage=new Map<string,string>(),keys:string[]=[];let nextId=0;
+  const storage=new Map<string,string>(),keys:string[]=[],zips:string[]=[];let nextId=0;
   Object.defineProperty(globalThis,'window',{configurable:true,value:{
     dispatchEvent:()=>true,location:{origin:'https://app.example'},crypto:{randomUUID:()=>`scan-${++nextId}`},
     sessionStorage:{getItem:(key:string)=>storage.get(key)||null,setItem:(key:string,value:string)=>storage.set(key,value),removeItem:(key:string)=>storage.delete(key)},
@@ -17,6 +17,7 @@ test('scanner entry points reuse the scoped request key on failure and clear it 
     assert.equal(headers.get('X-CSRF-Token'),'csrf');
     assert.equal(headers.get('X-Workspace-ID'),'workspace');
     keys.push(headers.get('Idempotency-Key')!);
+    zips.push(JSON.parse(init?.body as string).zip);
     return new Response(JSON.stringify(keys.length===1?{error:'Please retry'}:{scan:{id:'accepted'}}),{status:keys.length===1?503:202});
   };
   try {
@@ -25,6 +26,7 @@ test('scanner entry points reuse the scoped request key on failure and clear it 
     assert.equal((await startJobScan()).id,'accepted');
     assert.equal(keys[0],keys[1]);assert.equal(storage.size,0);
     await startJobScan();assert.notEqual(keys[1],keys[2]);
+    await startJobScan(' 01234 ');assert.equal(zips.at(-1),'01234');
   }finally{
     globalThis.fetch=originalFetch;Object.defineProperty(globalThis,'window',{configurable:true,value:originalWindow});configureApi('local','','');
   }

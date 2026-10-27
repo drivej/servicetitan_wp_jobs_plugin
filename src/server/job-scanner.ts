@@ -8,7 +8,7 @@ import { HttpError } from './saas/validation.js';
 import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
 export interface ScannerStore {
-  enqueue(scope: BuildScope, id: string): Promise<StoredScannerTask>;
+  enqueue(scope: BuildScope, id: string, zip?: string): Promise<StoredScannerTask>;
   latest(scope: BuildScope): Promise<StoredScannerTask | undefined>;
   claim(): Promise<StoredScannerTask | undefined>;
   get(scope: BuildScope,id: string): Promise<StoredScannerTask | undefined>;
@@ -60,6 +60,7 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
       task.currentJob={jobId:job.id,title:safeWorkText(job.descriptionPreview || job.jobName,160),stage:'checking'};await store.save(task);
       let details;
       try{details=await providers.serviceTitan.getJobDetails(job.id);}catch{continue;}
+      if(task.zip && (task.zip.includes('-') ? details.summary.location.zip.trim()!==task.zip : details.summary.location.zip.trim().split('-')[0]!==task.zip))continue;
       if(scannerSkipReason(details))continue;
       if(await canceled()){task.stopReason='canceled';break outer;}
       task.currentJob={...task.currentJob,stage:'rating'};await store.save(task);
@@ -126,10 +127,10 @@ export function scannerApi(scope: BuildScope, store: ScannerStore, queue: BuildQ
       if(task.cancelRequested)for(const item of task.selected)await queue.cancelQueued(scope,item.buildTaskId,task.id);
       return publicScan(await settleScan(task,store,queue));
     },
-    start: async (id: string) => {
+    start: async (id: string, zip?: string) => {
       const task = await latest();
       if (task && (['queued','running','drafting'].includes(task.state) || task.selected.some(item => item.build && ['queued','running'].includes(item.build.state)))) return publicScan(task);
-      return publicScan(await store.enqueue(scope,id));
+      return publicScan(await store.enqueue(scope,id,zip));
     },
   };
 }

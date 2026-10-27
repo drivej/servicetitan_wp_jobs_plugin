@@ -6,6 +6,7 @@ export interface ScannerTask {
   id: string;
   state: 'queued' | 'running' | 'drafting' | 'succeeded' | 'failed';
   createdAt: string;
+  zip?: string;
   scanned: number;
   rated: number;
   candidates: ScannerCandidate[];

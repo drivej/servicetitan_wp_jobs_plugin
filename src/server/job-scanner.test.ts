@@ -91,6 +91,23 @@ test('repeated build failures still stop at the rating limit or source exhaustio
   }finally{await f.close();}
 });
 
+test('ZIP filter persists across restart and excludes other locations before AI rating and building',async()=>{
+  const f=await fileFixture();try{
+    const s=scope();await scannerApi(s,f.store,f.queue).start(randomUUID(),'01234');
+    const reloaded=new FileScannerStore(join(f.dir,'scans.json'));const task=(await reloaded.claim())!;
+    assert.equal(task.zip,'01234');
+    const {p}=providers([1,2,3,4]);const details=p.serviceTitan.getJobDetails.bind(p.serviceTitan);
+    const zips=['99999','01234-5678','01234','—'];
+    p.serviceTitan.getJobDetails=async id=>{const result=await details(id);result.summary.location.zip=zips[id-1]!;return result;};
+    let ratings=0;
+    await executeScan(task,p,{rate:async()=>{ratings++;return{score:80,reason:'Useful repair details.'};}},reloaded,f.queue);
+    assert.equal(ratings,2);assert.equal(task.scanned,4);assert.deepEqual(f.completed,[2,3]);
+    await scannerApi(s,reloaded,f.queue).start(randomUUID(),'01234-5678');const exact=(await reloaded.claim())!;
+    await executeScan(exact,p,{rate:async()=>({score:80,reason:'Useful repair details.'})},reloaded,f.queue);
+    assert.deepEqual(exact.selected.map(item=>item.jobId),[2]);
+  }finally{await f.close();}
+});
+
 test('empty/exhausted scans charge only the scan; AI failure queues no drafts after scan admission',async()=>{
   const f=await fileFixture();try{
     const s=scope();const api=scannerApi(s,f.store,f.queue);await api.start(randomUUID());const task=(await f.store.claim())!;

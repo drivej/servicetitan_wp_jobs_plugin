@@ -2,7 +2,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { startJobScan } from './scannerApi';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
-import { Button, CircularProgress, IconButton } from '@mui/material';
+import { Button, CircularProgress, IconButton, TextField } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import type { ScannerTask } from '../shared/job-scanner';
 import type { WordPressStatus } from './wordpressStatusCache';
@@ -19,6 +19,7 @@ async function read<T>(response: Response): Promise<T> {
 }
 export function JobScanner() {
   const [scan,setScan] = useState<ScannerTask | null>();
+  const [zip,setZip] = useState('');
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
   const [canceling,setCanceling] = useState(false);
@@ -86,11 +87,12 @@ export function JobScanner() {
     return () => { controller.abort(); clearTimeout(timer); };
   },[isActive,scan === undefined]);
   const start = async () => {
+    if (zip.trim() && !/^\d{5}(?:-\d{4})?$/.test(zip.trim())) { setError('Enter a five-digit ZIP code, optionally followed by a four-digit extension.'); return; }
     if (exhausted) { showTokenError(); return; }
     if (!await confirmTokenSpend('job_scan')) return;
     setBusy(true); setError(''); setStatuses({});
     try {
-      setScan(await startJobScan());
+      setScan(await startJobScan(zip));
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to start scan.'); }
     finally {setBusy(false);}
   };
@@ -115,10 +117,12 @@ export function JobScanner() {
       <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy?'Starting…':isActive?'Scan in progress':'Find My Next Great Posts'}</Button>
       <IconButton component='a' href='/help/job-scanner' aria-label='How AI Job Scout works' title='How AI Job Scout works'><InfoOutlinedIcon/></IconButton>
     </div>}/>
+    <TextField label='ZIP code' placeholder='All ZIP codes' value={zip} onChange={event=>setZip(event.target.value)} disabled={busy || isActive} size='small' helperText='Optional. Only jobs at matching service locations will be evaluated.' sx={{maxWidth:360}}/>
     {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
     {error && <p className='notice error' role='alert'>{error}</p>}
     <div className='scanner-summary' role='status'>
       {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {isActive ? `${pushed.length}/5 drafts ready` : `${pushed.length} ${pushed.length===1?'draft':'drafts'} ready`} · {scan.candidates.length} strong candidates found{draftsNotCreated > 0 && <> · {draftsNotCreated} {draftsNotCreated===1?'candidate did':'candidates did'} not produce a draft</>} · {scan.scanned} jobs checked</p> : <p>Prepare up to 5 WordPress drafts, one at a time. If a candidate fails, the scanner looks for another.</p>}
+      {scan?.zip && <p className='field-help'>Scan ZIP code: {scan.zip}</p>}
       {scan?.error && <p className='notice error'>{scan.error}</p>}
       {scan?.stopReason==='limits' && <p className='field-help'>Search limit reached.</p>}
       {scan && !isActive && !pushed.length && scan.state==='succeeded' && <p>No drafts were created. {scan.stopReason==='canceled'?'Completed work has been preserved.':'No available jobs could be built in this scan.'}</p>}

@@ -40,7 +40,9 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'X-Workspace-ID':randomUUID()}})).status,409);
     balance=0;assert.equal((await fetch(base+'/start',{method:'POST',headers})).status,402);balance=6;
     assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'Idempotency-Key':'invalid'}})).status,400);
-    const response=await fetch(base+'/start',{method:'POST',headers});assert.equal(response.status,202);const first=await response.json();
+    for(const zip of ['bad',12345,['01234']])assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({zip})})).status,400);
+    const response=await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({zip:' 01234 '})});assert.equal(response.status,202);const first=await response.json();
+    assert.equal(first.scan.zip,'01234');
     assert.equal(response.headers.get('cache-control'),'private, no-store');
     const second=await(await fetch(base+'/start',{method:'POST',headers})).json();assert.equal(first.scan.id,second.scan.id);
     const latest=await(await fetch(base+'/latest',{headers})).json();assert.equal(latest.scan.id,first.scan.id);assert.equal(latest.scan.userId,undefined);assert.equal(latest.scan.workspaceId,undefined);
