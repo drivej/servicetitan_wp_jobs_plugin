@@ -8,7 +8,7 @@ interface PendingConfirmation {
   resolve: (confirmed: boolean) => void;
 }
 const actionCopy: Record<TokenAction, { title: string; benefit: string; approve: string }> = {
-  job_scan: { title: 'Find your next great posts', benefit: 'Find promising jobs and turn the best matches into up to five WordPress drafts.', approve: 'Approve scan & drafts' },
+  job_scan: { title: 'Find your next great posts', benefit: 'AI Job Scout searches completed jobs using your selected dates and ZIP code, skips jobs already in WordPress, and prepares up to five drafts for your review. You choose what to publish.', approve: 'Approve scan & drafts' },
   ai_generation: { title: 'Bring this job to life', benefit: 'Create fresh post copy from your job’s details, ready for you to review.', approve: 'Spend 1 token & generate' },
   build: { title: 'Make your next great post', benefit: 'Turn this job into a WordPress draft, ready for your review.', approve: 'Spend 1 token & build' },
   update: { title: 'Give this post a fresh spark', benefit: 'Generate fresh copy and update your WordPress post.', approve: 'Spend 1 token & update' },
@@ -30,10 +30,10 @@ export function useTokenSpendConfirmation() {
     pendingRef.current = undefined;
   }, []);
 
-  const confirmTokenSpend = (action: TokenAction): Promise<boolean> => {
+  const confirmTokenSpend = (action: TokenAction, alwaysConfirm = false): Promise<boolean> => {
     if (pendingRef.current) return Promise.resolve(false);
     // Standalone installations and free actions do not charge tokens.
-    if (!isSaaSWorkspace() || TOKEN_ACTIONS[action].cost === 0) return Promise.resolve(true);
+    if ((!isSaaSWorkspace() && !alwaysConfirm) || TOKEN_ACTIONS[action].cost === 0) return Promise.resolve(true);
     // Every paid action needs explicit approval, including accounts that saved
     // a "hide confirmation" preference in an older version.
     return new Promise((resolve) => {

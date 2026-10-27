@@ -1,8 +1,8 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import { JobScanner } from './JobScanner';
+import { JobScanner, type JobScannerHandle } from './JobScanner';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Pagination, Paper, TextField } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
@@ -64,6 +64,7 @@ export function App() {
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
   const tokensExhausted = useTokensExhausted();
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
+  const scannerControl=useRef<JobScannerHandle>(null);
   const [scoutInfoOpen,setScoutInfoOpen] = useState(false);
 
 
@@ -372,7 +373,7 @@ export function App() {
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
-        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next)+(nextView==='scout'?'&view=scout':''));}}>
+        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';const next={...search,filters:draftRange,page:1};setSearch(next);if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
           <div className='job-search-date-range'>
             <label>
               <span>Start date</span>
@@ -400,13 +401,13 @@ export function App() {
           <input name='pageSize' type='hidden' value={search.pageSize} />
           <div className='job-search-actions'>
             <Button variant='contained' className='primary' type='submit' value='browse' disabled={loading}>Search</Button>
-            <Button variant='contained' className='job-scout-button' type='submit' value='scout' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>}>AI Job Scout</Button>
+            <Button variant='contained' className='job-scout-button' type='submit' value='scout' disabled={!wordpressPluginReady} startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>}>AI Job Scout</Button>
             <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
           </div>
         </form>
       </Paper>
 
-      <div hidden={view!=='scout'}><JobScanner searchFilters={search.filters}/></div>
+      <JobScanner searchFilters={search.filters} controlRef={scannerControl} onShow={()=>setView('scout')} visible={view==='scout'}/>
       <section style={view!=='browse'?{display:'none'}:undefined} className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>
           <div>
