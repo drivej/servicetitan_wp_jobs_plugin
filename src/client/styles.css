@@ -2212,3 +2212,8 @@ td strong {
 .scanner-page { gap: 18px; }
 .scanner-page .scanner-summary, .scanner-page .scanner-summary > p { margin: 0; }
 .scanner-page .scanner-results, .scanner-page .scanner-cancel { margin-top: 0; }
+
+.job-search-actions { margin-bottom: 7px; display: flex; align-items: center; gap: 10px; align-self: end; flex-wrap: wrap; }
+.job-search-actions .MuiButton-root { white-space: nowrap; }
+.job-search-actions .job-scout-button { background: #6541a5; color: #fff; }
+.job-search-actions .job-scout-button:hover { background: #513187; }

@@ -1,4 +1,5 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import type { JobFilters } from './jobsSearch';
 import { startJobScan } from './scannerApi';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
@@ -17,7 +18,7 @@ async function read<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(body.error || 'Job Scanner request failed.');
   return body;
 }
-export function JobScanner() {
+export function JobScanner({searchFilters}: {searchFilters?:JobFilters} = {}) {
   const [scan,setScan] = useState<ScannerTask | null>();
   const [zip,setZip] = useState('');
   const [error,setError] = useState('');
@@ -87,12 +88,13 @@ export function JobScanner() {
     return () => { controller.abort(); clearTimeout(timer); };
   },[isActive,scan === undefined]);
   const start = async () => {
-    if (zip.trim() && !/^\d{5}(?:-\d{4})?$/.test(zip.trim())) { setError('Enter a five-digit ZIP code, optionally followed by a four-digit extension.'); return; }
+    const scanZip=searchFilters?.zip ?? zip;
+    if (scanZip.trim() && !/^\d{5}(?:-\d{4})?$/.test(scanZip.trim())) { setError('Enter a five-digit ZIP code, optionally followed by a four-digit extension.'); return; }
     if (exhausted) { showTokenError(); return; }
     if (!await confirmTokenSpend('job_scan')) return;
     setBusy(true); setError(''); setStatuses({});
     try {
-      setScan(await startJobScan(zip));
+      setScan(await startJobScan(scanZip,searchFilters));
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to start scan.'); }
     finally {setBusy(false);}
   };
@@ -112,17 +114,19 @@ export function JobScanner() {
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to publish draft.'); }
     finally {setPublishing(undefined);}
   };
-  return <main className='app-page scanner-page'>
-    <PageHeader eyebrow='AI Job Scout' title='Job Scanner' className='scanner-page-header' actions={<div className='job-scout-actions'>
-      <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy?'Starting…':isActive?'Scan in progress':'Find My Next Great Posts'}</Button>
+  const scanActions=<div className='job-scout-actions'>
+      <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy?'Starting…':isActive?'Scan in progress':searchFilters?'Start AI Job Scout':'Find My Next Great Posts'}</Button>
       <IconButton component='a' href='/help/job-scanner' aria-label='How AI Job Scout works' title='How AI Job Scout works'><InfoOutlinedIcon/></IconButton>
-    </div>}/>
-    <TextField label='ZIP code' placeholder='All ZIP codes' value={zip} onChange={event=>setZip(event.target.value)} disabled={busy || isActive} size='small' helperText='Optional. Only jobs at matching service locations will be evaluated.' sx={{maxWidth:360}}/>
+    </div>;
+  return <section className='app-page scanner-page'>
+    {searchFilters ? <div className='scanner-page-header'><h2>AI Job Scout</h2>{scanActions}</div> : <PageHeader eyebrow='AI Job Scout' title='Job Scanner' className='scanner-page-header' actions={scanActions}/>}
+    {!searchFilters && <TextField label='ZIP code' placeholder='All ZIP codes' value={zip} onChange={event=>setZip(event.target.value)} disabled={busy || isActive} size='small' helperText='Optional. Only jobs at matching service locations will be evaluated.' sx={{maxWidth:360}}/>}
+    {searchFilters && <p className='field-help'>Next scan: {searchFilters.start} to {searchFilters.end}{searchFilters.zip ? ` · ZIP ${searchFilters.zip}` : ' · All ZIP codes'}. Apply search above before starting. Active scans keep their original search.</p>}
     {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
     {error && <p className='notice error' role='alert'>{error}</p>}
     <div className='scanner-summary' role='status'>
       {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {isActive ? `${pushed.length}/5 drafts ready` : `${pushed.length} ${pushed.length===1?'draft':'drafts'} ready`} · {scan.candidates.length} strong candidates found{draftsNotCreated > 0 && <> · {draftsNotCreated} {draftsNotCreated===1?'candidate did':'candidates did'} not produce a draft</>} · {scan.scanned} jobs checked</p> : <p>Prepare up to 5 WordPress drafts, one at a time. If a candidate fails, the scanner looks for another.</p>}
-      {scan?.zip && <p className='field-help'>Scan ZIP code: {scan.zip}</p>}
+      {(scan?.zip || scan?.dateRange) && <p className='field-help'>This scan: {scan.dateRange ? `${scan.dateRange.startDate.slice(0,10)} to ${new Date(Date.parse(scan.dateRange.endDateExclusive)-86400000).toISOString().slice(0,10)}` : 'All dates'} · {scan.zip ? `ZIP ${scan.zip}` : 'All ZIP codes'}</p>}
       {scan?.error && <p className='notice error'>{scan.error}</p>}
       {scan?.stopReason==='limits' && <p className='field-help'>Search limit reached.</p>}
       {scan && !isActive && !pushed.length && scan.state==='succeeded' && <p>No drafts were created. {scan.stopReason==='canceled'?'Completed work has been preserved.':'No available jobs could be built in this scan.'}</p>}
@@ -159,5 +163,5 @@ export function JobScanner() {
       <p className='field-help'>Queued work will stop. A draft already building may finish; completed drafts and their token charges remain.</p>
     </div>}
     {tokenSpendDialog}
-  </main>;
+  </section>;
 }

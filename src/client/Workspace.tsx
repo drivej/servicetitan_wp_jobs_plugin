@@ -858,7 +858,6 @@ export function Workspace({ children }: { children: ReactNode }) {
         <div className='workspace-menu-row d-flex gap-2 p-2 align-end'>
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
-          <Button component='a' href='/job-scanner' variant={path === '/job-scanner' ? 'contained' : 'text'} aria-current={path === '/job-scanner' ? 'page' : undefined}>Job Scanner</Button>
           <JobsButton href={jobsHref} path={path} />
           <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
         </div>

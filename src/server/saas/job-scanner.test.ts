@@ -41,8 +41,10 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     balance=0;assert.equal((await fetch(base+'/start',{method:'POST',headers})).status,402);balance=6;
     assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'Idempotency-Key':'invalid'}})).status,400);
     for(const zip of ['bad',12345,['01234']])assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({zip})})).status,400);
-    const response=await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({zip:' 01234 '})});assert.equal(response.status,202);const first=await response.json();
+    assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({start:'2026-10-08',end:'2026-10-01'})})).status,400);
+    const response=await fetch(base+'/start',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({zip:' 01234 ',start:'2026-10-01',end:'2026-10-07'})});assert.equal(response.status,202);const first=await response.json();
     assert.equal(first.scan.zip,'01234');
+    assert.deepEqual(first.scan.dateRange,{startDate:'2026-10-01T00:00:00.000Z',endDateExclusive:'2026-10-08T00:00:00.000Z'});
     assert.equal(response.headers.get('cache-control'),'private, no-store');
     const second=await(await fetch(base+'/start',{method:'POST',headers})).json();assert.equal(first.scan.id,second.scan.id);
     const latest=await(await fetch(base+'/latest',{headers})).json();assert.equal(latest.scan.id,first.scan.id);assert.equal(latest.scan.userId,undefined);assert.equal(latest.scan.workspaceId,undefined);

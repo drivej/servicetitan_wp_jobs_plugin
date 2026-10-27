@@ -108,6 +108,19 @@ test('ZIP filter persists across restart and excludes other locations before AI 
   }finally{await f.close();}
 });
 
+test('scanner uses the shared appointment search and only evaluates completed matching jobs',async()=>{
+  const f=await fileFixture();try{
+    const s=scope(),dateRange={startDate:'2026-10-01T00:00:00.000Z',endDateExclusive:'2026-10-08T00:00:00.000Z'};
+    await scannerApi(s,f.store,f.queue).start(randomUUID(),'30161',dateRange);
+    const task=(await f.store.claim())!;assert.deepEqual(task.dateRange,dateRange);
+    const {p}=providers([]);let searched=false;
+    p.serviceTitan.getScannerJobs=async()=>{throw new Error('Must use the shared search');};
+    p.serviceTitan.getJobs=async query=>{searched=true;assert.deepEqual(query,{...dateRange,zip:'30161',page:1,pageSize:25});return{data:[{...summary(1),status:'Scheduled'},summary(2)],page:1,pageSize:25,hasMore:false};};
+    await executeScan(task,p,{rate:async()=>({score:80,reason:'Useful details.'})},f.store,f.queue);
+    assert(searched);assert.equal(task.rated,1);assert.deepEqual(f.completed,[2]);
+  }finally{await f.close();}
+});
+
 test('empty/exhausted scans charge only the scan; AI failure queues no drafts after scan admission',async()=>{
   const f=await fileFixture();try{
     const s=scope();const api=scannerApi(s,f.store,f.queue);await api.start(randomUUID());const task=(await f.store.claim())!;

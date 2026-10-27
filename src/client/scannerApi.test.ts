@@ -26,7 +26,7 @@ test('scanner entry points reuse the scoped request key on failure and clear it 
     assert.equal((await startJobScan()).id,'accepted');
     assert.equal(keys[0],keys[1]);assert.equal(storage.size,0);
     await startJobScan();assert.notEqual(keys[1],keys[2]);
-    await startJobScan(' 01234 ');assert.equal(zips.at(-1),'01234');
+    await startJobScan(' 01234 ',{start:'2026-10-01',end:'2026-10-07'});assert.equal(zips.at(-1),'01234');
   }finally{
     globalThis.fetch=originalFetch;Object.defineProperty(globalThis,'window',{configurable:true,value:originalWindow});configureApi('local','','');
   }

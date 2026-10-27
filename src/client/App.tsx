@@ -1,8 +1,8 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import { startJobScan } from './scannerApi';
+import { JobScanner } from './JobScanner';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Pagination, Paper, TextField } from '@mui/material';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
@@ -47,7 +47,8 @@ const initialRange = (): JobFilters => {
 };
 
 export function App() {
-  const search = useMemo(() => parseJobsSearch(window.location.search, initialRange()), []);
+  const [search,setSearch] = useState(() => parseJobsSearch(window.location.search, initialRange()));
+  const [view,setView] = useState<'browse'|'scout'>(()=>window.location.pathname==='/job-scanner' || new URLSearchParams(window.location.search).get('view')==='scout'?'scout':'browse');
   const [draftRange, setDraftRange] = useState<JobFilters>(search.filters);
   const [result, setResult] = useState<JobsResponse>();
   const [error, setError] = useState('');
@@ -64,21 +65,6 @@ export function App() {
   const tokensExhausted = useTokensExhausted();
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
   const [scoutInfoOpen,setScoutInfoOpen] = useState(false);
-  const [scannerBusy,setScannerBusy] = useState(false);
-  const scannerOpening = useRef(false);
-  const runJobScout = async () => {
-    if (scannerOpening.current || !wordpressPluginReady) return;
-    if (tokensExhausted) { showTokenError(); return; }
-    scannerOpening.current=true;
-    try {
-      if (!await confirmTokenSpend('job_scan')) return;
-      setScannerBusy(true);
-      await startJobScan();
-      navigateTo('/job-scanner');
-    } catch(reason) {
-      setActionError({title:'Unable to start AI Job Scout',message:reason instanceof Error?reason.message:'Please try again.'});
-    } finally {scannerOpening.current=false;setScannerBusy(false);}
-  };
 
 
   useEffect(() => {
@@ -350,20 +336,14 @@ export function App() {
 
   return (
     <main className='app-page'>
-      <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
-      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' className='jobs-page-header' actions={<div className='job-scout-toolbar'>
-        <div className='job-scout-actions'>
-          <Button variant='contained' className='job-scout-button' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>} disabled={scannerBusy || !wordpressPluginReady} onClick={()=>void runJobScout()}>{scannerBusy?'Starting AI Job Scout…':'Find My Next Great Posts'}</Button>
-          <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
-        </div>
-        <p className='field-help'>1 token per scan + 1 per draft · Up to 6 tokens total</p>
-      </div>} />
+      <LoadingModal open={loading && view==='browse'} label='Loading ServiceTitan jobs' />
+      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' className='jobs-page-header' />
       <Dialog open={scoutInfoOpen} onClose={()=>setScoutInfoOpen(false)} aria-labelledby='job-scout-info-title' aria-describedby='job-scout-info-description'>
         <DialogTitle id='job-scout-info-title'>AI Job Scout</DialogTitle>
         <DialogContent>
           <h3>Your next great post is already in your job history.</h3>
           <p id='job-scout-info-description'>Let AI find promising completed jobs and turn the best matches into WordPress drafts—ready for your review.</p>
-          <p>AI Job Scout searches your recent completed jobs independently of the date and ZIP filters on this page. It skips jobs already in WordPress and prepares up to five drafts. You choose what to publish.</p>
+          <p>AI Job Scout uses the same appointment date range and ZIP search as Browse jobs. It skips jobs already in WordPress and prepares up to five drafts. You choose what to publish.</p>
           <p>1 token per scan, plus 1 token per draft created (up to 6 tokens total). You’ll approve the spend before the scan starts.</p>
         </DialogContent>
         <DialogActions><Button onClick={()=>setScoutInfoOpen(false)}>Got it</Button></DialogActions>
@@ -392,7 +372,7 @@ export function App() {
 
       <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
         {/* <h2 id='filters-heading'>Date range</h2> */}
-        <form className='job-search-form' action='/jobs' method='get'>
+        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next)+(nextView==='scout'?'&view=scout':''));}}>
           <div className='job-search-date-range'>
             <label>
               <span>Start date</span>
@@ -418,13 +398,16 @@ export function App() {
             />
           </label>
           <input name='pageSize' type='hidden' value={search.pageSize} />
-          <Button variant='contained' className='primary' type='submit' disabled={loading}>
-            Find jobs
-          </Button>
+          <div className='job-search-actions'>
+            <Button variant='contained' className='primary' type='submit' value='browse' disabled={loading}>Search</Button>
+            <Button variant='contained' className='job-scout-button' type='submit' value='scout' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>}>AI Job Scout</Button>
+            <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
+          </div>
         </form>
       </Paper>
 
-      <section className='results' aria-labelledby='results-heading' aria-busy={loading}>
+      <div hidden={view!=='scout'}><JobScanner searchFilters={search.filters}/></div>
+      <section style={view!=='browse'?{display:'none'}:undefined} className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>
           <div>
             {/* <p className='page-label'>Results</p> */}

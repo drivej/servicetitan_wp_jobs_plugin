@@ -8,7 +8,7 @@ import { HttpError } from './saas/validation.js';
 import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
 export interface ScannerStore {
-  enqueue(scope: BuildScope, id: string, zip?: string): Promise<StoredScannerTask>;
+  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<StoredScannerTask>;
   latest(scope: BuildScope): Promise<StoredScannerTask | undefined>;
   claim(): Promise<StoredScannerTask | undefined>;
   get(scope: BuildScope,id: string): Promise<StoredScannerTask | undefined>;
@@ -36,7 +36,7 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
   const canceled=async()=>Boolean((await store.get(task,task.id))?.cancelRequested);
   const finish=async(reason:NonNullable<ScannerTask['stopReason']>)=>{task.stopReason=await canceled()?'canceled':reason;task.currentJob=null;task.state='succeeded';await store.save(task);};
   if(await canceled()){await finish('canceled');return;}
-  if (!providers.serviceTitan.getScannerJobs) throw new Error('Job scanning is unavailable.');
+  if (!task.dateRange && !providers.serviceTitan.getScannerJobs) throw new Error('Job scanning is unavailable.');
   if ((await providers.wordpress.getPluginStatus()).state !== 'current') throw new Error('Verify the WordPress plugin before scanning.');
   if(await canceled()){await finish('canceled');return;}
   const spend = providers.spendJobToken || (async <T>(_action: string, operation: () => Promise<T>) => operation());
@@ -48,7 +48,7 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
     if(await canceled()){task.stopReason='canceled';break;}
     if(task.scanned>=SCANNER_MAX_JOBS || task.rated>=SCANNER_MAX_RATINGS || Date.now()-started>10*60000){task.stopReason='limits';break;}
     task.currentJob={title:'Finding your next promising job',stage:'searching'};await store.save(task);
-    const jobs=await providers.serviceTitan.getScannerJobs(page);
+    const jobs=task.dateRange ? await providers.serviceTitan.getJobs({...task.dateRange,...(task.zip ? {zip:task.zip} : {}),page,pageSize:25}) : await providers.serviceTitan.getScannerJobs!(page);
     if(!jobs.data.length){task.stopReason='exhausted';break;}
     const statuses=await providers.wordpress.getStatuses(jobs.data.map(job=>job.id));
     for(const job of jobs.data){
@@ -56,6 +56,7 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
       if(task.scanned>=SCANNER_MAX_JOBS || task.rated>=SCANNER_MAX_RATINGS || Date.now()-started>10*60000){task.stopReason='limits';break outer;}
       if(seen.has(job.id))continue;
       seen.add(job.id);task.scanned++;
+      if(task.dateRange && job.status!=='Completed')continue;
       if(statuses[job.id]?.state!=='not_found')continue;
       task.currentJob={jobId:job.id,title:safeWorkText(job.descriptionPreview || job.jobName,160),stage:'checking'};await store.save(task);
       let details;
@@ -127,10 +128,10 @@ export function scannerApi(scope: BuildScope, store: ScannerStore, queue: BuildQ
       if(task.cancelRequested)for(const item of task.selected)await queue.cancelQueued(scope,item.buildTaskId,task.id);
       return publicScan(await settleScan(task,store,queue));
     },
-    start: async (id: string, zip?: string) => {
+    start: async (id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}) => {
       const task = await latest();
       if (task && (['queued','running','drafting'].includes(task.state) || task.selected.some(item => item.build && ['queued','running'].includes(item.build.state)))) return publicScan(task);
-      return publicScan(await store.enqueue(scope,id,zip));
+      return publicScan(await store.enqueue(scope,id,zip,dateRange));
     },
   };
 }
