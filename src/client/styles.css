@@ -2198,3 +2198,17 @@ td strong {
 .job-scout-actions .job-scout-button:hover { background: #513187; }
 .job-scout-actions .job-scout-button.Mui-disabled { background: #e5e0ec; color: #776e83; }
 .job-scout-toolbar .field-help { margin: 8px 0 0; }
+
+.scanner-page-header { display: grid; grid-template-columns: 1fr auto; align-items: center; max-width: none; }
+.scanner-page-header > .eyebrow { grid-column: 1 / -1; }
+.scanner-page-header > .job-scout-actions { margin: 0; }
+.scanner-summary { margin: 18px 0; }
+.scanner-processing-row { background: #f6f2ff; }
+.scanner-processing-art { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 10px; background: #e9e0fa; color: #6541a5; font-size: 32px; }
+.scanner-stage { display: block; margin-top: 6px; color: #6541a5; font-size: 12px; }
+.scanner-cancel { margin-top: 24px; }
+@media(max-width:700px){ .scanner-page-header { grid-template-columns: 1fr; } }
+
+.scanner-page { gap: 18px; }
+.scanner-page .scanner-summary, .scanner-page .scanner-summary > p { margin: 0; }
+.scanner-page .scanner-results, .scanner-page .scanner-cancel { margin-top: 0; }

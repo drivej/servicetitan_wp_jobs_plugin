@@ -6,12 +6,13 @@ import type { Database } from './saas/database.js';
 import type { WordPressPostStatus } from './wordpress.js';
 
 export interface BuildScope { userId: string; workspaceId: string; websiteId: string; }
-export interface StoredBuildTask extends BuildTask, BuildScope { updatedAt: number; }
+export interface StoredBuildTask extends BuildTask, BuildScope { updatedAt: number; scannerId?: string; }
 export interface BuildQueueStore {
-  enqueue(scope: BuildScope, jobId: number): Promise<BuildTask>;
+  enqueue(scope: BuildScope, jobId: number, scannerId?: string): Promise<BuildTask>;
   list(scope: BuildScope, jobIds: number[]): Promise<BuildTask[]>;
   listById(scope: BuildScope, ids: string[]): Promise<BuildTask[]>;
   claim(): Promise<StoredBuildTask | undefined>;
+  cancelQueued(scope: BuildScope, id: string, scannerId?: string): Promise<boolean>;
   save(task: StoredBuildTask): Promise<void>;
 }
 const interruptedMessage = 'The server lost contact with this build. Check WordPress before retrying.';
@@ -37,11 +38,11 @@ export class FileBuildQueueStore implements BuildQueueStore {
     this.tail = work.catch(() => undefined);
     return work;
   }
-  enqueue(scope: BuildScope, jobId: number) {
+  enqueue(scope: BuildScope, jobId: number, scannerId?: string) {
     return this.access((tasks) => {
       const existing = tasks.find((t) => t.websiteId === scope.websiteId && t.workspaceId === scope.workspaceId && t.jobId === jobId && ['queued', 'running'].includes(t.state));
       if (existing) return publicTask(existing);
-      const task: StoredBuildTask = { ...scope, id: randomUUID(), jobId, state: 'queued', updatedAt: Date.now() };
+      const task: StoredBuildTask = { userId:scope.userId,workspaceId:scope.workspaceId,websiteId:scope.websiteId, ...(scannerId ? {scannerId}:{}), id: randomUUID(), jobId, state: 'queued', updatedAt: Date.now() };
       tasks.push(task);
       return publicTask(task);
     });
@@ -52,6 +53,11 @@ export class FileBuildQueueStore implements BuildQueueStore {
   listById(scope: BuildScope, ids: string[]) {
     return this.access(tasks => tasks.filter(task => task.workspaceId === scope.workspaceId && task.websiteId === scope.websiteId && ids.includes(task.id)).map(publicTask));
   }
+  cancelQueued(scope: BuildScope,id: string,scannerId?: string) { return this.access(tasks=>{
+    const task=tasks.find(item=>item.id===id && item.workspaceId===scope.workspaceId && item.websiteId===scope.websiteId && item.state==='queued' && (!scannerId || item.scannerId===scannerId));
+    if(!task)return false;
+    task.state='failed';task.error='Canceled before draft building started.';task.updatedAt=Date.now();return true;
+  }); }
   claim() {
     return this.access((tasks) => {
       for (const task of tasks) if (task.state === 'running' && task.updatedAt < Date.now() - staleAfter) {
@@ -71,9 +77,9 @@ export class FileBuildQueueStore implements BuildQueueStore {
 
 export class PostgresBuildQueueStore implements BuildQueueStore {
   constructor(private readonly db: Database) {}
-  enqueue(scope: BuildScope, jobId: number) {
+  enqueue(scope: BuildScope, jobId: number, scannerId?: string) {
     return this.db.transaction(undefined, async (sql) => {
-      const task: StoredBuildTask = { ...scope, id: randomUUID(), jobId, state: 'queued', updatedAt: Date.now() };
+      const task: StoredBuildTask = { userId:scope.userId,workspaceId:scope.workspaceId,websiteId:scope.websiteId, ...(scannerId ? {scannerId}:{}), id: randomUUID(), jobId, state: 'queued', updatedAt: Date.now() };
       // A partial unique index serializes duplicate submissions across users and instances.
       const row = (await sql.query(`INSERT INTO build_deploy_tasks(id,workspace_id,website_id,job_id,state,payload)
         VALUES($1,$2,$3,$4,'queued',$5) ON CONFLICT(workspace_id,website_id,job_id) WHERE state IN ('queued','running')
@@ -88,6 +94,10 @@ export class PostgresBuildQueueStore implements BuildQueueStore {
   }
   listById(scope: BuildScope, ids: string[]) {
     return this.db.transaction(undefined, async sql => (await sql.query('SELECT payload FROM build_deploy_tasks WHERE workspace_id=$1 AND website_id=$2 AND id=ANY($3::uuid[])', [scope.workspaceId,scope.websiteId,ids])).rows.map(row => publicTask(row.payload as StoredBuildTask)));
+  }
+  async cancelQueued(scope: BuildScope,id: string,scannerId?: string) {
+    return this.db.transaction(undefined,async sql=>(await sql.query(`UPDATE build_deploy_tasks SET state='failed',payload=payload || jsonb_build_object('state','failed','error','Canceled before draft building started.'),updated_at=now()
+      WHERE id=$1 AND workspace_id=$2 AND website_id=$3 AND state='queued' AND ($4::text IS NULL OR payload->>'scannerId'=$4) RETURNING id`,[id,scope.workspaceId,scope.websiteId,scannerId || null])).rows.length>0);
   }
   claim() {
     return this.db.transaction(undefined, async (sql) => {

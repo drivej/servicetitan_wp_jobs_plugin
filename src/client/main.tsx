@@ -1,3 +1,4 @@
+import { JobScannerGuide } from './JobScannerGuide';
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
@@ -18,7 +19,7 @@ import packageJson from '../../package.json';
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);
 const helpTopicMatch = path.match(/^\/help\/(wordpress|servicetitan|onboarding|plugin)-([a-z-]+)$/);
-const page = helpTopicMatch
+const page = path === '/help/job-scanner' ? <JobScannerGuide /> : helpTopicMatch
   ? <WordPressIntegrationGuide topic={`${helpTopicMatch[1]}-${helpTopicMatch[2]}`} />
   : path === '/help'
   ? <WordPressIntegrationGuide />

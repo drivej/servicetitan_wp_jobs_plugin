@@ -1,7 +1,8 @@
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { startJobScan } from './scannerApi';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
-import { Button, LinearProgress } from '@mui/material';
+import { Button, CircularProgress, IconButton } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import type { ScannerTask } from '../shared/job-scanner';
 import type { WordPressStatus } from './wordpressStatusCache';
@@ -20,6 +21,7 @@ export function JobScanner() {
   const [scan,setScan] = useState<ScannerTask | null>();
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
+  const [canceling,setCanceling] = useState(false);
   const [publishing,setPublishing] = useState<number>();
   const [jobs,setJobs] = useState<Record<number,JobTableItem>>({});
   const [detailsError,setDetailsError] = useState('');
@@ -36,8 +38,8 @@ export function JobScanner() {
   const pushedIds = pushed.map(item=>item.jobId).join(',');
   useEffect(()=>{
     const controller=new AbortController();
-    setJobs({});setDetailsError('');
     const ids=pushedIds ? pushedIds.split(',').map(Number) : [];
+    setJobs(current=>Object.fromEntries(Object.entries(current).filter(([id])=>ids.includes(Number(id)))));setDetailsError('');
     void Promise.allSettled(ids.map(async id=>{
       const details=await read<{summary:JobTableItem;attachments:NonNullable<JobTableItem['attachments']>}>(await apiFetch(`/api/jobs/${id}`,{signal:controller.signal}));
       return {id,job:{...details.summary,attachments:details.attachments}};
@@ -70,14 +72,14 @@ export function JobScanner() {
         const body = await read<{scan:ScannerTask|null}>(await apiFetch('/api/scanner/latest',{signal:controller.signal}));
         if (current !== generation.current || controller.signal.aborted) return;
         setScan(body.scan); setError('');
-        const signature = JSON.stringify([body.scan?.state,body.scan?.selected.map(item=>item.build?.state)]);
+        const signature = JSON.stringify([body.scan?.state,body.scan?.scanFeeCharged,body.scan?.currentJob?.stage,body.scan?.selected.map(item=>item.build?.state)]);
         if (signature !== progress.current) { progress.current=signature; window.dispatchEvent(new Event('job-tokens-changed')); }
         if (body.scan?.selected.length && !activeScan(body.scan)) {
           const live = await read<{statuses:Record<number,WordPressStatus>}>(await apiFetch('/api/wordpress/statuses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds:body.scan.selected.map(item=>item.jobId)}),signal:controller.signal}));
           if (!controller.signal.aborted) setStatuses(live.statuses);
         }
       } catch (reason) { if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : 'Unable to load scan.'); setScan(current => current === undefined ? null : current); } }
-      finally { if (!controller.signal.aborted && (isActive || scan === undefined)) timer=setTimeout(()=>void load(),5000); }
+      finally { if (!controller.signal.aborted && (isActive || scan === undefined)) timer=setTimeout(()=>void load(),2000); }
     };
     void load();
     return () => { controller.abort(); clearTimeout(timer); };
@@ -91,6 +93,14 @@ export function JobScanner() {
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to start scan.'); }
     finally {setBusy(false);}
   };
+  const cancelScan = async()=>{
+    if(!scan || canceling)return;
+    setCanceling(true);setError('');
+    try{
+      const body=await read<{scan:ScannerTask}>(await apiFetch(`/api/scanner/${scan.id}/cancel`,{method:'POST'}));setScan(body.scan);
+    }catch(reason){setError(reason instanceof Error?reason.message:'Unable to cancel the scan.');}
+    finally{setCanceling(false);}
+  };
   const publish = async (jobId:number) => {
     setPublishing(jobId); setError('');
     try {
@@ -99,31 +109,23 @@ export function JobScanner() {
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to publish draft.'); }
     finally {setPublishing(undefined);}
   };
-  return <main className='app-page'>
-    <PageHeader eyebrow='Find your next project post' title='Job Scanner' description='Review recent completed jobs, rate their source content, and prepare the strongest opportunities as WordPress drafts.' />
-    <section className='panel scanner-panel'>
-      <h2>Find strong content automatically</h2>
-      <p>Starting with the newest jobs by creation date (completed jobs only), skip jobs already in WordPress and collect up to 10 candidates rated 70/100 or higher. The best five become drafts for your review.</p>
-      <p><strong>1 token per scan + 1 token per draft created (up to 6 total).</strong> Publishing is free. If your balance runs out, fewer drafts may be created.</p>
-      <p className='field-help'>Ratings measure the evidence available for a useful local-service post, not predicted search rankings. Each scan is limited to 500 jobs, 40 AI ratings, and about 10 minutes; it may finish sooner. Images are checked when building drafts.</p>
-      <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy ? 'Starting…' : isActive ? 'Scan in progress' : 'Scan and prepare drafts'}</Button>
-      {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
-      {error && <p className='notice error' role='alert'>{error}</p>}
-      {scan && <div className='scanner-progress' aria-live='polite'>
-        <p><strong>{scan.state === 'queued' ? 'Queued — scanning will begin shortly' : scan.state === 'running' ? 'Scanning newest completed jobs' : scan.state === 'drafting' ? 'Preparing WordPress drafts' : scan.state === 'failed' ? 'Scan could not finish' : 'Scan complete'}</strong> · {scan.scanned} jobs checked · {scan.rated} AI ratings · {scan.candidates.length} strong candidates</p>
-        {isActive && <LinearProgress aria-label='Job Scanner progress' />}
-        {scan.stopReason === 'limits' && <p>Scan limits reached. Results cover the jobs scanned so far; more jobs may remain.</p>}
-        {scan.stopReason === 'exhausted' && <p>No more jobs were returned by ServiceTitan.</p>}
-        {scan.error && <p className='notice error'>{scan.error}</p>}
-        {!isActive && !scan.selected.length && scan.state === 'succeeded' && <p>No jobs met the content threshold. The scan cost one token; no draft tokens were charged.</p>}
-      </div>}
-    </section>
-    {pushed.length > 0 && <section className='scanner-results' aria-labelledby='scanner-pushed-heading'>
-      <h2 id='scanner-pushed-heading'>Jobs pushed to WordPress</h2>
-      <p>{pushed.length} {pushed.length===1?'job was':'jobs were'} sent to WordPress as {pushed.length===1?'a draft':'drafts'}. Review each job before publishing.</p>
+  return <main className='app-page scanner-page'>
+    <PageHeader eyebrow='AI Job Scout' title='Job Scanner' className='scanner-page-header' actions={<div className='job-scout-actions'>
+      <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy?'Starting…':isActive?'Scan in progress':'Find My Next Great Posts'}</Button>
+      <IconButton component='a' href='/help/job-scanner' aria-label='How AI Job Scout works' title='How AI Job Scout works'><InfoOutlinedIcon/></IconButton>
+    </div>}/>
+    {!plugin.loading && !plugin.ready && <p className='notice'>Verify the WordPress plugin in Settings before scanning.</p>}
+    {error && <p className='notice error' role='alert'>{error}</p>}
+    <div className='scanner-summary' role='status'>
+      {scan ? <p><strong>{scan.stopReason==='canceled'?'Scan canceled':scan.cancelRequested?'Canceling scan…':isActive?'Finding your next great posts…':scan.state==='failed'?'Scan stopped':'Scan complete'}</strong> · {pushed.length} {pushed.length===1?'draft':'drafts'} ready · {scan.candidates.length}/5 strong candidates · {scan.scanned} jobs checked</p> : <p>Find up to 5 strong jobs and prepare WordPress drafts, one at a time.</p>}
+      {scan?.error && <p className='notice error'>{scan.error}</p>}
+      {scan?.stopReason==='limits' && <p className='field-help'>Search limit reached.</p>}
+      {scan && !isActive && !pushed.length && scan.state==='succeeded' && <p>No drafts were created. {scan.stopReason==='canceled'?'Completed work has been preserved.':'No available jobs could be built in this scan.'}</p>}
+    </div>
+    {(pushed.length > 0 || isActive) && <section className='scanner-results' aria-label='Your WordPress drafts'>
       {detailsError && <p className='notice' role='status'>{detailsError} <Button onClick={()=>setRefreshVersion(value=>value+1)}>Retry details</Button></p>}
       <div className='table-wrap'><table className='jobs-table'>
-        <caption className='visually-hidden'>Jobs successfully pushed by this scan</caption>
+        <caption className='visually-hidden'>Job Scanner progress and completed WordPress drafts</caption>
         <colgroup><col className='readiness-column'/><col className='job-image-column'/><col className='job-name-column'/><col className='location-column'/><col className='wp-status-column'/><col className='actions-column'/></colgroup>
         <JobTableHeader refreshing={refreshing} disabled={refreshing || publishing!==undefined} onRefresh={()=>void refreshStatuses()}/>
         <tbody>{pushed.map(item=>{
@@ -132,9 +134,25 @@ export function JobScanner() {
           return <JobTableRow key={item.jobId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status}
             wordpressBusy={publishing!==undefined || refreshing} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted}
             onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void publish(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
-        })}</tbody>
+        })}
+        {isActive && <tr className='job-row scanner-processing-row' aria-busy='true'>
+          <td className='readiness-cell' aria-label='Processing'>…</td>
+          <td className='job-image-cell'><div className='scanner-processing-art'><CircularProgress size={28} aria-label={scan?.currentJob?.stage==='drafting'?'Building WordPress draft':'Checking next job'}/></div></td>
+          <td className='job-name-cell'><div className='job-name'>{scan?.currentJob?.title || 'Getting your scan ready'}</div>
+            <div className='job-row-metadata'>{scan?.currentJob?.jobId && <span>#{scan.currentJob.jobId}</span>}{scan?.currentJob?.score!==undefined && <span>{scan.currentJob.score}/100</span>}</div>
+            <span className='scanner-stage'>{scan?.cancelRequested?'Finishing the current job safely…':scan?.currentJob?.stage==='drafting'?'Building and pushing your WordPress draft…':scan?.currentJob?.stage==='rating'?'Evaluating this job with AI…':scan?.currentJob?.stage==='checking'?'Checking job details and attachments…':scan?.state==='queued'?'Waiting to start…':'Looking for your next strong job…'}</span>
+          </td>
+          <td className='location-cell' data-label='Location'>—</td>
+          <td className='wp-status-cell' data-label='WordPress'>{scan?.currentJob?.stage==='drafting'?'Preparing draft':'Checking'}</td>
+          <td className='actions-cell' data-label='Token cost'><span className='field-help'>{scan?.currentJob?.stage==='drafting'?'1 token per draft':'1 token per scan'}</span></td>
+        </tr>}
+        </tbody>
       </table></div>
     </section>}
+    {isActive && <div className='scanner-cancel'>
+      <Button color='error' variant='outlined' disabled={canceling || Boolean(scan?.cancelRequested)} onClick={()=>void cancelScan()}>{canceling || scan?.cancelRequested?'Canceling…':'Cancel job scan'}</Button>
+      <p className='field-help'>Queued work will stop. A draft already building may finish; completed drafts and their token charges remain.</p>
+    </div>}
     {tokenSpendDialog}
   </main>;
 }

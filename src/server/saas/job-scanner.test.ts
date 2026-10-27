@@ -44,5 +44,15 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     assert.equal(response.headers.get('cache-control'),'private, no-store');
     const second=await(await fetch(base+'/start',{method:'POST',headers})).json();assert.equal(first.scan.id,second.scan.id);
     const latest=await(await fetch(base+'/latest',{headers})).json();assert.equal(latest.scan.id,first.scan.id);assert.equal(latest.scan.userId,undefined);assert.equal(latest.scan.workspaceId,undefined);
+    const cancel=base+`/${first.scan.id}/cancel`;
+    assert.equal((await fetch(cancel,{method:'POST'})).status,401);
+    assert.equal((await fetch(cancel,{method:'POST',headers:{Cookie:headers.Cookie}})).status,403);
+    assert.equal((await fetch(cancel.replace(websiteId,randomUUID()),{method:'POST',headers})).status,404);
+    assert.equal((await fetch(base+`/${randomUUID()}/cancel`,{method:'POST',headers})).status,404);
+    balance=0;
+    const stopped=await fetch(cancel,{method:'POST',headers});assert.equal(stopped.status,200);
+    const stoppedBody=await stopped.json();assert.equal(stoppedBody.scan.stopReason,'canceled');assert.equal(stoppedBody.scan.scanFeeCharged,undefined);
+    assert.equal(stoppedBody.scan.userId,undefined);assert.equal(await scanners.claim(),undefined);
+
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(dir,{recursive:true,force:true});}
 });

@@ -10,9 +10,14 @@ export interface ScannerTask {
   rated: number;
   candidates: ScannerCandidate[];
   selected: ScannerSelection[];
-  stopReason?: 'ten_candidates' | 'exhausted' | 'limits';
+  stopReason?: 'five_candidates' | 'ten_candidates' | 'exhausted' | 'limits' | 'canceled';
+  cancelRequested?: boolean;
+  scanFeeCharged?: boolean;
+  currentJob?: { jobId?: number; title: string; stage: 'searching' | 'checking' | 'rating' | 'drafting'; score?: number } | null;
   error?: string;
 }
 export const SCANNER_MIN_SCORE = 70;
 export const SCANNER_MAX_JOBS = 500;
 export const SCANNER_MAX_RATINGS = 40;
+
+export const SCANNER_MAX_CANDIDATES = 5;

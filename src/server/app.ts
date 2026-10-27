@@ -24,7 +24,7 @@ import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 interface CreateAppOptions {
   jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
-  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string): Promise<ScannerTask> };
+  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -150,6 +150,9 @@ export const createApp = ({
   });
   app.get(`${apiPrefix}/scanner/latest`, async (_request, response, next) => {
     try { if (!scanner) throw new HttpError('Job Scanner is unavailable.',503); response.set('Cache-Control','private, no-store'); response.json({ scan: await scanner.latest() }); } catch (error) { next(error); }
+  });
+  app.post(`${apiPrefix}/scanner/:scanId/cancel`,async(request,response,next)=>{
+    try{if(!scanner)throw new HttpError('Job Scanner is unavailable.',503);response.set('Cache-Control','private, no-store');response.json({scan:await scanner.cancel(uuid(request.params.scanId))});}catch(error){next(error);}
   });
   app.post(`${apiPrefix}/scanner/start`, async (request, response, next) => {
     try {
