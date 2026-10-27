@@ -2213,7 +2213,7 @@ td strong {
 .scanner-page .scanner-summary, .scanner-page .scanner-summary > p { margin: 0; }
 .scanner-page .scanner-results, .scanner-page .scanner-cancel { margin-top: 0; }
 
-.job-search-actions { margin-bottom: 7px; display: flex; align-items: center; gap: 10px; align-self: end; flex-wrap: wrap; }
+.job-search-actions { margin-bottom: 0; display: flex; align-items: center; gap: 10px; align-self: end; flex-wrap: wrap; }
 .job-search-actions .MuiButton-root { white-space: nowrap; }
 .job-search-actions > .MuiButton-root, .job-search-actions > .MuiIconButton-root { height: 40px; box-sizing: border-box; }
 .job-search-actions > .MuiIconButton-root { width: 40px; }
