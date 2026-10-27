@@ -24,7 +24,7 @@ import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
 interface CreateAppOptions {
   jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
-  scanner?: { latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
+  scanner?: { history(page:number):Promise<ScannerTask[]>; get(id:string):Promise<ScannerTask>; latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -148,8 +148,14 @@ export const createApp = ({
       response.json({ attachments: await serviceTitan.getJobImageCandidates(parseJobId(request.params.jobId)) });
     } catch (error) { next(error); }
   });
+  app.get(`${apiPrefix}/scanner/history`,async(request,response,next)=>{
+    try{if(!scanner)throw new HttpError('Job Scanner is unavailable.',503);const page=positiveInteger(request.query.page,'page',1,10000);response.set('Cache-Control','private, no-store');response.json({scans:await scanner.history(page)});}catch(error){next(error);}
+  });
   app.get(`${apiPrefix}/scanner/latest`, async (_request, response, next) => {
     try { if (!scanner) throw new HttpError('Job Scanner is unavailable.',503); response.set('Cache-Control','private, no-store'); response.json({ scan: await scanner.latest() }); } catch (error) { next(error); }
+  });
+  app.get(`${apiPrefix}/scanner/:scanId`,async(request,response,next)=>{
+    try{if(!scanner)throw new HttpError('Job Scanner is unavailable.',503);response.set('Cache-Control','private, no-store');response.json({scan:await scanner.get(uuid(request.params.scanId))});}catch(error){next(error);}
   });
   app.post(`${apiPrefix}/scanner/:scanId/cancel`,async(request,response,next)=>{
     try{if(!scanner)throw new HttpError('Job Scanner is unavailable.',503);response.set('Cache-Control','private, no-store');response.json({scan:await scanner.cancel(uuid(request.params.scanId))});}catch(error){next(error);}

@@ -1,4 +1,6 @@
+import { ScanHistory } from './ScanHistory';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { JobScanner, type JobScannerHandle } from './JobScanner';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Pagination, Paper, TextField } from '@mui/material';
@@ -64,6 +66,7 @@ export function App() {
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
   const tokensExhausted = useTokensExhausted();
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
+  const [historyOpen,setHistoryOpen]=useState(false);
   const scannerControl=useRef<JobScannerHandle>(null);
   const [scoutInfoOpen,setScoutInfoOpen] = useState(false);
 
@@ -402,11 +405,13 @@ export function App() {
           <div className='job-search-actions'>
             <Button variant='contained' className='primary' type='submit' value='browse' disabled={loading}>Search</Button>
             <Button variant='contained' className='job-scout-button' type='submit' value='scout' disabled={!wordpressPluginReady} startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>}>AI Job Scout</Button>
+            <IconButton type='button' aria-label='Previous scans' title='Previous scans' onClick={()=>setHistoryOpen(true)}><ListAltOutlinedIcon/></IconButton>
             <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
           </div>
         </form>
       </Paper>
 
+      <ScanHistory open={historyOpen} onClose={()=>setHistoryOpen(false)} onSelect={id=>{setHistoryOpen(false);scannerControl.current?.select(id);}}/>
       <JobScanner searchFilters={search.filters} controlRef={scannerControl} onShow={()=>setView('scout')} visible={view==='scout'}/>
       <section style={view!=='browse'?{display:'none'}:undefined} className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>

@@ -9,6 +9,7 @@ import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
 export interface ScannerStore {
   enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string}): Promise<StoredScannerTask>;
+  history(scope: BuildScope, page: number): Promise<StoredScannerTask[]>;
   latest(scope: BuildScope): Promise<StoredScannerTask | undefined>;
   claim(): Promise<StoredScannerTask | undefined>;
   get(scope: BuildScope,id: string): Promise<StoredScannerTask | undefined>;
@@ -121,6 +122,8 @@ export function scannerApi(scope: BuildScope, store: ScannerStore, queue: BuildQ
     return task ? settleScan(task,store,queue) : undefined;
   };
   return {
+    history:async(page:number)=>(await store.history(scope,page)).map(publicScan),
+    get:async(id:string)=>{const task=await store.get(scope,id);if(!task)throw new HttpError('Scan not found.',404);return publicScan(await settleScan(task,store,queue));},
     latest: async () => { const task = await latest(); return task ? publicScan(task) : null; },
     cancel: async(id:string)=>{
       const task=await store.cancel(scope,id);

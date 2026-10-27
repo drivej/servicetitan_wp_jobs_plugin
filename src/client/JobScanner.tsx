@@ -18,9 +18,10 @@ async function read<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(body.error || 'Job Scanner request failed.');
   return body;
 }
-export interface JobScannerHandle { start(filters:JobFilters):Promise<void>; }
+export interface JobScannerHandle { start(filters:JobFilters):Promise<void>; select(id:string):void; }
 export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {searchFilters?:JobFilters;controlRef?:Ref<JobScannerHandle>;onShow?:()=>void;visible?:boolean} = {}) {
   const [scan,setScan] = useState<ScannerTask | null>();
+  const [selectedScanId,setSelectedScanId] = useState('');
   const [startedScanId,setStartedScanId] = useState('');
   const starting = useRef(false);
   const [zip,setZip] = useState('');
@@ -76,7 +77,7 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     const load = async () => {
       try {
         if (document.hidden) return;
-        const body = await read<{scan:ScannerTask|null}>(await apiFetch('/api/scanner/latest',{signal:controller.signal}));
+        const body = await read<{scan:ScannerTask|null}>(await apiFetch(selectedScanId ? `/api/scanner/${selectedScanId}` : '/api/scanner/latest',{signal:controller.signal}));
         if (current !== generation.current || controller.signal.aborted) return;
         setScan(body.scan); setError('');
         const signature = JSON.stringify([body.scan?.state,body.scan?.scanFeeCharged,body.scan?.currentJob?.stage,body.scan?.selected.map(item=>item.build?.state)]);
@@ -90,7 +91,7 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     };
     void load();
     return () => { controller.abort(); clearTimeout(timer); };
-  },[isActive,scan === undefined]);
+  },[isActive,scan === undefined,selectedScanId]);
   const start = async (filters=searchFilters) => {
     if(isActive){onShow?.();return;}
     if(starting.current || busy || !plugin.ready)return;
@@ -102,11 +103,11 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     onShow?.();
     setBusy(true); setError(''); setStatuses({});
     try {
-      const next=await startJobScan(scanZip,filters);setStartedScanId(next.id);setScan(next);
+      const next=await startJobScan(scanZip,filters);setSelectedScanId(next.id);setStartedScanId(next.id);setScan(next);
     } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to start scan.'); }
     finally {starting.current=false;setBusy(false);}
   };
-  useImperativeHandle(controlRef,()=>({start}));
+  useImperativeHandle(controlRef,()=>({start,select:(id:string)=>{setStatuses({});setScan(undefined);setSelectedScanId(id);setStartedScanId(id);onShow?.();}}));
   const cancelScan = async()=>{
     if(!scan || canceling)return;
     setCanceling(true);setError('');

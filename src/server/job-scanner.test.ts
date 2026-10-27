@@ -121,6 +121,23 @@ test('scanner uses the shared appointment search and only evaluates completed ma
   }finally{await f.close();}
 });
 
+test('scan history is paginated, scoped, and reopening a saved scan never queues or charges work',async()=>{
+  const f=await fileFixture();try{
+    const s=scope(),api=scannerApi(s,f.store,f.queue),ids:string[]=[];
+    for(let i=0;i<23;i++){
+      const scan=await api.start(randomUUID(),'30161');ids.push(scan.id);
+      const task=(await f.store.claim())!;await executeScan(task,providers([]).p,{rate:async()=>{throw new Error('unused');}},f.store,f.queue);
+    }
+    assert.equal((await api.history(1)).length,20);assert.equal((await api.history(2)).length,3);
+    assert.equal((await api.history(1))[0]!.id,ids.at(-1));
+    assert.deepEqual(await scannerApi({...s,websiteId:randomUUID()},f.store,f.queue).history(1),[]);
+    await assert.rejects(scannerApi({...s,websiteId:randomUUID()},f.store,f.queue).get(ids[0]!),/Scan not found/);
+    const saved=await api.get(ids[0]!);assert.equal(saved.zip,'30161');assert.equal(saved.state,'succeeded');
+    assert(!JSON.stringify(saved).includes(s.userId));assert.equal(await f.queue.claim(),undefined);
+    assert.equal(await f.store.claim(),undefined);
+  }finally{await f.close();}
+});
+
 test('empty/exhausted scans charge only the scan; AI failure queues no drafts after scan admission',async()=>{
   const f=await fileFixture();try{
     const s=scope();const api=scannerApi(s,f.store,f.queue);await api.start(randomUUID());const task=(await f.store.claim())!;
@@ -165,6 +182,7 @@ test('PostgreSQL scanner claims are durable, scoped and deduplicated; exact buil
     const store=new PostgresScannerStore(db),queue=new PostgresBuildQueueStore(db);
     const [first,duplicate]=await Promise.all([store.enqueue(s,randomUUID()),store.enqueue(s,randomUUID())]);assert.equal(first.id,duplicate.id);
     const claimed=(await store.claim())!;assert.equal(claimed.id,first.id);assert.equal(await store.claim(),undefined);
+    assert.equal((await store.history(s,1))[0]!.id,first.id);assert.deepEqual(await store.history({...s,websiteId:randomUUID()},1),[]);
     assert.equal(await store.cancel({...s,websiteId:randomUUID()},first.id),undefined);
     await store.cancel(s,first.id);await store.save(claimed);
     assert.equal((await store.get(s,first.id))?.cancelRequested,true,'stale PostgreSQL worker saves must retain cancellation');

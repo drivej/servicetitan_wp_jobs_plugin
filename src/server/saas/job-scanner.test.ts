@@ -35,6 +35,8 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     const base=`http://127.0.0.1:${address.port}/api/websites/${websiteId}/scanner`;
     const headers={Cookie:`st_session=${token}`,Origin:config.origin,'X-CSRF-Token':csrfToken(token),'Idempotency-Key':randomUUID()};
     assert.equal((await fetch(base+'/latest')).status,401);
+    assert.equal((await fetch(base+'/history')).status,401);
+    assert.equal((await fetch(base+'/history?page=0',{headers})).status,400);
     assert.equal((await fetch(base+'/start',{method:'POST',headers:{Cookie:headers.Cookie}})).status,403);
     assert.equal((await fetch(base.replace(websiteId,randomUUID())+'/latest',{headers})).status,404);
     assert.equal((await fetch(base+'/start',{method:'POST',headers:{...headers,'X-Workspace-ID':randomUUID()}})).status,409);
@@ -48,6 +50,10 @@ test('scanner HTTP requires session, CSRF, tokens and website access; retries re
     assert.equal(response.headers.get('cache-control'),'private, no-store');
     const second=await(await fetch(base+'/start',{method:'POST',headers})).json();assert.equal(first.scan.id,second.scan.id);
     const latest=await(await fetch(base+'/latest',{headers})).json();assert.equal(latest.scan.id,first.scan.id);assert.equal(latest.scan.userId,undefined);assert.equal(latest.scan.workspaceId,undefined);
+    const historyResponse=await fetch(base+'/history',{headers});assert.equal(historyResponse.status,200);assert.equal((await historyResponse.json()).scans[0].id,first.scan.id);
+    assert.equal((await fetch(base+`/${first.scan.id}`,{headers})).status,200);
+    assert.equal((await fetch(base.replace(websiteId,randomUUID())+`/${first.scan.id}`,{headers})).status,404);
+    assert.equal((await fetch(base+`/${randomUUID()}`,{headers})).status,404);
     const cancel=base+`/${first.scan.id}/cancel`;
     assert.equal((await fetch(cancel,{method:'POST'})).status,401);
     assert.equal((await fetch(cancel,{method:'POST',headers:{Cookie:headers.Cookie}})).status,403);

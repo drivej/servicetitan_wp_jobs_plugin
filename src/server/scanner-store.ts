@@ -17,6 +17,7 @@ export class PostgresScannerStore implements ScannerStore {
       return row.payload as StoredScannerTask;
     });
   }
+  history(scope:BuildScope,page:number){return this.db.transaction(undefined,async sql=>(await sql.query('SELECT payload FROM job_scanner_tasks WHERE workspace_id=$1 AND website_id=$2 ORDER BY created_at DESC,id DESC LIMIT 20 OFFSET $3',[scope.workspaceId,scope.websiteId,(page-1)*20])).rows.map(row=>row.payload as StoredScannerTask));}
   latest(scope: BuildScope) {
     return this.db.transaction(undefined, async sql => (await sql.query('SELECT payload FROM job_scanner_tasks WHERE workspace_id=$1 AND website_id=$2 ORDER BY created_at DESC LIMIT 1', [scope.workspaceId,scope.websiteId])).rows[0]?.payload as StoredScannerTask | undefined);
   }
@@ -72,6 +73,7 @@ export class FileScannerStore implements ScannerStore {
     if (previous) return structuredClone(previous);
     const task = initialTask(scope,id,zip,dateRange); tasks.push(task); return structuredClone(task);
   }); }
+  history(scope:BuildScope,page:number){return this.access(tasks=>structuredClone(tasks.filter(task=>task.workspaceId===scope.workspaceId && task.websiteId===scope.websiteId).reverse().slice((page-1)*20,page*20)));}
   latest(scope: BuildScope) { return this.access(tasks => { const task = tasks.filter(task => task.workspaceId===scope.workspaceId && task.websiteId===scope.websiteId).at(-1); return task ? structuredClone(task) : undefined; }); }
   get(scope:BuildScope,id:string){return this.access(tasks=>{const task=tasks.find(item=>item.id===id && item.workspaceId===scope.workspaceId && item.websiteId===scope.websiteId);return task?structuredClone(task):undefined;});}
   cancel(scope:BuildScope,id:string){return this.access(tasks=>{
