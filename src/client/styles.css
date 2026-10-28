@@ -2289,3 +2289,8 @@ td strong {
   background: #fee2e2;
   color: #991b1b;
 }
+
+.wordpress-preview-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.wordpress-preview-heading h2 { margin-bottom: 4px; }
+.wordpress-preview-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0; color: #64748b; font-size: 12px; }
+.wordpress-preview-frame { display: block; width: 100%; height: 680px; border: 1px solid #e2e8f0; border-radius: 12px; background: white; }

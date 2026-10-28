@@ -449,3 +449,32 @@ test('replacing an image on a current-version draft never sends a publish status
   assert.equal(result.postStatus,'draft');assert.equal(result.featuredImageAttachmentId,image.id);
   assert.equal(requests.length,3);
 });
+
+test('loads saved draft content and featured image for the in-app preview', async () => {
+  const requests: string[] = [];
+  const mockFetch: typeof fetch = async (input) => {
+    requests.push(String(input));
+    const body = requests.length === 1
+      ? { statuses: { [job.id]: { state: 'exists', label: 'Draft', postId: 77, postStatus: 'draft' } } }
+      : { id: 77, status: 'draft', title: { rendered: 'Saved title' }, excerpt: { rendered: '<p>Saved excerpt</p>' }, content: { rendered: '<h2>Completed work</h2><p>Saved body</p>' }, modified_gmt: '2026-10-28T10:00:00', _embedded: { 'wp:featuredmedia': [{ source_url: 'https://wordpress.example/photo.jpg', alt_text: 'Completed repair' }] } };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const preview = await new WordPressClient(config, mockFetch).getPostPreview(job.id);
+  assert.equal(requests[1], 'https://wordpress.example/wp-json/wp/v2/st_job/77?context=edit&_embed=wp:featuredmedia');
+  assert.equal(preview.contentHtml, '<h2>Completed work</h2><p>Saved body</p>');
+  assert.equal(preview.titleHtml, 'Saved title');
+  assert.equal(preview.excerptHtml, '<p>Saved excerpt</p>');
+  assert.equal(preview.featuredImageUrl, 'https://wordpress.example/photo.jpg');
+  assert.equal(preview.status, 'draft');
+  assert.equal(preview.modifiedOn, '2026-10-28T10:00:00Z');
+});
+
+test('does not request preview content when the job has no WordPress post', async () => {
+  let requests = 0;
+  const mockFetch: typeof fetch = async () => {
+    requests++;
+    return new Response(JSON.stringify({ statuses: { [job.id]: { state: 'not_found', label: 'None' } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  await assert.rejects(() => new WordPressClient(config, mockFetch).getPostPreview(job.id), /no WordPress post/);
+  assert.equal(requests, 1);
+});

@@ -1,3 +1,4 @@
+import { WordPressPostPreview } from './WordPressPostPreview';
 import { Button, Radio, TextField } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
@@ -445,6 +446,8 @@ export function JobDetails({ jobId }: { jobId: number }) {
           <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void updateWordPressPostStatus('publish')} onSetDraft={() => void updateWordPressPostStatus('draft')} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
         </table>
       </div>}
+
+      {wordpressStatus?.state === 'exists' && <WordPressPostPreview jobId={jobId} revision={wordpressStatus} />}
 
       {seoRegenerationAvailable && wordpressStatus?.state === 'exists' && <aside className='notice seo-out-of-sync' aria-labelledby='seo-out-of-sync-heading'>
         <div>

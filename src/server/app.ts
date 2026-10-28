@@ -222,6 +222,13 @@ export const createApp = ({
       response.json(await wordpress.getStatus(parseJobId(request.params.jobId)));
     } catch (error) { next(error); }
   });
+  app.get(`${apiPrefix}/jobs/:jobId/wordpress/preview`, async (request, response, next) => {
+    try {
+      response.set('Cache-Control', 'no-store');
+      if (!wordpress.getPostPreview) throw new WordPressRequestError('WordPress preview is unavailable.', 503);
+      response.json(await wordpress.getPostPreview(parseJobId(request.params.jobId)));
+    } catch (error) { next(error); }
+  });
   app.post(`${apiPrefix}/jobs/:jobId/wordpress`, async (request, response, next) => {
     try {
       const jobId = parseJobId(request.params.jobId);

@@ -1,3 +1,4 @@
+import type { WordPressPostPreview } from '../shared/wordpress-preview.js';
 import type { JobImage, JobListItem } from './service-titan.js';
 import type { WordPressConfig } from './config.js';
 import type { ZipCodeLookup, ZipCodePlace } from './zip-lookup.js';
@@ -14,6 +15,10 @@ interface WordPressPost {
   link?: string;
   modified_gmt?: string;
   modified?: string;
+  title?: { rendered?: string };
+  excerpt?: { rendered?: string };
+  content?: { rendered?: string };
+  _embedded?: { 'wp:featuredmedia'?: Array<{ source_url?: string; alt_text?: string }> };
   seoTitle?: string;
   seoDescription?: string;
 }
@@ -55,6 +60,7 @@ export interface WordPressPluginStatus {
 }
 
 export interface WordPressProvider {
+  getPostPreview?(serviceTitanJobId: number): Promise<WordPressPostPreview>;
   getPluginStatus(): Promise<WordPressPluginStatus>;
   getStatuses(serviceTitanJobIds: number[]): Promise<Record<number, WordPressPostStatus>>;
   getStatus(serviceTitanJobId: number): Promise<WordPressPostStatus>;
@@ -186,6 +192,24 @@ export class WordPressClient implements WordPressProvider {
     });
     this.regenerations.set(job.id, regeneration);
     return regeneration;
+  }
+
+  async getPostPreview(serviceTitanJobId: number): Promise<WordPressPostPreview> {
+    const current = await this.getStatus(serviceTitanJobId);
+    if (current.state !== 'exists' || !current.postId) {
+      throw new WordPressRequestError('This job has no WordPress post to preview.', 404);
+    }
+    const response = await this.request(`${this.config.collectionUrl}/${current.postId}?context=edit&_embed=wp:featuredmedia`);
+    const post = await parseJson<WordPressPost>(response);
+    const image = post._embedded?.['wp:featuredmedia']?.[0];
+    return {
+      id: post.id, status: post.status,
+      titleHtml: post.title?.rendered || '',
+      excerptHtml: post.excerpt?.rendered || '',
+      contentHtml: post.content?.rendered || '',
+      ...(image?.source_url ? { featuredImageUrl: image.source_url, featuredImageAlt: image.alt_text || '' } : {}),
+      ...(post.modified_gmt || post.modified ? { modifiedOn: post.modified_gmt ? `${post.modified_gmt}Z` : post.modified } : {}),
+    };
   }
 
   async updateStatus(serviceTitanJobId: number, status: WordPressWritableStatus): Promise<WordPressPostStatus> {
