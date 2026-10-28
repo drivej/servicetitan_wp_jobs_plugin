@@ -53,10 +53,10 @@ export function ScanHistory({open}:{open:boolean}) {
     })();
     return ()=>controller.abort();
   },[open,page,retry]);
-  const publish=async(id:number)=>{
+  const updateStatus=async(id:number, nextStatus: 'publish' | 'draft')=>{
     setPublishing(id);setError('');
-    try{const status=await read<WordPressStatus>(await apiFetch(`/api/jobs/${id}/wordpress/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'publish'})}));setStatuses(current=>({...current,[id]:status}));}
-    catch(reason){setError(reason instanceof Error?reason.message:'Unable to publish draft.');}
+    try{const status=await read<WordPressStatus>(await apiFetch(`/api/jobs/${id}/wordpress/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:nextStatus})}));setStatuses(current=>({...current,[id]:status}));}
+    catch(reason){setError(reason instanceof Error?reason.message:'Unable to update WordPress status.');}
     finally{setPublishing(undefined);}
   };
   if(!open)return null;
@@ -79,7 +79,7 @@ export function ScanHistory({open}:{open:boolean}) {
           {pushed.map(item=>{
             const status=statuses[item.jobId] || {state:'unknown' as const,label:'Unknown'};
             const job=jobs[item.jobId] || {id:item.jobId,jobName:item.title,status:'Completed',location:{city:'—',state:'—',zip:'—'}};
-            return <JobTableRow key={item.buildTaskId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status} wordpressBusy={publishing!==undefined || loading} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted} onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void publish(item.jobId)} onRefresh={()=>setRetry(value=>value+1)}/>;
+            return <JobTableRow key={item.buildTaskId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status} wordpressBusy={publishing!==undefined || loading} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted} onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onRefresh={()=>setRetry(value=>value+1)}/>;
           })}
           {!pushed.length && <tr><td colSpan={6}>No drafts were created in this scan.</td></tr>}
         </tbody>;

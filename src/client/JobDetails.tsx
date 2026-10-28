@@ -343,21 +343,21 @@ export function JobDetails({ jobId }: { jobId: number }) {
     }
   };
 
-  const publishWordPressPost = async () => {
+  const updateWordPressPostStatus = async (nextStatus: 'publish' | 'draft') => {
     if (wordpressStatus?.state !== 'exists' || !wordpressPluginReady || publishing) return;
     setPublishing(true);
     try {
       const response = await apiFetch(`/api/jobs/${jobId}/wordpress/status`, {
         method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'publish' })
+        body: JSON.stringify({ status: nextStatus })
       });
       const body = await readJson<WordPressStatus | { error?: string }>(response);
-      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not publish the post.');
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not update the post status.');
       const status = body as WordPressStatus;
       setWordpressStatus(status);
       writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'WordPress could not publish the post.');
+      setError(requestError instanceof Error ? requestError.message : 'WordPress could not update the post status.');
     } finally {
       setPublishing(false);
     }
@@ -442,7 +442,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         <table className='jobs-table' aria-label='Job list row'>
           <colgroup><col className='readiness-column' /><col className='job-image-column' /><col className='job-name-column' /><col className='location-column' /><col className='wp-status-column' /><col className='actions-column' /></colgroup>
           <JobTableHeader disabled={!wordpressPluginReady || wordpressStatusLoading || publishing || regenerating || queueingBuild} onRefresh={() => void refreshWordPressStatus()} />
-          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void publishWordPressPost()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
+          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void updateWordPressPostStatus('publish')} onSetDraft={() => void updateWordPressPostStatus('draft')} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
         </table>
       </div>}
 

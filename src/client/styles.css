@@ -401,7 +401,7 @@ td strong {
   width: 18%;
 }
 .jobs-table .wp-status-column {
-  width: 112px;
+  width: 208px;
 }
 .jobs-table .actions-column {
   width: 240px;
@@ -2238,3 +2238,49 @@ td strong {
 
 .account-members-search-form { grid-template-columns: minmax(0, 1fr) auto; }
 @media(max-width:700px) { .account-members-search-form { grid-template-columns: 1fr; } }
+
+.wordpress-state-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.wordpress-state-control .MuiToggleButtonGroup-root {
+  background: #f1f5f9;
+  border: 1px solid #dbe3ed;
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+}
+.wordpress-state-control .MuiToggleButtonGroup-root .MuiToggleButton-root {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  text-transform: none;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #64748b;
+}
+.wordpress-state-control .MuiToggleButton-root.Mui-selected {
+  background: #fff;
+  color: #92400e;
+  box-shadow: 0 1px 3px #0f172a1a;
+}
+.wordpress-state-control .MuiToggleButton-root[value='publish'].Mui-selected {
+  background: #dcfce7;
+  color: #166534;
+}
+.wordpress-state-control .MuiToggleButton-root.Mui-focusVisible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+.wordpress-state-control .MuiToggleButton-root.Mui-disabled.Mui-selected {
+  opacity: .7;
+}
+.wordpress-state-accessory {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+}

@@ -1,6 +1,6 @@
-import { Button, Chip, IconButton } from '@mui/material';
+import { Button, Chip, CircularProgress, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useState } from 'react';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import UpgradeRoundedIcon from '@mui/icons-material/UpgradeRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
@@ -37,6 +37,7 @@ export interface JobTableRowProps {
   rating?: { score: number; reason: string };
   onBuild?: () => void;
   onPublish: () => void;
+  onSetDraft: () => void;
   onUpdate?: () => void;
   onRefresh: () => void;
 }
@@ -60,7 +61,7 @@ export function JobTableHeader({ onRefresh, refreshing = false, disabled = false
   </thead>;
 }
 
-export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onUpdate, onRefresh }: JobTableRowProps) {
+export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onSetDraft, onUpdate, onRefresh }: JobTableRowProps) {
   const [imageValidationState, setImageValidationState] = useState<JobTableItem['imageValidationState']>('loading');
   const buildBusy = wordpressBusy || buildTask?.state === 'queued' || buildTask?.state === 'running';
   const updateAvailable = isSeoPromptOutOfSync(wordpressStatus, job.modifiedOn);
@@ -114,11 +115,21 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     </td>
     <td className='location-cell' data-label='Location'><div className='location-cell-city' title={`${job.location.city}, ${job.location.state}`}>{job.location.city}, {job.location.state}</div><span>{job.location.zip}</span></td>
     <td className='wp-status-cell' data-label='WordPress'>
-      <Chip component={wordpressStatus.state === 'exists' && wordpressStatus.link ? 'a' : 'div'} clickable={wordpressStatus.state === 'exists' && Boolean(wordpressStatus.link)} href={wordpressStatus.state === 'exists' ? wordpressStatus.link : undefined} target={wordpressStatus.state === 'exists' && wordpressStatus.link ? '_blank' : undefined} rel={wordpressStatus.state === 'exists' && wordpressStatus.link ? 'noreferrer' : undefined} onClick={(event: React.MouseEvent) => { if (wordpressStatus.state === 'exists' && wordpressStatus.link) event.stopPropagation(); }} size='small' color={statusColor} icon={wordpressStatus.state === 'exists' ? <EditRoundedIcon fontSize='small' /> : undefined} label={statusLabel} title={wordpressStatus.link ? `Open ${statusLabel.toLowerCase()} post on the website` : wordpressStatus.message} />
+      {wordpressStatus.state === 'exists' && (wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish') ? <div className='wordpress-state-control' aria-busy={wordpressBusy}>
+        <ToggleButtonGroup exclusive size='small' value={wordpressStatus.postStatus} disabled={!wordpressPluginReady || wordpressBusy} aria-label={`WordPress status for ${job.jobName}`} onClick={(event) => event.stopPropagation()} onChange={(_event, value: string | null) => {
+          if (value === 'draft') onSetDraft();
+          if (value === 'publish') onPublish();
+        }}>
+          <ToggleButton value='draft' title='Save as a draft and remove from the public website. No token cost.'>Draft</ToggleButton>
+          <ToggleButton value='publish' title='Publish this post on the website. No token cost.'>Published</ToggleButton>
+        </ToggleButtonGroup>
+        <span className='wordpress-state-accessory'>
+          {wordpressBusy ? <CircularProgress size={14} aria-label='Saving WordPress status' /> : wordpressStatus.link ? <IconButton component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' size='small' aria-label={`Open ${job.jobName} on WordPress`} title='Open WordPress post' onClick={(event) => event.stopPropagation()}><OpenInNewRoundedIcon sx={{ fontSize: 15 }} /></IconButton> : null}
+        </span>
+      </div> : <Chip size='small' color={statusColor} label={statusLabel} title={wordpressStatus.message} />}
     </td>
     <td className='actions-cell' data-label='Actions'><div className='row-actions'>
       {onBuild && wordpressStatus.state === 'not_found' && <Button variant='contained' color='primary' className='build-deploy-button token-cost' type='button' disabled={!wordpressPluginReady || readiness !== 'valid' || buildBusy || Boolean(queueError)} aria-disabled={!wordpressPluginReady || readiness !== 'valid' || tokensExhausted || buildBusy || Boolean(queueError)} title={`Generate copy, select the first available image, and create a WordPress draft. Uses ${TOKEN_ACTIONS.build.cost} job token.`} onClick={(event) => { event.stopPropagation(); onBuild(); }}>{buildTask?.state === 'running' ? 'Building…' : buildBusy ? 'Queued…' : 'Build'}</Button>}
-      {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'draft' && <Button variant='contained' className='job-action-publish' type='button' disabled={!wordpressPluginReady || wordpressBusy} title={TOKEN_ACTIONS.publish.cost === 0 ? 'No token cost.' : `Uses ${TOKEN_ACTIONS.publish.cost} job token.`} onClick={(event) => { event.stopPropagation(); onPublish(); }}>{wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Publishing…' : 'Publish'}</Button>}
       {onUpdate && wordpressStatus.state === 'exists' && updateAvailable && wordpressStatus.seoState !== 'newer' && <Button variant='contained' className='job-action-seo token-cost' type='button' startIcon={<UpgradeRoundedIcon aria-hidden='true' />} disabled={!wordpressPluginReady || wordpressBusy || tokensExhausted} title={`${seoUpdateDescription(wordpressStatus, job.modifiedOn)} Uses ${TOKEN_ACTIONS.update.cost} job token and preserves the current WordPress status.`} aria-label={`Regenerate SEO for ${job.jobName}`} onClick={(event) => { event.stopPropagation(); onUpdate(); }}>{wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Updating…' : 'SEO'}</Button>}
       {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'publish' && !updateAvailable && <Button className='job-action-update update-current' type='button' disabled title={wordpressStatus.seoState === 'newer' ? 'This post was generated by a newer prompt version.' : 'This post already uses the latest AI prompt and ServiceTitan job details.'}>{wordpressStatus.seoState === 'newer' ? 'Newer' : 'Current'}</Button>}
       <IconButton size='small' className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`} type='button' aria-label={`Refresh WordPress status for ${job.jobName}`} title='Refresh WordPress post status' disabled={wordpressBusy} onClick={(event) => { event.stopPropagation(); onRefresh(); }}><RefreshRoundedIcon fontSize='small' aria-hidden='true' /></IconButton>

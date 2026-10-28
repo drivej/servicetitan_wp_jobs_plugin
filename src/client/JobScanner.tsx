@@ -116,12 +116,12 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     }catch(reason){setError(reason instanceof Error?reason.message:'Unable to cancel the scan.');}
     finally{setCanceling(false);}
   };
-  const publish = async (jobId:number) => {
+  const updateStatus = async (jobId:number, nextStatus: 'publish' | 'draft') => {
     setPublishing(jobId); setError('');
     try {
-      const result = await read<WordPressStatus>(await apiFetch(`/api/jobs/${jobId}/wordpress/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'publish'})}));
+      const result = await read<WordPressStatus>(await apiFetch(`/api/jobs/${jobId}/wordpress/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:nextStatus})}));
       setStatuses(current=>({...current,[jobId]:result}));
-    } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to publish draft.'); }
+    } catch(reason) { setError(reason instanceof Error ? reason.message : 'Unable to update WordPress status.'); }
     finally {setPublishing(undefined);}
   };
   const scanActions=<div className='job-scout-actions'>
@@ -155,7 +155,7 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
           const job=jobs[item.jobId] || {id:item.jobId,jobName:item.title,status:'Completed',location:{city:'—',state:'—',zip:'—'}};
           return <JobTableRow key={item.jobId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status}
             wordpressBusy={publishing!==undefined || refreshing} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted}
-            onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void publish(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
+            onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
         })}
         {isActive && <tr className='job-row scanner-processing-row' aria-busy='true'>
           <td className='readiness-cell' aria-label='Processing'>…</td>

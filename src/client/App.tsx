@@ -210,6 +210,7 @@ export function App() {
       setActionError({ title: 'WordPress plugin update required', message: 'Install the required companion plugin from the WordPress plugin tab before using WordPress actions.' });
       return;
     }
+    const previousStatus = wordpressStatuses[jobId] || unknownWordPressStatus;
     setWordpressBusy(jobId, true);
     setActionError(undefined);
     setWordpressStatuses((current) => ({
@@ -236,7 +237,7 @@ export function App() {
       const message = requestError instanceof Error ? requestError.message : 'WordPress could not update the post status.';
       setWordpressStatuses((current) => ({
         ...current,
-        [jobId]: { state: 'unknown', label: 'Unknown', message }
+        [jobId]: previousStatus
       }));
       setActionError({ title: 'Could not update WordPress status', message });
     } finally {
@@ -472,6 +473,7 @@ export function App() {
                       if (wordpressPluginReady && !queueError) void enqueueBuild(job.id);
                     }}
                     onPublish={() => void updateWordpressStatus(job.id, 'publish')}
+                    onSetDraft={() => void updateWordpressStatus(job.id, 'draft')}
                     onUpdate={() => void updateWordpressSeo(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)}
                     onRefresh={() => void requestWordpress(job.id)}
                   />
