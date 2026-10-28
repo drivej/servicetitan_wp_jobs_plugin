@@ -110,3 +110,14 @@ test('worker persists failures and continues with the next queued job', async ()
     assert.equal(tasks[1]?.state, 'succeeded');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+
+test('literal fallback stops automatic builds before any WordPress write', async () => {
+  const { providers, events } = fixture();
+  const { InsufficientJobCopyError } = await import('./openai-error.js');
+  const { TokenOperationSafeFailure } = await import('./token-operation.js');
+  providers.copyGenerator.generate = async () => { throw new InsufficientJobCopyError(); };
+  await assert.rejects(buildAndDeploy(42, providers), (error: unknown) =>
+    error instanceof TokenOperationSafeFailure && error.originalError instanceof InsufficientJobCopyError);
+  assert.equal(events.includes('push:draft'), false);
+});

@@ -4,3 +4,8 @@ export class OpenAIRequestError extends Error {
     this.name = 'OpenAIRequestError';
   }
 }
+
+/** A literal seed fallback is never publishable project copy. */
+export class InsufficientJobCopyError extends OpenAIRequestError {
+  constructor() { super('try your best', 422); this.name = 'InsufficientJobCopyError'; }
+}

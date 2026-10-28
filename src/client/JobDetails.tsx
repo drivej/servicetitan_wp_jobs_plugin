@@ -7,7 +7,7 @@ import { JobTableHeader, JobTableRow } from './JobTable';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
 import { accountFetch, apiFetch, apiUrl, wordpressStatusStorage } from './api';
 
-import { formatJobCopy, hasCompleteJobBody, type GeneratedJobCopy, type JobCopySource } from '../shared/job-copy';
+import { formatJobCopy, hasCompleteJobBody, fromSeedJobCopy, type SeedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { showTokenError, useTokensExhausted } from './tokenState';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { isSeoPromptOutOfSync, writeCachedWordPressStatuses, type WordPressStatus } from './wordpressStatusCache';
@@ -279,8 +279,19 @@ export function JobDetails({ jobId }: { jobId: number }) {
         headers: { Accept: 'application/json' },
       });
       if (response.status === 402) return;
-      const body = await readJson<GeneratedJobCopy & { error?: string }>(response);
-      if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Unable to generate copy.');
+      if (response.headers.get('content-type')?.includes('text/plain')) {
+        const fallback = await response.text();
+        if (fallback === 'try your best') {
+          setAiCopyEdited(true);
+          setAiCopy(fallback);
+          return;
+        }
+        throw new Error(fallback || 'Unable to generate copy.');
+      }
+      const result = await readJson<SeedJobCopy & { error?: string }>(response);
+      if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Unable to generate copy.');
+      if (result.status !== 'ready' || !Array.isArray(result.image_alt_texts) || !result.image_alt_texts.every(text => typeof text === 'string')) throw new Error('The app server returned incomplete generated copy.');
+      const body = fromSeedJobCopy(result, (details?.attachments || []).map(item => item.fileName));
       if (!hasCompleteJobBody(body)) throw new Error('The app server returned incomplete generated copy.');
       setAiCopyEdited(true);
       setAiCopy(formatJobCopy(body));
@@ -529,7 +540,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                 multiline
                 aria-label='AI-generated post copy'
                 rows={16}
-                slotProps={{ htmlInput: { maxLength: 6000 } }}
+                slotProps={{ htmlInput: { maxLength: 30000 } }}
                 placeholder={'TITLE: Service Performed in City, ST\nBODY:\n<p>Project copy…</p>\nSEO TITLE: Service Performed in City, ST\nSEO DESCRIPTION: A concise description of the documented work and location.'}
                 value={aiCopy}
                 onChange={(event) => {
@@ -543,7 +554,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
                     ? 'The current title and excerpt are loaded from WordPress. Update generates fresh copy with the latest AI prompt before sending it to WordPress.'
                     : 'Build creates the initial draft and generates its copy automatically. Include TITLE, BODY, SEO TITLE, and SEO DESCRIPTION when preparing copy manually.'}
                 </span>
-                <span>{aiCopy.length}/6000</span>
+                <span>{aiCopy.length}/30000</span>
               </span>
             </label>
           </section>

@@ -244,7 +244,7 @@ export class WordPressClient implements WordPressProvider {
       }),
     });
     let post = await parseJson<WordPressPost>(response);
-    const mediaId = await this.uploadImage(images[0]!, post.id);
+    const mediaId = await this.uploadImage(images[0]!, post.id, imageAltText(approvedCopy, images[0]!));
     const featuredResponse = await this.request(`${this.config.collectionUrl}/${post.id}`, {
       method: 'POST',
       body: JSON.stringify({ featured_media: mediaId }),
@@ -273,7 +273,7 @@ export class WordPressClient implements WordPressProvider {
       throw new WordPressRequestError('Generate or paste the complete AI post copy before updating this post to the latest SEO version.', 400);
     }
 
-    const featuredMedia = image ? await this.uploadImage(image, currentStatus.postId) : undefined;
+    const featuredMedia = image ? await this.uploadImage(image, currentStatus.postId, imageAltText(approvedCopy, image)) : undefined;
     const generatedFields = generatedPostFields(job, approvedCopy);
     if (!approvedCopy) {
       delete generatedFields.title;
@@ -303,7 +303,7 @@ export class WordPressClient implements WordPressProvider {
     }, SEO_GENERATOR_VERSION, false);
   }
 
-  private async uploadImage(image: JobImage, postId: number): Promise<number> {
+  private async uploadImage(image: JobImage, postId: number, altText?: string): Promise<number> {
     const url = new URL(wordPressMediaUrl(this.config.collectionUrl));
     url.searchParams.set('post', String(postId));
     const response = await this.request(url.toString(), {
@@ -317,6 +317,12 @@ export class WordPressClient implements WordPressProvider {
     });
     const media = await parseJson<{ id?: number }>(response);
     if (!media.id) throw new WordPressRequestError('WordPress did not return an ID for an uploaded image.', 502);
+    if (altText) {
+      const updated = await this.request(`${wordPressMediaUrl(this.config.collectionUrl)}/${media.id}`, {
+        method: 'POST', body: JSON.stringify({ alt_text: altText }),
+      });
+      if (!updated.ok) throw new WordPressRequestError('Unable to save image alt text.', 502);
+    }
     return media.id;
   }
 
@@ -671,4 +677,11 @@ const compareVersions = (left: string, right: string): number => {
     if (difference !== 0) return difference;
   }
   return 0;
+};
+
+/** Match the chosen image to its source position; ambiguous names get no generated description. */
+const imageAltText = (copy: ApprovedPostCopy | undefined, image: JobImage): string | undefined => {
+  const names = copy?.imageFileNames || [];
+  const index = names.indexOf(image.fileName);
+  return index >= 0 && names.lastIndexOf(image.fileName) === index ? copy?.imageAltTexts?.[index] : undefined;
 };

@@ -85,7 +85,7 @@ test('superadmin prompt preview and scanner rating require the platform actor wi
     assert.equal(spent, 0);
     const generated = await fetch(`${url}/ai-copy`, { method: 'POST' });
     assert.equal(generated.status, 200);
-    assert.equal(preview.prompt, `${JOB_COPY_INSTRUCTIONS}\nReturn the result using the supplied JSON schema.\n\n${generatedFacts}`);
+    assert.equal(preview.prompt, `${JOB_COPY_INSTRUCTIONS}\n\n${generatedFacts}`);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -248,6 +248,7 @@ test('regenerates fresh copy and passes an optional replacement image through th
 
 test('generates editable AI copy from trusted ServiceTitan job details', async () => {
   let generatedJobName = '';
+  let useFallback = false;
   const bodyHtml = '<p>A Torrance property had a documented kitchen drain blockage that required drain clearing.</p><p>The technician located the documented blockage and cleared the affected drain line.</p><p>The completed work addressed the reported issue. Contact the company for drain clearing in Torrance.</p>';
   const app = createApp({
     serviceTitan: {
@@ -278,6 +279,10 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
     },
     copyGenerator: {
       generate: async (job) => {
+        if (useFallback) {
+          const { InsufficientJobCopyError } = await import('./openai-error.js');
+          throw new InsufficientJobCopyError();
+        }
         generatedJobName = job.jobName;
         return {
           title: 'Drain Clearing Service in Torrance, CA',
@@ -299,11 +304,18 @@ test('generates editable AI copy from trusted ServiceTitan job details', async (
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(generatedJobName, 'Drain Clearing');
     assert.deepEqual(await response.json(), {
+      status: 'ready',
       title: 'Drain Clearing Service in Torrance, CA',
-      bodyHtml,
-      seoTitle: validCopy.seoTitle,
-      seoDescription: validCopy.seoDescription,
+      body_html: bodyHtml,
+      seo_title: validCopy.seoTitle,
+      meta_description: validCopy.seoDescription,
+      image_alt_texts: [],
     });
+    useFallback = true;
+    const fallback = await fetch(`http://127.0.0.1:${address.port}/api/jobs/42/ai-copy`, { method: 'POST' });
+    assert.equal(fallback.status, 422);
+    assert.match(fallback.headers.get('content-type') || '', /text\/plain/);
+    assert.equal(await fallback.text(), 'try your best');
   } finally {
     await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
   }
@@ -378,4 +390,12 @@ test('all paid routes enforce the server token gate even with forged billing fie
     // The token callback and WordPress publishing are never reached when the image fails.
     assert.deepEqual(actions, ['ai_generation', 'build', 'update']);
   } finally { await new Promise<void>((done, reject) => server.close((error) => error ? reject(error) : done())); }
+});
+
+
+test('full v3 metadata survives review and approval; fallback cannot become post copy', () => {
+  const copy = { ...validCopy, status: 'ready' as const, imageAltTexts: ['', 'A documented project view'], imageFileNames: ['one.jpg', 'two.jpg'] };
+  assert.deepEqual(parseApprovedPostCopy(formatJobCopy(copy), true), copy);
+  assert.throws(() => parseApprovedPostCopy('try your best', true), /^InsufficientJobCopyError: try your best$/);
+  assert.throws(() => parseApprovedPostCopy(formatJobCopy(copy).replace('IMAGE ALT TEXTS: ["","A documented project view"]', 'IMAGE ALT TEXTS: []'), true), /Invalid image alt text metadata/);
 });

@@ -8,7 +8,7 @@ import express, { type ErrorRequestHandler, type RequestHandler } from 'express'
 import type { ScannerTask } from '../shared/job-scanner.js';
 import { HttpError, uuid } from './saas/validation.js';
 
-import { OpenAIRequestError } from './openai-error.js';
+import { InsufficientJobCopyError, OpenAIRequestError } from './openai-error.js';
 import { DisabledJobCopyGenerator, type JobCopyGenerator } from './openai.js';
 import type { JobsProvider, JobsQuery } from './service-titan.js';
 import { ServiceTitanRequestError } from './service-titan-error.js';
@@ -19,7 +19,7 @@ import { buildJobCopyFacts, JOB_COPY_INSTRUCTIONS } from './job-copy-prompt.js';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version.js';
 
 import type { BuildTask } from '../shared/build-queue.js';
-import { formatJobCopy, isWordPressBodyHtml } from '../shared/job-copy.js';
+import { formatJobCopy, isWordPressBodyHtml, toSeedJobCopy } from '../shared/job-copy.js';
 
 interface CreateAppOptions {
   jobScorer?: JobScorer;
@@ -58,7 +58,7 @@ export const createApp = ({
 }: CreateAppOptions) => {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '16kb' }));
+  app.use(express.json({ limit: '64kb' }));
   const copySource = async (jobId: number, clarification?: string) => {
     const details = await serviceTitan.getJobDetails(jobId);
     return { ...details.summary,
@@ -86,7 +86,7 @@ export const createApp = ({
       }
       response.set('Cache-Control', 'private, no-store');
       const source = await copySource(parseJobId(request.params.jobId));
-      const instructions = `${JOB_COPY_INSTRUCTIONS}\nReturn the result using the supplied JSON schema.`;
+      const instructions = JOB_COPY_INSTRUCTIONS;
       const input = buildJobCopyFacts(source);
       response.json({ prompt: `${instructions}\n\n${input}`, version: SEO_GENERATOR_VERSION });
     } catch (error) { next(error); }
@@ -191,7 +191,7 @@ export const createApp = ({
       response.set('Cache-Control', 'no-store');
       const clarification = parseCopyClarification(request.body?.clarification);
       const promptSource = await copySource(jobId, clarification);
-      response.json(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId })));
+      response.json(toSeedJobCopy(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId }))));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {
@@ -281,6 +281,7 @@ export const createApp = ({
   }
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+    if (error instanceof InsufficientJobCopyError) { response.status(422).type('text/plain').send('try your best'); return; }
     if (error instanceof HttpError) { response.status(error.status).json({ error: error.message }); return; }
     if (error instanceof ValidationError) { response.status(400).json({ error: error.message }); return; }
     if (error instanceof OpenAIRequestError) { response.status(error.status).json({ error: error.message }); return; }
@@ -405,7 +406,27 @@ export const parseApprovedPostCopy = (value: unknown, required: boolean): Approv
     return undefined;
   }
   if (typeof value !== 'string') throw new ValidationError('AI-generated copy must contain a title and HTML body.');
-  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
+  if (value.trim() === 'try your best') throw new InsufficientJobCopyError();
+  const metadataIndex = value.indexOf('\nSTATUS:');
+  const metadata = metadataIndex >= 0 ? value.slice(metadataIndex) : '';
+  const copyText = metadataIndex >= 0 ? value.slice(0, metadataIndex) : value;
+  let extras: Pick<ApprovedPostCopy, 'status' | 'imageAltTexts' | 'imageFileNames'> = {};
+  if (metadata) {
+    const fields = metadata.match(/^\nSTATUS: ready(?:\nIMAGE ALT TEXTS: ([^\n]+)\nIMAGE FILENAMES: ([^\n]+))?$/);
+    if (!fields) throw new ValidationError('Invalid generated copy metadata.');
+    extras = { status: 'ready' };
+    if (fields[1]) {
+      try {
+        const altTexts: unknown = JSON.parse(fields[1]);
+        const fileNames: unknown = JSON.parse(fields[2]!);
+        if (!Array.isArray(altTexts) || !Array.isArray(fileNames) || altTexts.length !== fileNames.length
+          || altTexts.length > 10 || ![...altTexts, ...fileNames].every(item => typeof item === 'string' && item.length <= 2000)) throw new Error();
+        extras.imageAltTexts = altTexts;
+        extras.imageFileNames = fileNames;
+      } catch { throw new ValidationError('Invalid image alt text metadata.'); }
+    }
+  }
+  const match = copyText.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
   if (!match) throw new ValidationError('Provide TITLE, BODY, SEO TITLE, and SEO DESCRIPTION sections.');
   const title = match[1]!.trim();
   const bodyHtml = match[2]!.trim();
@@ -416,7 +437,7 @@ export const parseApprovedPostCopy = (value: unknown, required: boolean): Approv
   const seoDescription = typeof match[4] === 'string' ? match[4].trim() : '';
   if (seoTitle.length < 5 || seoTitle.length > 160) throw new ValidationError('SEO title must be between 5 and 160 characters.');
   if (seoDescription.length < 40 || seoDescription.length > 320) throw new ValidationError('SEO description must be between 40 and 320 characters.');
-  return { title, bodyHtml, seoTitle, seoDescription };
+  return { title, bodyHtml, seoTitle, seoDescription, ...extras };
 };
 
 const parseJobIds = (value: unknown): number[] => {

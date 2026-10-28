@@ -15,4 +15,4 @@ await build({
   },
 });
 await mkdir('dist', { recursive: true });
-await copyFile('seo_seed.md', 'dist/seo_seed.md');
+await copyFile('seo_seed_v3.md', 'dist/seo_seed_v3.md');

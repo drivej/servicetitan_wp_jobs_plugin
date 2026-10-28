@@ -16,14 +16,17 @@ export interface JobCopySource extends WorkContent {
 }
 
 export interface GeneratedJobCopy {
+  status?: 'ready';
+  imageAltTexts?: string[];
+  imageFileNames?: string[];
   title: string;
   bodyHtml: string;
   seoTitle: string;
   seoDescription: string;
 }
 
-export const formatJobCopy = ({ title, bodyHtml, seoTitle, seoDescription }: GeneratedJobCopy): string =>
-  `TITLE: ${title.trim()}\nBODY:\n${bodyHtml.trim()}\nSEO TITLE: ${seoTitle.trim()}\nSEO DESCRIPTION: ${seoDescription.trim()}`;
+export const formatJobCopy = ({ title, bodyHtml, seoTitle, seoDescription, status, imageAltTexts, imageFileNames }: GeneratedJobCopy): string =>
+  `TITLE: ${title.trim()}\nBODY:\n${bodyHtml.trim()}\nSEO TITLE: ${seoTitle.trim()}\nSEO DESCRIPTION: ${seoDescription.trim()}${status ? `\nSTATUS: ${status}` : ''}${imageAltTexts ? `\nIMAGE ALT TEXTS: ${JSON.stringify(imageAltTexts)}\nIMAGE FILENAMES: ${JSON.stringify(imageFileNames || [])}` : ''}`;
 
 export const hasCompleteJobBody = (copy: unknown): copy is GeneratedJobCopy => {
   if (!copy || typeof copy !== 'object') return false;
@@ -40,7 +43,8 @@ export const hasCompleteJobBody = (copy: unknown): copy is GeneratedJobCopy => {
 
 export const hasFormattedJobBody = (value: string): boolean => {
   if (typeof value !== 'string') return false;
-  const match = value.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
+  const copyText = value.split('\nSTATUS:')[0]!;
+  const match = copyText.trim().match(/^TITLE:\s*([^\n]+)\nBODY:\s*([\s\S]*?)\nSEO TITLE:\s*([^\n]+)\nSEO DESCRIPTION:\s*([\s\S]+)$/i);
   return Boolean(match && isWordPressBodyHtml(match[2]!.trim()));
 };
 
@@ -75,3 +79,21 @@ export const isWordPressBodyHtml = (value: unknown): value is string => {
   if (stack.length !== 0 || value.slice(cursor).trim() || paragraphs < 1 || headings > 4 || quotes > 1) return false;
   return value.replace(/<[^>]+>/g, '').replace(/&(?:amp|lt|gt|quot|#39);/gi, 'x').trim().length > 0;
 };
+
+/** Public generation response follows the seed; internal copy keeps existing field names. */
+export interface SeedJobCopy {
+  status: 'ready';
+  title: string;
+  body_html: string;
+  seo_title: string;
+  meta_description: string;
+  image_alt_texts: string[];
+}
+export const toSeedJobCopy = (copy: GeneratedJobCopy): SeedJobCopy => ({
+  status: 'ready', title: copy.title, body_html: copy.bodyHtml, seo_title: copy.seoTitle,
+  meta_description: copy.seoDescription, image_alt_texts: copy.imageAltTexts || [],
+});
+export const fromSeedJobCopy = (copy: SeedJobCopy, imageFileNames: string[]): GeneratedJobCopy => ({
+  status: copy.status, title: copy.title, bodyHtml: copy.body_html, seoTitle: copy.seo_title,
+  seoDescription: copy.meta_description, imageAltTexts: copy.image_alt_texts, imageFileNames: imageFileNames.slice(0, 10),
+});

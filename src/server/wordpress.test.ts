@@ -478,3 +478,22 @@ test('does not request preview content when the job has no WordPress post', asyn
   await assert.rejects(() => new WordPressClient(config, mockFetch).getPostPreview(job.id), /no WordPress post/);
   assert.equal(requests, 1);
 });
+
+
+test('saves supplied alt text for the selected image by filename rather than first-image position', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new WordPressClient(config, async (input, init) => {
+    requests.push({ url: String(input), init });
+    if (requests.length === 1) return Response.json([]);
+    if (requests.length === 3) return Response.json({ id: 501 });
+    return Response.json({ id: 77, status: 'draft' });
+  });
+  await client.pushJob(job, [image], 'draft', {
+    ...approvedCopy, seoTitle: 'Project service in Austin',
+    seoDescription: 'A documented project service in Austin addressed the customer concern.',
+    status: 'ready', imageFileNames: ['other.jpg', image.fileName], imageAltTexts: ['Other image', 'Selected project image'],
+  });
+  assert.equal(requests[3]?.url, 'https://wordpress.example/wp-json/wp/v2/media/501');
+  assert.deepEqual(JSON.parse(String(requests[3]?.init?.body)), { alt_text: 'Selected project image' });
+  assert.deepEqual(JSON.parse(String(requests[4]?.init?.body)), { featured_media: 501 });
+});
