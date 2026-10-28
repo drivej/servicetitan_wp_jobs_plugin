@@ -2282,7 +2282,7 @@ td strong {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  width: auto;
 }
 
 .wordpress-state-control .MuiToggleButton-root[value='trash'].Mui-selected {

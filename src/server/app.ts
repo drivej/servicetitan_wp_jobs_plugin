@@ -277,6 +277,14 @@ export const createApp = ({
   };
   app.post(`${apiPrefix}/jobs/:jobId/wordpress/status`, updateWordpressStatus);
   app.patch(`${apiPrefix}/jobs/:jobId/wordpress`, updateWordpressStatus);
+  app.post(`${apiPrefix}/jobs/:jobId/wordpress/trash`, async (request, response, next) => {
+    try {
+      const jobId = parseJobId(request.params.jobId);
+      if (!wordpress.trashPost) throw new WordPressRequestError('Moving WordPress posts to Trash is unavailable.', 503);
+      response.set('Cache-Control', 'no-store');
+      response.json(await spendJobToken('publish', () => wordpress.trashPost!(jobId), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'trash', jobId })));
+    } catch (error) { next(error); }
+  });
 
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));

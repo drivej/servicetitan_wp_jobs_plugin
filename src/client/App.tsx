@@ -245,6 +245,30 @@ export function App() {
     }
   };
 
+  const trashWordpressPost = async (jobId: number) => {
+    if (!wordpressPluginReady) return;
+    const previousStatus = wordpressStatuses[jobId] || unknownWordPressStatus;
+    setWordpressBusy(jobId, true);
+    setActionError(undefined);
+    setWordpressStatuses((current) => ({ ...current, [jobId]: { ...previousStatus, label: 'Moving to Trash…' } }));
+    try {
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/trash`, {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const body = await readApiResponse<WordPressStatus | { error?: string }>(response, 'WordPress could not move the post to Trash.');
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not move the post to Trash.');
+      const status = body as WordPressStatus;
+      setWordpressStatuses((current) => ({ ...current, [jobId]: status }));
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'WordPress could not move the post to Trash.';
+      setWordpressStatuses((current) => ({ ...current, [jobId]: previousStatus }));
+      setActionError({ title: 'Could not move post to Trash', message });
+    } finally {
+      setWordpressBusy(jobId, false);
+    }
+  };
+
   const updateWordpressSeo = async (jobId: number, currentStatus: WordPressStatus) => {
     const serviceTitanModifiedOn = result?.data.find((job) => job.id === jobId)?.modifiedOn;
     if (!wordpressPluginReady || !isSeoPromptOutOfSync(currentStatus, serviceTitanModifiedOn)) return;
@@ -474,6 +498,7 @@ export function App() {
                     }}
                     onPublish={() => void updateWordpressStatus(job.id, 'publish')}
                     onSetDraft={() => void updateWordpressStatus(job.id, 'draft')}
+                    onTrash={() => void trashWordpressPost(job.id)}
                     onUpdate={() => void updateWordpressSeo(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)}
                     onRefresh={() => void requestWordpress(job.id)}
                   />

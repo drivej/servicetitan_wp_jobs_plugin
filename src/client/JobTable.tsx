@@ -7,6 +7,7 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import HourglassTopRoundedIcon from '@mui/icons-material/HourglassTopRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import type { BuildTask } from '../shared/build-queue';
 import { JobThumbnail } from './JobThumbnail';
 import { isSeoPromptOutOfSync, type WordPressStatus } from './wordpressStatusCache';
@@ -38,6 +39,7 @@ export interface JobTableRowProps {
   onBuild?: () => void;
   onPublish: () => void;
   onSetDraft: () => void;
+  onTrash?: () => void;
   onUpdate?: () => void;
   onRefresh: () => void;
 }
@@ -61,7 +63,7 @@ export function JobTableHeader({ onRefresh, refreshing = false, disabled = false
   </thead>;
 }
 
-export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onSetDraft, onUpdate, onRefresh }: JobTableRowProps) {
+export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onSetDraft, onTrash, onUpdate, onRefresh }: JobTableRowProps) {
   const [imageValidationState, setImageValidationState] = useState<JobTableItem['imageValidationState']>('loading');
   const buildBusy = wordpressBusy || buildTask?.state === 'queued' || buildTask?.state === 'running';
   const updateAvailable = isSeoPromptOutOfSync(wordpressStatus, job.modifiedOn);
@@ -125,7 +127,10 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
           {wordpressStatus.postStatus !== 'trash' && <ToggleButton value='publish' title='Publish this post on the website. No token cost.'>Published</ToggleButton>}
         </ToggleButtonGroup>
         <span className='wordpress-state-accessory'>
-          {wordpressBusy ? <CircularProgress size={14} aria-label='Saving WordPress status' /> : wordpressStatus.link ? <IconButton component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' size='small' aria-label={`Open ${job.jobName} on WordPress`} title='Open WordPress post' onClick={(event) => event.stopPropagation()}><OpenInNewRoundedIcon sx={{ fontSize: 15 }} /></IconButton> : null}
+          {wordpressBusy ? <CircularProgress size={14} aria-label='Saving WordPress status' /> : <>
+            {wordpressStatus.link && wordpressStatus.postStatus !== 'trash' && <IconButton component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' size='small' aria-label={`Open ${job.jobName} on WordPress`} title='Open WordPress post' onClick={(event) => event.stopPropagation()}><OpenInNewRoundedIcon sx={{ fontSize: 15 }} /></IconButton>}
+            {onTrash && wordpressStatus.postStatus !== 'trash' && <IconButton size='small' disabled={!wordpressPluginReady} aria-label={`Move ${job.jobName} to WordPress Trash`} title='Move post to WordPress Trash' onClick={(event) => { event.stopPropagation(); onTrash(); }}><DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} /></IconButton>}
+          </>}
         </span>
       </div> : <Chip size='small' color={statusColor} label={statusLabel} title={wordpressStatus.message} />}
     </td>

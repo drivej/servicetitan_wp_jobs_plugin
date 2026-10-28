@@ -67,6 +67,7 @@ export interface WordPressProvider {
   pushJob(job: JobListItem, images: JobImage[], status: WordPressWritableStatus, approvedCopy: ApprovedPostCopy): Promise<WordPressPostStatus>;
   regenerateJob(job: JobListItem, force: boolean, image?: JobImage, approvedCopy?: ApprovedPostCopy): Promise<WordPressPostStatus>;
   updateStatus(serviceTitanJobId: number, status: WordPressWritableStatus): Promise<WordPressPostStatus>;
+  trashPost?(serviceTitanJobId: number): Promise<WordPressPostStatus>;
 }
 
 type FetchImplementation = typeof fetch;
@@ -223,6 +224,18 @@ export class WordPressClient implements WordPressProvider {
       body: JSON.stringify({ status }),
     });
     return { ...currentStatus, ...postToStatus(await parseJson<WordPressPost>(response)) };
+  }
+
+  async trashPost(serviceTitanJobId: number): Promise<WordPressPostStatus> {
+    const currentStatus = await this.getStatus(serviceTitanJobId);
+    if (currentStatus.state !== 'exists' || !currentStatus.postId) {
+      throw new WordPressRequestError('This ServiceTitan job does not exist in WordPress.', 404);
+    }
+    if (currentStatus.postStatus === 'trash') return currentStatus;
+
+    await this.request(`${this.config.collectionUrl}/${currentStatus.postId}`, { method: 'DELETE' });
+    const { link: _link, ...trashedStatus } = currentStatus;
+    return { ...trashedStatus, label: 'Trash', postStatus: 'trash' };
   }
 
   private async createJobPost(job: JobListItem, images: JobImage[], status: WordPressWritableStatus, approvedCopy: ApprovedPostCopy): Promise<WordPressPostStatus> {
@@ -481,6 +494,10 @@ export class DisabledWordPressClient implements WordPressProvider {
   }
 
   async updateStatus(): Promise<WordPressPostStatus> {
+    throw new WordPressRequestError('WordPress is not configured on the server.', 503);
+  }
+
+  async trashPost(): Promise<WordPressPostStatus> {
     throw new WordPressRequestError('WordPress is not configured on the server.', 503);
   }
 }
