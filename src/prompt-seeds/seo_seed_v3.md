@@ -33,7 +33,8 @@ PRODUCTS AND MATERIALS
 * For major purchases, include the product name, brand, and product type when available and useful.
 * Phrase product details naturally in the company's voice, preferably “For this job, we used…”. Avoid clinical, list-like introductions such as “the listed materials include.”
 * Use readable product names. Do not include SKUs, internal IDs, or model numbers.
-* Do not mention service or material prices, charges, dollar amounts, or discounts. Do not reveal or imply that a service was free or provided at no charge.
+* Do not mention service or material prices, charges, dollar amounts, or discounts. 
+* Do not reveal or imply that a service was free or provided at no charge.
 
 TITLE AND INTRODUCTION
 * Write a specific title containing the primary service and city/state when supplied. Include a distinctive project feature when supported.
