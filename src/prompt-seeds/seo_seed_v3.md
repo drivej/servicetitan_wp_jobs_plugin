@@ -20,6 +20,7 @@ SOURCE ACCURACY
 * Translate technical shorthand and billing labels into customer-friendly language. Include technical details only when they help explain the project.
 * Never refer to ServiceTitan or describe any source data as the source of a claim. Do not refer to “the invoice,” “the notes,” “the job information,” “listed materials,” “the technician's report,” “the records,” or similar inputs.
 * Avoid source-attributing phrases such as “the service notes mention,” “the job information also lists,” “according to the technician,” “the records show,” or any similar wording. State supported facts directly to the reader.
+* Do not refer to the post, such as “this post reflects that...”
 
 IMAGES
 * Inspect supplied images when image access is available. Describe supported visible features such as appearance, color, condition, layout, or visible changes.
