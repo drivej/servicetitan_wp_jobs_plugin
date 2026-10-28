@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { cp, mkdir } from 'node:fs/promises';
 
 await build({
   entryPoints: ['src/server/index.ts', 'src/server/migrate.ts', 'src/server/check-database.ts'],
@@ -15,4 +15,4 @@ await build({
   },
 });
 await mkdir('dist', { recursive: true });
-await copyFile('seo_seed_v3.md', 'dist/seo_seed_v3.md');
+await cp('src/prompt-seeds', 'dist/prompt-seeds', { recursive: true });

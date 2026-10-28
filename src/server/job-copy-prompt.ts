@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JobCopySource } from '../shared/job-copy.js';
@@ -7,9 +7,8 @@ import type { JobCopySource } from '../shared/job-copy.js';
 // affects generated post content, bump SEO_GENERATOR_VERSION in
 // ../shared/seo-prompt-version.ts to flag existing posts as out of sync.
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-const seedPath = [resolve(moduleDirectory, '../seo_seed_v3.md'), resolve(moduleDirectory, '../../seo_seed_v3.md'), resolve(process.cwd(), 'seo_seed_v3.md')]
-  .find((candidate) => existsSync(candidate));
-if (!seedPath) throw new Error('seo_seed_v3.md is required to build the job-copy prompt.');
+const promptSeedsDirectory = resolve(moduleDirectory, '../prompt-seeds');
+const seedPath = resolve(promptSeedsDirectory, 'seo_seed_v3.md');
 const seedText = readFileSync(seedPath, 'utf8');
 const outputSection = seedText.search(/^OUTPUT\b/m);
 if (outputSection < 0) throw new Error('seo_seed_v3.md must contain an OUTPUT section.');
