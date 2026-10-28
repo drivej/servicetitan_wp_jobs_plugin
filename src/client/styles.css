@@ -2284,3 +2284,8 @@ td strong {
   justify-content: center;
   width: 26px;
 }
+
+.wordpress-state-control .MuiToggleButton-root[value='trash'].Mui-selected {
+  background: #fee2e2;
+  color: #991b1b;
+}

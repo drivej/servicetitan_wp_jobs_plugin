@@ -115,13 +115,14 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     </td>
     <td className='location-cell' data-label='Location'><div className='location-cell-city' title={`${job.location.city}, ${job.location.state}`}>{job.location.city}, {job.location.state}</div><span>{job.location.zip}</span></td>
     <td className='wp-status-cell' data-label='WordPress'>
-      {wordpressStatus.state === 'exists' && (wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish') ? <div className='wordpress-state-control' aria-busy={wordpressBusy}>
+      {wordpressStatus.state === 'exists' && (wordpressStatus.postStatus === 'draft' || wordpressStatus.postStatus === 'publish' || wordpressStatus.postStatus === 'trash') ? <div className='wordpress-state-control' aria-busy={wordpressBusy}>
         <ToggleButtonGroup exclusive size='small' value={wordpressStatus.postStatus} disabled={!wordpressPluginReady || wordpressBusy} aria-label={`WordPress status for ${job.jobName}`} onClick={(event) => event.stopPropagation()} onChange={(_event, value: string | null) => {
           if (value === 'draft') onSetDraft();
           if (value === 'publish') onPublish();
         }}>
-          <ToggleButton value='draft' title='Save as a draft and remove from the public website. No token cost.'>Draft</ToggleButton>
-          <ToggleButton value='publish' title='Publish this post on the website. No token cost.'>Published</ToggleButton>
+          {wordpressStatus.postStatus === 'trash' && <ToggleButton value='trash' title='This post is in Trash.'>Trash</ToggleButton>}
+          <ToggleButton value='draft' title={wordpressStatus.postStatus === 'trash' ? 'Restore this post from Trash as a draft. No token cost.' : 'Save as a draft and remove from the public website. No token cost.'}>Draft</ToggleButton>
+          {wordpressStatus.postStatus !== 'trash' && <ToggleButton value='publish' title='Publish this post on the website. No token cost.'>Published</ToggleButton>}
         </ToggleButtonGroup>
         <span className='wordpress-state-accessory'>
           {wordpressBusy ? <CircularProgress size={14} aria-label='Saving WordPress status' /> : wordpressStatus.link ? <IconButton component='a' href={wordpressStatus.link} target='_blank' rel='noreferrer' size='small' aria-label={`Open ${job.jobName} on WordPress`} title='Open WordPress post' onClick={(event) => event.stopPropagation()}><OpenInNewRoundedIcon sx={{ fontSize: 15 }} /></IconButton> : null}

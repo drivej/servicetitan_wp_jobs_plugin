@@ -279,6 +279,37 @@ test('updates the status of a correlated WordPress post', async () => {
   assert.equal(status.seoState, 'outdated');
 });
 
+test('restores a trashed WordPress post to draft without changing its content', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const mockFetch: typeof fetch = async (input, init) => {
+    requests.push({ url: String(input), ...(init ? { init } : {}) });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({ statuses: { '123456': {
+        state: 'exists', label: 'Trash', postId: 77, postStatus: 'trash', seoVersion: SEO_GENERATOR_VERSION - 1, seoModified: false,
+      } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      id: 77,
+      slug: 'servicetitan-job-123456',
+      status: 'draft',
+      link: 'https://wordpress.example/jobs/servicetitan-job-123456',
+      modified: '2026-09-11T10:15:00',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const client = new WordPressClient(config, mockFetch);
+  const status = await client.updateStatus(job.id, 'draft');
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1]!.url, 'https://wordpress.example/wp-json/wp/v2/st_job/77');
+  assert.equal(requests[1]!.init?.method, 'POST');
+  assert.deepEqual(JSON.parse(String(requests[1]!.init?.body)), { status: 'draft' });
+  assert.equal(status.postStatus, 'draft');
+  assert.equal(status.postModifiedOn, '2026-09-11T10:15:00');
+  assert.equal(status.seoVersion, SEO_GENERATOR_VERSION - 1);
+  assert.equal(status.currentSeoVersion, SEO_GENERATOR_VERSION);
+  assert.equal(status.seoState, 'outdated');
+});
+
 test('regenerates SEO copy for a draft without publishing it', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const mockFetch: typeof fetch = async (input, init) => {
