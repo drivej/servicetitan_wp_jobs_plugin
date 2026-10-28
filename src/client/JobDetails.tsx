@@ -1,3 +1,4 @@
+import { readJson } from './readJson';
 import { WordPressPostPreview } from './WordPressPostPreview';
 import { Button, Radio, TextField } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -601,16 +602,6 @@ export function JobDetails({ jobId }: { jobId: number }) {
     </main>
   );
 }
-
-const readJson = async <T,>(response: Response): Promise<T> => {
-  const text = await response.text();
-  if (!text.trim()) throw new Error(`The app server returned an empty response (HTTP ${response.status}).`);
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`The app server returned an invalid response (HTTP ${response.status}).`);
-  }
-};
 
 const comparableUploadedFileName = (value: string): string => {
   const decoded = (() => {

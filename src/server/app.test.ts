@@ -184,6 +184,8 @@ test('regenerates fresh copy and passes an optional replacement image through th
   let regeneratedWithTitle = '';
   let regeneratedWithSeoDescription = '';
   let generatedFromJob = '';
+  let useFallback = false;
+  let wordpressWrites = 0;
   const app = createApp({
     serviceTitan: {
       getJobs: async () => ({ data: [], page: 1, pageSize: 25, hasMore: false }),
@@ -205,7 +207,13 @@ test('regenerates fresh copy and passes an optional replacement image through th
         return { id: attachmentId, fileName: 'replacement.jpg', contentType: 'image/jpeg', bytes: new Uint8Array([1, 2, 3]) };
       },
     },
-    copyGenerator: { generate: async source => { generatedFromJob=source.jobName; return validCopy; } },
+    copyGenerator: { generate: async source => {
+      if (useFallback) {
+        const { InsufficientJobCopyError } = await import('./openai-error.js');
+        throw new InsufficientJobCopyError();
+      }
+      generatedFromJob=source.jobName; return validCopy;
+    } },
     wordpress: {
       getPluginStatus: async () => ({ state: 'current', requiredVersion: REQUIRED_WORDPRESS_PLUGIN_VERSION, installedVersion: REQUIRED_WORDPRESS_PLUGIN_VERSION, seoGeneratorVersion: SEO_GENERATOR_VERSION }),
       getStatuses: async () => ({}),
@@ -213,6 +221,7 @@ test('regenerates fresh copy and passes an optional replacement image through th
       pushJob: async () => { throw new Error('not used'); },
       regenerateJob: async (_job, force, image, copy) => {
         assert.equal(force, false);
+        wordpressWrites++;
         regeneratedWithImage = image?.id || '';
         regeneratedWithTitle = copy?.title || '';
         regeneratedWithSeoDescription = copy?.seoDescription || '';
@@ -241,6 +250,15 @@ test('regenerates fresh copy and passes an optional replacement image through th
     assert.equal(generatedFromJob, 'Plumbing Service');
     assert.equal(regeneratedWithTitle, validCopy.title);
     assert.equal(regeneratedWithSeoDescription, validCopy.seoDescription);
+    useFallback = true;
+    const fallback = await fetch(`http://127.0.0.1:${address.port}/api/jobs/42/wordpress/regenerate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: false }),
+    });
+    assert.equal(fallback.status, 422);
+    assert.match(fallback.headers.get('content-type') || '', /application\/json/);
+    assert.deepEqual(await fallback.json(), { error: 'There is not enough supported project information to generate this post. Add project details and try again.' });
+    assert.equal(wordpressWrites, 1);
+
   } finally {
     await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
   }

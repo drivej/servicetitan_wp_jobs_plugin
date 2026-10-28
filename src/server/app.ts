@@ -192,7 +192,10 @@ export const createApp = ({
       const clarification = parseCopyClarification(request.body?.clarification);
       const promptSource = await copySource(jobId, clarification);
       response.json(toSeedJobCopy(await spendJobToken('ai_generation', () => copyGenerator.generate(promptSource), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'ai_generation', jobId }))));
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (error instanceof InsufficientJobCopyError) { response.status(422).type('text/plain').send('try your best'); return; }
+      next(error);
+    }
   });
   app.get(`${apiPrefix}/jobs/:jobId/images/:attachmentId`, async (request, response, next) => {
     try {
@@ -281,7 +284,11 @@ export const createApp = ({
   }
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
-    if (error instanceof InsufficientJobCopyError) { response.status(422).type('text/plain').send('try your best'); return; }
+    if (error instanceof TokenOperationSafeFailure) error = error.originalError;
+    if (error instanceof InsufficientJobCopyError) {
+      response.status(422).json({ error: 'There is not enough supported project information to generate this post. Add project details and try again.' });
+      return;
+    }
     if (error instanceof HttpError) { response.status(error.status).json({ error: error.message }); return; }
     if (error instanceof ValidationError) { response.status(400).json({ error: error.message }); return; }
     if (error instanceof OpenAIRequestError) { response.status(error.status).json({ error: error.message }); return; }
