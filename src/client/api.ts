@@ -16,6 +16,36 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
 };
 const paidOperationPath = (path: string, method: string): boolean => method.toUpperCase() === 'POST'
   && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/(?:regenerate|status|trash))?)$/.test(new URL(path, window.location.origin).pathname);
+const WORDPRESS_TRASH_INTERVAL_MS = 1_500;
+let wordpressTrashQueue: Promise<void> = Promise.resolve();
+let lastWordPressTrashRequestAt = 0;
+
+/** Serialize trash operations and pace them to avoid overwhelming WordPress. */
+export const enqueueWordPressTrash = (jobId: number): Promise<Response> => {
+  const operation = wordpressTrashQueue.then(async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const waitForNextSlot = WORDPRESS_TRASH_INTERVAL_MS - (Date.now() - lastWordPressTrashRequestAt);
+      if (waitForNextSlot > 0) await new Promise((resolve) => setTimeout(resolve, waitForNextSlot));
+      lastWordPressTrashRequestAt = Date.now();
+
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/trash`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (response.status !== 429 || attempt === 2) return response;
+
+      const retryAfter = Number(response.headers.get('Retry-After'));
+      const retryDelay = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(30_000, retryAfter * 1_000)
+        : 2_000 * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+    throw new Error('WordPress could not move the post to Trash.');
+  });
+  wordpressTrashQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+};
 const paidOperationKey = async (path: string, init: RequestInit): Promise<{ key: string; storageKey: string }> => {
   const body = typeof init.body === 'string' ? init.body : '';
   const copyContractVersion = /\/jobs\/\d+\/ai-copy$/.test(new URL(path, window.location.origin).pathname) ? 'copy-v2' : 'operation-v1';

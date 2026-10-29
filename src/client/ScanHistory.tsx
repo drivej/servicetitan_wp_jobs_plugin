@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@mui/material';
-import { apiFetch } from './api';
+import { apiFetch, enqueueWordPressTrash } from './api';
 import type { ScannerTask } from '../shared/job-scanner';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
@@ -61,7 +61,7 @@ export function ScanHistory({open}:{open:boolean}) {
   };
   const trashPost=async(id:number)=>{
     setPublishing(id);setError('');
-    try{const status=await read<WordPressStatus>(await apiFetch(`/api/jobs/${id}/wordpress/trash`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));setStatuses(current=>({...current,[id]:status}));}
+    try{const status=await read<WordPressStatus>(await enqueueWordPressTrash(id));setStatuses(current=>({...current,[id]:status}));}
     catch(reason){setError(reason instanceof Error?reason.message:'Unable to move the WordPress post to Trash.');}
     finally{setPublishing(undefined);}
   };

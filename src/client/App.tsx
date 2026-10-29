@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
-import { apiFetch, wordpressStatusStorage } from './api';
+import { apiFetch, enqueueWordPressTrash, wordpressStatusStorage } from './api';
 
 import { ErrorDialog } from './ErrorDialog';
 import { LoadingModal } from './LoadingModal';
@@ -252,9 +252,7 @@ export function App() {
     setActionError(undefined);
     setWordpressStatuses((current) => ({ ...current, [jobId]: { ...previousStatus, label: 'Moving to Trash…' } }));
     try {
-      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/trash`, {
-        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}',
-      });
+      const response = await enqueueWordPressTrash(jobId);
       const body = await readApiResponse<WordPressStatus | { error?: string }>(response, 'WordPress could not move the post to Trash.');
       if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not move the post to Trash.');
       const status = body as WordPressStatus;

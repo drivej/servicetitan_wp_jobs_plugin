@@ -6,7 +6,7 @@ import type { BuildTask } from '../shared/build-queue';
 import { ErrorDialog } from './ErrorDialog';
 import { JobTableHeader, JobTableRow } from './JobTable';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
-import { accountFetch, apiFetch, apiUrl, wordpressStatusStorage } from './api';
+import { accountFetch, apiFetch, apiUrl, enqueueWordPressTrash, wordpressStatusStorage } from './api';
 
 import { formatJobCopy, hasCompleteJobBody, fromSeedJobCopy, type SeedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { showTokenError, useTokensExhausted } from './tokenState';
@@ -380,9 +380,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
     if (wordpressStatus?.state !== 'exists' || !wordpressPluginReady || publishing) return;
     setPublishing(true);
     try {
-      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/trash`, {
-        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}',
-      });
+      const response = await enqueueWordPressTrash(jobId);
       const body = await readJson<WordPressStatus | { error?: string }>(response);
       if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not move the post to Trash.');
       const status = body as WordPressStatus;
