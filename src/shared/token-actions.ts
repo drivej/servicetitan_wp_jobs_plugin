@@ -1,5 +1,5 @@
 export const TOKEN_ACTIONS = {
-  job_scan: { label: 'Job Scanner', cost: 1 },
+  job_scan: { label: 'Job Scanner', cost: 3 },
   ai_generation: { label: 'Generate Copy', cost: 1 },
   build: { label: 'Build', cost: 1 },
   update: { label: 'Update', cost: 1 },

@@ -8,7 +8,7 @@ import { HttpError } from './saas/validation.js';
 import { safeWorkText } from './work-content.js';
 export interface StoredScannerTask extends ScannerTask, BuildScope { updatedAt: number; }
 export interface ScannerStore {
-  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}): Promise<StoredScannerTask>;
+  enqueue(scope: BuildScope, id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}, targetDrafts?: number): Promise<StoredScannerTask>;
   history(scope: BuildScope, page: number): Promise<StoredScannerTask[]>;
   latest(scope: BuildScope): Promise<StoredScannerTask | undefined>;
   claim(): Promise<StoredScannerTask | undefined>;
@@ -87,7 +87,8 @@ export async function executeScan(task: StoredScannerTask, providers: BuildProvi
       }
       if(await canceled()){task.stopReason='canceled';break outer;}
       const draftsReady=task.selected.filter(item=>item.build?.state==='succeeded' && item.build.result?.state==='exists').length;
-      if(draftsReady>=SCANNER_MAX_DRAFTS){task.stopReason='five_drafts';break outer;}
+      const targetDrafts = task.targetDrafts || SCANNER_MAX_DRAFTS;
+      if(draftsReady>=targetDrafts){task.stopReason=targetDrafts===SCANNER_MAX_DRAFTS?'five_drafts':'target_drafts';break outer;}
     }
     await store.save(task);
     if(!jobs.hasMore){task.stopReason='exhausted';break;}
@@ -131,10 +132,10 @@ export function scannerApi(scope: BuildScope, store: ScannerStore, queue: BuildQ
       if(task.cancelRequested)for(const item of task.selected)await queue.cancelQueued(scope,item.buildTaskId,task.id);
       return publicScan(await settleScan(task,store,queue));
     },
-    start: async (id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}) => {
+  start: async (id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}, targetDrafts = SCANNER_MAX_DRAFTS) => {
       const task = await latest();
       if (task && (['queued','running','drafting'].includes(task.state) || task.selected.some(item => item.build && ['queued','running'].includes(item.build.state)))) return publicScan(task);
-      return publicScan(await store.enqueue(scope,id,zip,dateRange));
+      return publicScan(await store.enqueue(scope,id,zip,dateRange,targetDrafts));
     },
   };
 }

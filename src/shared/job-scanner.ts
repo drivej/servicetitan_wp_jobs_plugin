@@ -8,11 +8,12 @@ export interface ScannerTask {
   createdAt: string;
   zip?: string;
   dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean};
+  targetDrafts?: number;
   scanned: number;
   rated: number;
   candidates: ScannerCandidate[];
   selected: ScannerSelection[];
-  stopReason?: 'five_drafts' | 'five_candidates' | 'ten_candidates' | 'exhausted' | 'limits' | 'canceled';
+  stopReason?: 'five_drafts' | 'target_drafts' | 'five_candidates' | 'ten_candidates' | 'exhausted' | 'limits' | 'canceled';
   cancelRequested?: boolean;
   scanFeeCharged?: boolean;
   currentJob?: { jobId?: number; title: string; stage: 'searching' | 'checking' | 'rating' | 'drafting'; score?: number } | null;
@@ -23,3 +24,5 @@ export const SCANNER_MAX_JOBS = 500;
 export const SCANNER_MAX_RATINGS = 40;
 
 export const SCANNER_MAX_DRAFTS = 5;
+export const SCANNER_MIN_TARGET_DRAFTS = 1;
+export const SCANNER_MAX_TARGET_DRAFTS = 10;

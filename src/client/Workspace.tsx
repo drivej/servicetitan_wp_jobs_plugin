@@ -1,6 +1,7 @@
 import { serviceTitanActions } from './serviceTitanActions';
 import { WebsiteOwnershipConflict } from './WebsiteOwnership';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { Avatar, Button, IconButton, TextField } from '@mui/material';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiHealth } from './ApiHealth';
@@ -77,7 +78,7 @@ function workspaceRedirect(path: string, status: OnboardingStatus | undefined, i
   // Jobs require a subscription; setup, billing, settings, and help remain accessible.
   // Platform administrators may inspect a customer's configured jobs while viewing as them.
   // Paid mutations remain subject to the impersonated workspace's normal token checks.
-  if (!status.activeProduct && !impersonating) return path === '/job-scanner' || path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
+  if (!status.activeProduct && !impersonating) return path === '/job-scanner' || path === '/previous-scans' || path === '/wordpress-jobs' || path === '/jobs' || path.startsWith('/jobs/') ? '/pricing' : undefined;
   const setupComplete = status.settingsReady || status.onboardingStep >= 3;
   const helpPage = path === '/help' || path.startsWith('/help/');
   if (!setupComplete && !helpPage && !['/onboarding', '/settings', '/wordpress-plugin', '/invite', '/admin/api-health'].includes(path)) return '/onboarding';
@@ -234,11 +235,34 @@ const AccountMenu = ({ user, onSignOut, busy, impersonating = false, isLocal = f
 };
 
 const JobsButton = ({ href, path }: { href: string; path: string }) => {
+  const historyView = path === '/jobs' && new URLSearchParams(window.location.search).get('view') === 'history';
+  const active = (path === '/jobs' || path.startsWith('/jobs/')) && !historyView;
   return (
-    <Button component='a' className='btn-nav' variant={path === '/jobs' || path.startsWith('/jobs/') ? 'contained' : 'text'} href={href} aria-current={path === '/jobs' || path.startsWith('/jobs/') ? 'page' : undefined}>
+    <Button component='a' className={`btn-nav${active ? ' is-active' : ''}`} variant='text' href={href} aria-current={active ? 'page' : undefined}>
       Jobs
     </Button>
   );
+};
+
+const JobScannerButton = ({ path }: { path: string }) => {
+  const active = path === '/job-scanner';
+  return <Button component='a' className={`btn-nav${active ? ' is-active' : ''}`} variant='text' href='/job-scanner' aria-current={active ? 'page' : undefined} startIcon={<AutoAwesomeRoundedIcon aria-hidden='true' />}>
+    AI Job Scanner
+  </Button>;
+};
+
+const PreviousScansButton = ({ path }: { path: string }) => {
+  const active = path === '/previous-scans';
+  return <Button component='a' className={`btn-nav${active ? ' is-active' : ''}`} variant='text' href='/previous-scans' aria-current={active ? 'page' : undefined}>
+    Previous Scans
+  </Button>;
+};
+
+const WordPressJobsButton = ({ path }: { path: string }) => {
+  const active = path === '/wordpress-jobs';
+  return <Button component='a' className={`btn-nav${active ? ' is-active' : ''}`} variant='text' href='/wordpress-jobs' aria-current={active ? 'page' : undefined}>
+    WordPress Jobs
+  </Button>;
 };
 
 const ConnectionTestButton = ({ disabled, busy, busyLabel, label = 'Test Connection', type = 'button', onClick }: { disabled: boolean; busy: boolean; busyLabel: string; label?: string; type?: 'button' | 'submit'; onClick?: () => void }) => (
@@ -447,7 +471,9 @@ export function Workspace({ children }: { children: ReactNode }) {
   const settingsPage = path === '/settings';
   const teamPage = path === '/team';
   const currentPage = path === '/wordpress-plugin' ? 'plugin' : path === '/help' || path.startsWith('/help/') ? 'guide' : path === '/jobs' || path.startsWith('/jobs/') ? 'jobs' : undefined;
-  const jobsHref = currentPage === 'jobs' ? `/jobs${window.location.search}` : '/jobs';
+  const jobsQuery = new URLSearchParams(window.location.search);
+  jobsQuery.delete('view');
+  const jobsHref = currentPage === 'jobs' && jobsQuery.size > 0 ? `/jobs?${jobsQuery.toString()}` : '/jobs';
   const redirectTarget = loaded && !signedOut ? workspaceRedirect(path, onboarding, session?.mode === 'local', Boolean(invitationToken), Boolean(session?.impersonation)) : undefined;
   const redirectedTo = useRef<string | undefined>(undefined);
 
@@ -859,6 +885,9 @@ export function Workspace({ children }: { children: ReactNode }) {
           <WorkspaceTokens count={isLocal ? 3 : user.jobTokens} path={path} />
           <div className='workspace-menu-spacer' />
           <JobsButton href={jobsHref} path={path} />
+          <JobScannerButton path={path} />
+          <PreviousScansButton path={path} />
+          <WordPressJobsButton path={path} />
           <AccountMenu user={user} onSignOut={() => void logout()} busy={busy || isLocal} impersonating={Boolean(session?.impersonation)} isLocal={isLocal} />
         </div>
       </header>
@@ -1182,8 +1211,8 @@ export function Workspace({ children }: { children: ReactNode }) {
                     <h2>{ownershipReverification ? 'Confirm ownership using your saved connection' : 'Install the plugin and connect WordPress'}</h2>
                     {ownershipReverification ? <p className='notice'>We now verify website ownership so a WordPress installation can belong to only one account. Your website and credentials are saved. Update the companion plugin on your WordPress website, then select Verify website ownership below. Leave the password blank to use the saved credentials. The connected WordPress user must be an administrator.</p> : <p>Install and activate the companion plugin, then enter WordPress credentials so onboarding can test both the plugin route and authenticated REST API access.</p>}
                     <div className='onboarding-plugin-download'>
-                      <Button component='a' variant='contained' size='large' className='onboarding-download-button' startIcon={<DownloadRoundedIcon />} href='/downloads/job-showcase-for-servicetitan-1.20.3.zip' download>
-                        Download WordPress plugin 1.20.3
+                      <Button component='a' variant='contained' size='large' className='onboarding-download-button' startIcon={<DownloadRoundedIcon />} href='/downloads/job-showcase-for-servicetitan-1.20.5.zip' download>
+                        Download WordPress plugin 1.20.5
                       </Button>
                       <p>
                         Upload this ZIP in WordPress under <strong>Plugins → Add New Plugin → Upload Plugin</strong>, then install and activate it. <a href='/wordpress-plugin'>Full installation instructions</a>
@@ -1377,7 +1406,7 @@ export function Workspace({ children }: { children: ReactNode }) {
         </main>
       ) : (
         <div key={`${user.id}:${selected}`}>
-          {!isLocal && !onboardingComplete && (path === '/job-scanner' || path === '/jobs' || path.startsWith('/jobs/')) ? (
+          {!isLocal && !onboardingComplete && (path === '/job-scanner' || path === '/previous-scans' || path === '/wordpress-jobs' || path === '/jobs' || path.startsWith('/jobs/')) ? (
             <main className='app-page'>
               <h1>Complete setup</h1>
               <p>{websiteStepComplete ? 'WordPress is connected. Finish the ServiceTitan check in onboarding to open Jobs.' : 'Connect your WordPress website first, then verify ServiceTitan to open Jobs.'}</p>

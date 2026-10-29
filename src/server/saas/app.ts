@@ -48,11 +48,11 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
     res.json({
       name: 'Job Showcase for ServiceTitan',
       slug: 'servicetitan-job-integration',
-      version: '1.20.3',
+      version: '1.20.5',
       requires: '6.5',
       tested: '6.8',
       requires_php: '7.4',
-      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.3.zip`,
+      package: `${config.origin}/downloads/job-showcase-for-servicetitan-1.20.5.zip`,
       homepage: config.origin,
       sections: { description: 'Publishes recent project posts from ServiceTitan to WordPress.' },
     });
@@ -576,6 +576,14 @@ export function createSaaSApp({ config, store, google, websiteApp, staticDirecto
   app.get('/downloads/job-showcase-for-servicetitan-1.20.3.zip', (_req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
     res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.3.zip'), (error) => { if (error && !res.headersSent) next(error); });
+  });
+  app.get('/downloads/job-showcase-for-servicetitan-1.20.4.zip', (_req, res, next) => {
+    res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
+    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.4.zip'), (error) => { if (error && !res.headersSent) next(error); });
+  });
+  app.get('/downloads/job-showcase-for-servicetitan-1.20.5.zip', (_req, res, next) => {
+    res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/zip', 'X-Content-Type-Options': 'nosniff' });
+    res.download(resolve('dist/downloads/job-showcase-for-servicetitan-1.20.5.zip'), (error) => { if (error && !res.headersSent) next(error); });
   });
   if (staticDirectory) {
     app.use(express.static(staticDirectory, { index: false, maxAge: '1h' }));

@@ -1,21 +1,24 @@
-import { Button, Chip, IconButton } from '@mui/material';
-import { useState } from 'react';
-import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
-import UpgradeRoundedIcon from '@mui/icons-material/UpgradeRounded';
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import HourglassTopRoundedIcon from '@mui/icons-material/HourglassTopRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import UpgradeRoundedIcon from '@mui/icons-material/UpgradeRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import { Button, Chip, IconButton } from '@mui/material';
+import { useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
+import { TOKEN_ACTIONS } from '../shared/token-actions';
 import { JobThumbnail } from './JobThumbnail';
 import { isSeoPromptOutOfSync, type WordPressStatus } from './wordpressStatusCache';
-import { TOKEN_ACTIONS } from '../shared/token-actions';
 import { WordPressStatusControl, type WordPressLifecycleStatus } from './WordPressStatusControl';
 
 export interface JobTableItem {
   id: number;
   attachments?: Array<{ id: string; fileName: string }>;
+  wordpressRecord?: boolean;
+  wordpressFeaturedImageUrl?: string;
+  wordpressFeaturedImageAlt?: string;
   imageValidationState?: 'loading' | 'valid' | 'invalid' | 'error';
   sourceCopyStatus?: 'missing' | 'limited' | 'available';
   jobName: string;
@@ -54,7 +57,7 @@ export function JobTableHeader({ onRefresh, refreshing = false, disabled = false
       <th scope='col'>WordPress</th>
       <th scope='col' className='actions-heading'>
         <div className='actions-heading-content'>
-          <span>ACTIONS</span>
+          {/* <span>ACTIONS</span> */}
           <IconButton size='small' title='Refresh WordPress statuses' aria-label='Refresh WordPress statuses' className={refreshing ? 'is-spinning' : undefined} disabled={disabled} onClick={onRefresh}>
             <RefreshRoundedIcon fontSize='small' aria-hidden='true' />
           </IconButton>
@@ -64,7 +67,7 @@ export function JobTableHeader({ onRefresh, refreshing = false, disabled = false
   </thead>;
 }
 
-export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onTrash, onUnlink, onUpdate, onRefresh }: JobTableRowProps) {
+export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, buildTask, queueError, wordpressPluginReady, tokensExhausted, onOpen, rating, onBuild, onPublish, onSetDraft, onTrash, onUnlink, onUpdate, onRefresh }: JobTableRowProps) {
   const [imageValidationState, setImageValidationState] = useState<JobTableItem['imageValidationState']>('loading');
   const buildBusy = wordpressBusy || buildTask?.state === 'queued' || buildTask?.state === 'running';
   const updateAvailable = isSeoPromptOutOfSync(wordpressStatus, job.modifiedOn);
@@ -74,7 +77,7 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
   const statusColor = wordpressStatus.state === 'not_found' ? 'default'
     : wordpressStatus.state === 'unknown' ? wordpressStatus.label.toLowerCase().includes('loading') ? 'info' : 'error'
     : wordpressStatus.postStatus === 'publish' ? 'success' : wordpressStatus.postStatus === 'draft' ? 'warning' : 'default';
-  const readiness = imageValidationState || job.imageValidationState || 'loading';
+  const readiness = job.wordpressRecord && !job.wordpressFeaturedImageUrl ? 'invalid' : imageValidationState || job.imageValidationState || 'loading';
   const readinessState = readiness === 'loading'
     ? 'loading'
     : readiness === 'invalid' || readiness === 'error' || job.sourceCopyStatus === 'missing'
@@ -103,8 +106,9 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
 
   const changeLifecycleStatus = (nextStatus: WordPressLifecycleStatus) => {
     if (nextStatus === 'draft' && lifecycleStatus === 'none') return onBuild?.();
-    if (nextStatus === 'published' && lifecycleStatus === 'draft') return onPublish();
-    if (nextStatus === 'trash' && lifecycleStatus === 'published') return onTrash?.();
+    if (nextStatus === 'draft' && (lifecycleStatus === 'published' || lifecycleStatus === 'trash')) return onSetDraft?.();
+    if (nextStatus === 'published' && (lifecycleStatus === 'draft' || lifecycleStatus === 'trash')) return onPublish();
+    if (nextStatus === 'trash' && (lifecycleStatus === 'draft' || lifecycleStatus === 'published')) return onTrash?.();
     if (nextStatus === 'none' && lifecycleStatus === 'draft') return onUnlink?.();
   };
 
@@ -118,7 +122,9 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     <td className={`readiness-cell readiness-${readinessState}`} data-label='Publish readiness' title={readinessLabel} aria-label={readinessLabel}>
       {readinessState === 'loading' ? <HourglassTopRoundedIcon aria-hidden='true' /> : readinessState === 'valid' ? <CheckRoundedIcon aria-hidden='true' /> : readinessState === 'invalid' ? <CloseRoundedIcon aria-hidden='true' /> : <WarningAmberRoundedIcon aria-hidden='true' />}
     </td>
-    <td className='job-image-cell' data-label='Image'><JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} /></td>
+    <td className='job-image-cell' data-label='Image'>{job.wordpressRecord ? <div className='job-thumbnail' aria-busy={!job.wordpressFeaturedImageUrl}>
+      {job.wordpressFeaturedImageUrl ? <img src={job.wordpressFeaturedImageUrl} alt={job.wordpressFeaturedImageAlt || `Image for ${job.jobName}`} width={64} height={64} onLoad={() => setImageValidationState('valid')} onError={() => setImageValidationState('invalid')} /> : <span className='job-thumbnail-message'>No image</span>}
+    </div> : <JobThumbnail key={`${job.id}:${job.attachments?.map((image) => image.id).join(',')}`} jobId={job.id} jobName={job.jobName} attachments={job.attachments || []} onValidationChange={setImageValidationState} />}</td>
     <td className='job-name-cell' data-label='Job'>
       <div className='job-name' title={job.descriptionPreview || job.jobName}>{job.descriptionPreview || job.jobName}</div>
       <div className='job-row-metadata'>
@@ -147,7 +153,7 @@ export function JobTableRow({ job, wordpressStatus, wordpressBusy = false, build
     </td>
     <td className='actions-cell' data-label='Actions'><div className='row-actions'>
       {onUpdate && wordpressStatus.state === 'exists' && updateAvailable && wordpressStatus.seoState !== 'newer' && <Button variant='contained' className='job-action-seo token-cost' type='button' startIcon={<UpgradeRoundedIcon aria-hidden='true' />} disabled={!wordpressPluginReady || wordpressBusy || tokensExhausted} title={`${seoUpdateDescription(wordpressStatus, job.modifiedOn)} Uses ${TOKEN_ACTIONS.update.cost} job token and preserves the current WordPress status.`} aria-label={`Regenerate SEO for ${job.jobName}`} onClick={(event) => { event.stopPropagation(); onUpdate(); }}>{wordpressBusy && wordpressStatus.label === 'Updating…' ? 'Updating…' : 'SEO'}</Button>}
-      {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'publish' && !updateAvailable && <Button className='job-action-update update-current' type='button' disabled title={wordpressStatus.seoState === 'newer' ? 'This post was generated by a newer prompt version.' : 'This post already uses the latest AI prompt and ServiceTitan job details.'}>{wordpressStatus.seoState === 'newer' ? 'Newer' : 'Current'}</Button>}
+      {wordpressStatus.state === 'exists' && wordpressStatus.postStatus === 'publish' && !updateAvailable && wordpressStatus.seoState === 'newer' && <Button className='job-action-update update-current' type='button' disabled title='This post was generated by a newer prompt version.'>Newer</Button>}
       <IconButton size='small' className={`icon-button${wordpressBusy ? ' is-spinning' : ''}`} type='button' aria-label={`Refresh WordPress status for ${job.jobName}`} title='Refresh WordPress post status' disabled={wordpressBusy} onClick={(event) => { event.stopPropagation(); onRefresh(); }}><RefreshRoundedIcon fontSize='small' aria-hidden='true' /></IconButton>
     </div></td>
   </tr>;

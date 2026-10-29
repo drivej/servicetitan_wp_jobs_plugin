@@ -365,7 +365,7 @@ Full source records are not stored in scanner task payloads: only IDs, bounded t
 
 ### Exclusive WordPress ownership
 
-SaaS requires migration `014_website_ownership.sql` and companion plugin **1.20.3**. Existing websites must verify ownership again before publishing. A verified installation belongs to one workspace; duplicate connections offer access requests or a platform-reviewed dispute, without revealing owner identity. See [deployment, request review, and transfer restrictions](docs/website-ownership.md) before rollout.
+SaaS requires migration `014_website_ownership.sql` and companion plugin **1.20.5**. Existing websites must verify ownership again before publishing. A verified installation belongs to one workspace; duplicate connections offer access requests or a platform-reviewed dispute, without revealing owner identity. See [deployment, request review, and transfer restrictions](docs/website-ownership.md) before rollout.
 
 ### Superadmin account deletion
 

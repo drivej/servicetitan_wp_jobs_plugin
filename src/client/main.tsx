@@ -1,11 +1,13 @@
 import { JobScannerGuide } from './JobScannerGuide';
-import { StrictMode, type ReactNode } from 'react';
+import { StrictMode, useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { Workspace } from './Workspace';
 
 import { App } from './App';
 import { JobDetails } from './JobDetails';
+import { JobScanner } from './JobScanner';
+import { WordPressJobs } from './WordPressJobs';
 import { WordPressIntegrationGuide } from './WordPressIntegrationGuide';
 import { WordPressPluginSetup } from './WordPressPluginSetup';
 import { MarketingPage } from './MarketingPage';
@@ -14,6 +16,9 @@ import { PageHeader } from './PageHeader';
 import './styles.css';
 import { useWordPressPluginStatus, WordPressPluginStatusProvider } from './useWordPressPluginStatus';
 import packageJson from '../../package.json';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import { apiFetch } from './api';
+import { navigateTo } from './navigation';
 
 const path = window.location.pathname.replace(/\/$/, '') || '/';
 const jobDetailsMatch = path.match(/^\/jobs\/(\d+)$/);
@@ -33,7 +38,11 @@ const page = path === '/help/job-scanner' ? <JobScannerGuide /> : helpTopicMatch
   : path === '/invite'
     ? <WelcomePage />
   : path === '/job-scanner'
-    ? <App />
+    ? <JobScanner />
+  : path === '/previous-scans'
+    ? <App initialView='history' />
+  : path === '/wordpress-jobs'
+    ? <WordPressJobs />
   : jobDetailsMatch
       ? <JobDetails jobId={Number(jobDetailsMatch[1])} />
       : path === '/jobs'
@@ -85,14 +94,42 @@ function PageHeaderFallback() {
 }
 
 function WelcomePage() {
+  const [postCount, setPostCount] = useState<number>();
+  const [countLoading, setCountLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiFetch('/api/wordpress/summary', { signal: controller.signal }).then(async (response) => {
+      const body = await response.json() as { postCount?: number; error?: string };
+      if (!response.ok) throw new Error(body.error || 'Unable to load the WordPress post count.');
+      if (Number.isSafeInteger(body.postCount)) setPostCount(body.postCount);
+    }).catch(() => { if (!controller.signal.aborted) setPostCount(undefined); })
+      .finally(() => { if (!controller.signal.aborted) setCountLoading(false); });
+    return () => controller.abort();
+  }, []);
+
   return (
     <main className='app-page'>
       <PageHeader
         eyebrow='Your workspace'
         title='Welcome to Job Showcase for ServiceTitan'
         description='Browse the latest ServiceTitan jobs and choose one to work on.'
-        actions={<Button component='a' href='/jobs' variant='contained' className='primary' endIcon={<span aria-hidden='true'>→</span>}>View latest jobs</Button>}
       />
+      {(countLoading || postCount !== 0) && <section className='home-overview panel' aria-label='WordPress overview'>
+        <div><span className='eyebrow'>WORDPRESS</span><h2>{countLoading ? 'Loading…' : postCount ?? 'Unavailable'}</h2><p>Recent Jobs posts on your WordPress website</p></div>
+        <div className='home-overview-actions'>
+          <Button component='a' href='/jobs' variant='outlined'>Browse jobs</Button>
+          <Button component='a' href='/job-scanner' variant='contained' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true' />}>AI Job Scanner</Button>
+        </div>
+      </section>}
+      {!countLoading && postCount === 0 && <section className='home-scanner-promo' aria-labelledby='home-scanner-promo-title'>
+        <div className='home-scanner-promo-copy'>
+          <span className='eyebrow'>A SIMPLE WAY TO GET STARTED</span>
+          <h2 id='home-scanner-promo-title'>Turn completed jobs into WordPress drafts</h2>
+          <p>AI Job Scanner finds promising jobs and prepares drafts for your review. Choose a ZIP code and draft count, start a scan, then review the drafts before publishing.</p>
+        </div>
+        <Button component='a' href='/job-scanner' variant='contained' size='large' startIcon={<AutoAwesomeRoundedIcon aria-hidden='true' />}>Open AI Job Scanner</Button>
+      </section>}
     </main>
   );
 }

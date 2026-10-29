@@ -4,7 +4,7 @@ Tags: servicetitan, rest-api, custom-post-type
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.20.3
+Stable tag: 1.20.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -52,6 +52,12 @@ filter. Add custom post types to the shared ZIP selector with the
 stji_zip_post_types filter.
 
 == Changelog ==
+
+= 1.20.5 =
+* Include featured and attached-image fallbacks in the WordPress Jobs list.
+
+= 1.20.4 =
+* Add authenticated pagination for WordPress posts created from ServiceTitan jobs.
 
 = 1.20.3 =
 * Add administrator-only persistent installation identity for exclusive SaaS website ownership.

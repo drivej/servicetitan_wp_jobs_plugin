@@ -59,7 +59,31 @@ export interface WordPressPluginStatus {
   seoGeneratorVersion: number;
 }
 
+export interface WordPressManagedPost {
+  jobId: number;
+  postId: number;
+  title: string;
+  excerpt: string;
+  status: string;
+  modifiedOn: string;
+  completedOn: string;
+  location: { city: string; state: string; zip: string };
+  featuredImageUrl: string;
+  featuredImageAlt: string;
+  link: string;
+}
+
+export interface WordPressManagedPostPage {
+  posts: WordPressManagedPost[];
+  page: number;
+  perPage: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface WordPressProvider {
+  getPostCount?(): Promise<number>;
+  getManagedPosts?(page: number, perPage: number): Promise<WordPressManagedPostPage>;
   getPostPreview?(serviceTitanJobId: number): Promise<WordPressPostPreview>;
   getPluginStatus(): Promise<WordPressPluginStatus>;
   getStatuses(serviceTitanJobIds: number[]): Promise<Record<number, WordPressPostStatus>>;
@@ -72,7 +96,7 @@ export interface WordPressProvider {
 }
 
 type FetchImplementation = typeof fetch;
-export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.20.3';
+export const REQUIRED_WORDPRESS_PLUGIN_VERSION = '1.20.5';
 
 export class WordPressClient implements WordPressProvider {
   private readonly authorization: string;
@@ -142,6 +166,22 @@ export class WordPressClient implements WordPressProvider {
         message: requestError.message,
       };
     }
+  }
+
+  async getPostCount(): Promise<number> {
+    const separator = this.config.collectionUrl.includes('?') ? '&' : '?';
+    const response = await this.request(`${this.config.collectionUrl}${separator}status=any&per_page=1&_fields=id`);
+    const totalHeader = response.headers.get('X-WP-Total');
+    const count = totalHeader === null ? Number.NaN : Number(totalHeader);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new WordPressRequestError('WordPress did not return a valid post count.', 502);
+    }
+    return count;
+  }
+
+  async getManagedPosts(page: number, perPage: number): Promise<WordPressManagedPostPage> {
+    const response = await this.request(pluginApiUrl(this.config.collectionUrl, 'posts', { page, perPage }));
+    return parseJson<WordPressManagedPostPage>(response);
   }
 
   async getStatuses(serviceTitanJobIds: number[]): Promise<Record<number, WordPressPostStatus>> {
@@ -478,6 +518,14 @@ function isCoordinate(value: number | null | undefined, minimum: number, maximum
 }
 
 export class DisabledWordPressClient implements WordPressProvider {
+  async getPostCount(): Promise<number> {
+    throw new WordPressRequestError('WordPress is not configured on the server.', 503);
+  }
+
+  async getManagedPosts(): Promise<WordPressManagedPostPage> {
+    throw new WordPressRequestError('WordPress is not configured on the server.', 503);
+  }
+
   async getPluginStatus(): Promise<WordPressPluginStatus> {
     return {
       state: 'unknown',
@@ -684,12 +732,13 @@ const safeJson = async <T>(response: Response): Promise<T | undefined> => {
   }
 };
 
-const pluginApiUrl = (collectionUrl: string, route: string): string => {
+const pluginApiUrl = (collectionUrl: string, route: string, params?: Record<string, number>): string => {
   const url = new URL(collectionUrl);
   const restIndex = url.pathname.indexOf('/wp-json/');
   const sitePath = restIndex >= 0 ? url.pathname.slice(0, restIndex) : '';
   url.pathname = `${sitePath}/wp-json/servicetitan-job-integration/v1/${route}`;
   url.search = '';
+  if (params) for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
   return url.toString();
 };
 

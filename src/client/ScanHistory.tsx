@@ -72,12 +72,12 @@ export function ScanHistory({open}:{open:boolean}) {
     finally{setPublishing(undefined);}
   };
   if(!open)return null;
-  return <section className='scanner-results' aria-label='Previous AI Job Scout scans'>
+  return <section className='scanner-results' aria-label='Previous AI Job Scanner scans'>
     {error && <p role='alert'>{error} <Button disabled={loading} onClick={()=>setRetry(value=>value+1)}>Retry</Button></p>}
     {loading && <p role='status'>Loading previous scans…</p>}
     {!loading && !error && !scans.length && <p>No scans on this page.</p>}
     {!!scans.length && <div className='table-wrap'><table className='jobs-table'>
-      <caption className='visually-hidden'>Previous AI Job Scout results grouped by scan</caption>
+      <caption className='visually-hidden'>Previous AI Job Scanner results grouped by scan</caption>
       <colgroup><col className='readiness-column'/><col className='job-image-column'/><col className='job-name-column'/><col className='location-column'/><col className='wp-status-column'/><col className='actions-column'/></colgroup>
       <JobTableHeader refreshing={loading} disabled={loading || publishing!==undefined} onRefresh={()=>setRetry(value=>value+1)}/>
       {scans.map(scan=>{

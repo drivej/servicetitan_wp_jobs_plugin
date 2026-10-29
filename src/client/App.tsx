@@ -1,10 +1,6 @@
 import { ScanHistory } from './ScanHistory';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
-import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import { JobScanner, type JobScannerHandle } from './JobScanner';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Switch, IconButton, Pagination, Paper, TextField } from '@mui/material';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Pagination, Paper, Switch, TextField } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
@@ -48,9 +44,9 @@ const initialRange = (): JobFilters => {
   return { start: toDateInput(start), end: toDateInput(end), zip: '' };
 };
 
-export function App() {
+export function App({ initialView = 'browse' }: { initialView?: 'browse' | 'history' }) {
   const [search,setSearch] = useState(() => parseJobsSearch(window.location.search, initialRange()));
-  const [view,setView] = useState<'browse'|'scout'|'history'>(()=>window.location.pathname==='/job-scanner' || new URLSearchParams(window.location.search).get('view')==='scout'?'scout':'browse');
+  const [view,setView] = useState<'browse'|'history'>(initialView);
   const [draftRange, setDraftRange] = useState<JobFilters>(search.filters);
   const [result, setResult] = useState<JobsResponse>();
   const [error, setError] = useState('');
@@ -66,10 +62,6 @@ export function App() {
   const wordpressPluginUpdateRequired = wordpressPluginStatus?.state === 'update_required';
   const tokensExhausted = useTokensExhausted();
   const { confirmTokenSpend, tokenSpendDialog } = useTokenSpendConfirmation();
-  const scannerControl=useRef<JobScannerHandle>(null);
-  const [scoutInfoOpen,setScoutInfoOpen] = useState(false);
-
-
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
@@ -385,20 +377,8 @@ export function App() {
 
   return (
     <main className='app-page'>
-      <LoadingModal open={loading && view==='browse'} label='Loading ServiceTitan jobs' />
-      <PageHeader eyebrow='ServiceTitan Jobs' title='Job search' className='jobs-page-header' />
-      <Dialog open={scoutInfoOpen} onClose={()=>setScoutInfoOpen(false)} aria-labelledby='job-scout-info-title' aria-describedby='job-scout-info-description'>
-        <DialogTitle id='job-scout-info-title'>AI Job Scout</DialogTitle>
-        <DialogContent>
-          <h3>Your next great post is already in your job history.</h3>
-          <p id='job-scout-info-description'>Let AI find promising completed jobs and turn the best matches into WordPress drafts—ready for your review.</p>
-          <p>AI Job Scout uses the same appointment date range and ZIP search as Browse jobs. It skips jobs already in WordPress and prepares up to five drafts. You choose what to publish.</p>
-          <p>1 token per scan, plus 1 token per draft created (up to 6 tokens total). You’ll approve the spend before the scan starts.</p>
-        </DialogContent>
-        <DialogActions><Button onClick={()=>setScoutInfoOpen(false)}>Got it</Button></DialogActions>
-      </Dialog>
-
-
+      <LoadingModal open={loading} label='Loading ServiceTitan jobs' />
+      <PageHeader eyebrow='ServiceTitan Jobs' title={view === 'history' ? 'Previous Scans' : 'Job search'} className='jobs-page-header' />
       {wordpressPluginLoading ? (
         <Alert severity='info' role='status'>
           Checking WordPress plugin compatibility…
@@ -411,7 +391,7 @@ export function App() {
               <strong>{wordpressPluginStatus?.state === 'update_required' ? 'WordPress plugin update required' : 'WordPress plugin could not be verified'}</strong>
               <span>
                 {wordpressPluginStatus?.installedVersion ? `Installed ${wordpressPluginStatus.installedVersion}; ` : ''}
-                required {wordpressPluginStatus?.requiredVersion || '1.20.3'}. WordPress actions are disabled.
+                required {wordpressPluginStatus?.requiredVersion || '1.20.5'}. WordPress actions are disabled.
               </span>
             </div>
             <a href='/wordpress-plugin'>Open plugin setup</a>
@@ -419,8 +399,8 @@ export function App() {
         )
       )}
 
-      <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
-        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const nextView=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='scout'?'scout':'browse';if(nextView==='scout'){void scannerControl.current?.start(draftRange);return;}const next={...search,filters:draftRange,page:1};setSearch(next);setView(nextView);window.history.replaceState(null,'',jobsListUrl(next));}}>
+      {view === 'browse' && <Paper component='section' variant='outlined' className='panel' aria-labelledby='filters-heading'>
+        <form className='job-search-form' onSubmit={event=>{event.preventDefault();const next={...search,filters:draftRange,page:1};setSearch(next);setView('browse');window.history.replaceState(null,'',jobsListUrl(next));}}>
           <div className='job-search-date-range'>
             <div className='job-search-dates-toggle'>
               <label htmlFor='job-search-use-dates'>Use Dates</label>
@@ -452,15 +432,11 @@ export function App() {
           <input name='pageSize' type='hidden' value={search.pageSize} />
           <div className='job-search-actions'>
             <Button variant='contained' className='primary' type='submit' value='browse' disabled={loading}>Search</Button>
-            <Button variant='contained' className='job-scout-button' type='submit' value='scout' disabled={!wordpressPluginReady} startIcon={<AutoAwesomeRoundedIcon aria-hidden='true'/>}>AI Job Scout</Button>
-            <IconButton type='button' className='scout-history-button' aria-label='Previous scans' title='Previous scans' onClick={()=>setView('history')}><FormatListBulletedIcon/></IconButton>
-            <IconButton aria-label='About AI Job Scout' title='About AI Job Scout' onClick={()=>setScoutInfoOpen(true)}><InfoOutlinedIcon/></IconButton>
           </div>
         </form>
-      </Paper>
+      </Paper>}
 
       <ScanHistory open={view==='history'}/>
-      <JobScanner searchFilters={search.filters} controlRef={scannerControl} onShow={()=>setView('scout')} visible={view==='scout'}/>
       <section style={view!=='browse'?{display:'none'}:undefined} className='results' aria-labelledby='results-heading' aria-busy={loading}>
         <div className='results-header'>
           <div>

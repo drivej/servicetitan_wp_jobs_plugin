@@ -1,6 +1,6 @@
 import { rateScannerJob, scannerSkipReason } from './scanner-rating.js';
 import { DisabledJobScorer, type JobScorer } from './job-scorer.js';
-import { SCANNER_MIN_SCORE } from '../shared/job-scanner.js';
+import { SCANNER_MAX_DRAFTS, SCANNER_MAX_TARGET_DRAFTS, SCANNER_MIN_SCORE, SCANNER_MIN_TARGET_DRAFTS } from '../shared/job-scanner.js';
 import { resolve } from 'node:path';
 
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
@@ -24,7 +24,7 @@ import { formatJobCopy, isWordPressBodyHtml, toSeedJobCopy } from '../shared/job
 interface CreateAppOptions {
   jobScorer?: JobScorer;
   localPlatformAdmin?: boolean;
-  scanner?: { history(page:number):Promise<ScannerTask[]>; get(id:string):Promise<ScannerTask>; latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
+  scanner?: { history(page:number):Promise<ScannerTask[]>; get(id:string):Promise<ScannerTask>; latest(): Promise<ScannerTask | null>; start(id: string, zip?: string, dateRange?: {startDate:string;endDateExclusive:string;allDates?:boolean}, targetDrafts?: number): Promise<ScannerTask>; cancel(id: string): Promise<ScannerTask> };
   buildQueue?: { enqueue(jobId: number): Promise<BuildTask>; list(jobIds: number[]): Promise<BuildTask[]> };
   serviceTitan: JobsProvider;
   wordpress: WordPressProvider;
@@ -39,7 +39,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 366;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
-const WORDPRESS_PLUGIN_FILENAME = 'job-showcase-for-servicetitan-1.20.3.zip';
+const WORDPRESS_PLUGIN_FILENAME = 'job-showcase-for-servicetitan-1.20.5.zip';
 const WORDPRESS_PLUGIN_ARCHIVE = resolve(process.cwd(), 'dist/downloads', WORDPRESS_PLUGIN_FILENAME);
 
 export const createApp = ({
@@ -111,6 +111,8 @@ export const createApp = ({
   app.get([
     '/downloads/servicetitan-job-integration.zip',
     '/downloads/job-showcase-for-servicetitan-1.20.3.zip',
+    '/downloads/job-showcase-for-servicetitan-1.20.4.zip',
+    '/downloads/job-showcase-for-servicetitan-1.20.5.zip',
     '/downloads/servicetitan-job-integration-1.11.1.zip',
     '/downloads/servicetitan-job-integration-1.11.0.zip',
     '/downloads/servicetitan-job-integration-1.10.0.zip',
@@ -167,8 +169,12 @@ export const createApp = ({
       let operationId: string;
       try { operationId = uuid(request.get('Idempotency-Key')); } catch { throw new HttpError('A valid Idempotency-Key is required.',400); }
       const zip=optionalZip(typeof request.body?.zip==='string' ? request.body.zip.trim() : request.body?.zip);
+      const targetDrafts = request.body?.targetDrafts === undefined ? SCANNER_MAX_DRAFTS : request.body.targetDrafts;
+      if (!Number.isInteger(targetDrafts) || targetDrafts < SCANNER_MIN_TARGET_DRAFTS || targetDrafts > SCANNER_MAX_TARGET_DRAFTS) {
+        throw new HttpError(`Posts to find must be a whole number from ${SCANNER_MIN_TARGET_DRAFTS} to ${SCANNER_MAX_TARGET_DRAFTS}.`,400);
+      }
       const range=request.body?.allDates!==undefined || request.body?.start!==undefined || request.body?.end!==undefined ? parseJobsQuery({start:request.body.start,end:request.body.end,zip,allDates:request.body.allDates}) : undefined;
-      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId,zip,range ? {startDate:range.startDate,endDateExclusive:range.endDateExclusive,...(range.allDates?{allDates:true}:{})} : undefined) });
+      response.set('Cache-Control','private, no-store'); response.status(202).json({ scan: await scanner.start(operationId,zip,range ? {startDate:range.startDate,endDateExclusive:range.endDateExclusive,...(range.allDates?{allDates:true}:{})} : undefined,targetDrafts) });
     } catch (error) { next(error); }
   });
   app.post(`${apiPrefix}/jobs/:jobId/build-deploy`, async (request, response, next) => {
@@ -217,6 +223,22 @@ export const createApp = ({
       const jobIds = parseJobIds(request.body?.jobIds);
       response.set('Cache-Control', 'no-store');
       response.json({ statuses: await wordpress.getStatuses(jobIds) });
+    } catch (error) { next(error); }
+  });
+  app.get(`${apiPrefix}/wordpress/summary`, async (_request, response, next) => {
+    try {
+      if (!wordpress.getPostCount) throw new WordPressRequestError('WordPress post counts are unavailable.', 503);
+      response.set('Cache-Control', 'private, no-store');
+      response.json({ postCount: await wordpress.getPostCount() });
+    } catch (error) { next(error); }
+  });
+  app.get(`${apiPrefix}/wordpress/jobs`, async (request, response, next) => {
+    try {
+      if (!wordpress.getManagedPosts) throw new WordPressRequestError('WordPress jobs are unavailable.', 503);
+      const page = positiveInteger(request.query.page, 'page', 1, Number.MAX_SAFE_INTEGER);
+      const perPage = positiveInteger(request.query.perPage, 'perPage', DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+      response.set('Cache-Control', 'private, no-store');
+      response.json(await wordpress.getManagedPosts(page, perPage));
     } catch (error) { next(error); }
   });
   app.get(`${apiPrefix}/jobs/:jobId/wordpress`, async (request, response, next) => {

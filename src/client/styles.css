@@ -106,6 +106,49 @@ END - REUSABLE CLASSES
   gap: 6px;
   margin-bottom: 0;
 }
+.workspace-menu-row .btn-nav.MuiButton-root {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #46584e;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.workspace-menu-row .btn-nav.MuiButton-root:hover {
+  border-color: #dce7e0;
+  background: #f2f6f3;
+  color: #204b39;
+}
+.workspace-menu-row .btn-nav.MuiButton-root.is-active {
+  border-color: #c8ded1;
+  background: #e8f1eb;
+  color: #174c35;
+}
+.workspace-menu-row .btn-nav.MuiButton-root.is-active:hover {
+  border-color: #b8d2c2;
+  background: #dfece4;
+}
+.workspace-menu-row .btn-nav .MuiButton-startIcon {
+  margin-right: 7px;
+  margin-left: 0;
+}
+.wordpress-jobs-panel { display: grid; gap: 16px; }
+.wordpress-jobs-summary { color: #617067; font-size: 0.88rem; font-weight: 650; }
+.wordpress-jobs-table { width: 100%; border-collapse: collapse; }
+.wordpress-jobs-table th, .wordpress-jobs-table td { padding: 12px 14px; border-bottom: 1px solid #e4e9e4; text-align: left; }
+.wordpress-jobs-table th { color: #5d6a62; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; }
+.wordpress-jobs-table td:first-child a { color: #20543d; font-weight: 650; text-decoration: none; }
+.wordpress-jobs-table td:first-child a:hover { text-decoration: underline; }
+.wordpress-job-status { display: inline-flex; padding: 4px 8px; border-radius: 6px; background: #edf1ee; color: #536159; font-size: 0.78rem; font-weight: 650; }
+.wordpress-job-status.status-publish { background: #e5f3e9; color: #23643f; }
+.wordpress-job-status.status-draft { background: #f2efe6; color: #77612b; }
+.wordpress-job-status.status-pending { background: #eaf0f5; color: #3d6077; }
+.wordpress-job-status.status-trash { background: #f6e8e7; color: #8a4541; }
 .page-header {
   max-width: 900px;
   margin: 0;
@@ -167,6 +210,25 @@ h2 {
   font-weight: 800;
   letter-spacing: 0;
 }
+.home-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.home-overview .eyebrow { color: #748078; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; }
+.home-overview h2 { margin: 4px 0 2px; color: #186d4c; font-size: 2rem; line-height: 1.1; }
+.home-overview p { margin: 0; color: #536159; }
+.home-overview-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.home-overview .notice { flex-basis: 100%; }
+.home-scanner-promo { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 28px; border: 1px solid #cfe1d5; border-radius: 12px; background: linear-gradient(115deg, #edf6ef, #f8faf5); }
+.home-scanner-promo-copy { max-width: 680px; }
+.home-scanner-promo .eyebrow { margin-bottom: 8px; }
+.home-scanner-promo h2 { color: #1d4934; font-size: clamp(1.45rem, 2.6vw, 2rem); }
+.home-scanner-promo p { margin: 10px 0 0; color: #526159; line-height: 1.55; }
+.home-scanner-promo > .MuiButton-root { flex: 0 0 auto; padding: 10px 20px; white-space: nowrap; }
+@media(max-width:640px) { .home-overview { align-items: flex-start; flex-direction: column; } }
+@media(max-width:640px) { .home-scanner-promo { align-items: stretch; flex-direction: column; padding: 22px; }.home-scanner-promo > .MuiButton-root { width: 100%; } }
 .job-search-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
@@ -456,6 +518,13 @@ td strong {
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.4;
+}
+.jobs-table .job-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .jobs-table .job-name-cell { min-width: 0; }
 .location-cell-city {
@@ -2207,6 +2276,18 @@ td strong {
 @media(max-width:700px){ .scanner-page-header { grid-template-columns: 1fr; } }
 
 .scanner-page { gap: 18px; }
+.scanner-page-standalone { width: min(1100px, calc(100% - 32px)); box-sizing: border-box; }
+.scanner-filter-card { width: 100%; display: grid; grid-template-columns: minmax(180px, 1fr) 132px 132px auto; align-items: end; gap: 16px; }
+.scanner-filter-field { display: block; min-width: 0; }
+.scanner-filter-field > span { display: block; margin-bottom: 7px; color: #46524b; font-size: 0.8rem; font-weight: 750; }
+.scanner-filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scanner-filter-actions .MuiButton-root { min-height: 40px; white-space: nowrap; }
+.scanner-filter-actions .scanner-search-button { padding-right: 24px; padding-left: 24px; }
+.scanner-filter-actions .scanner-cancel-search-button { background: #c62828; color: #fff; }
+.scanner-filter-actions .scanner-cancel-search-button:hover { background: #a91f1f; }
+.scanner-filter-actions .scanner-cancel-search-button.Mui-disabled { background: #c62828a6; color: #fff; }
+@media(max-width:760px) { .scanner-filter-card { grid-template-columns: minmax(0, 1fr) minmax(120px, 0.55fr); } .scanner-cost-field { grid-column: 1; } .scanner-filter-actions { grid-column: 2; justify-content: flex-end; } }
+@media(max-width:480px) { .scanner-filter-card { grid-template-columns: 1fr 1fr; gap: 12px; } .scanner-filter-field:first-child { grid-column: 1 / -1; } .scanner-cost-field { grid-column: 1; } .scanner-filter-actions { grid-column: 1 / -1; justify-content: flex-start; } }
 .scanner-page .scanner-summary, .scanner-page .scanner-summary > p { margin: 0; }
 .scanner-page .scanner-results, .scanner-page .scanner-cancel { margin-top: 0; }
 
@@ -2249,87 +2330,61 @@ td strong {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  height: 38px;
-  isolation: isolate;
-}
-.wordpress-lifecycle-track {
-  isolation: isolate;
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, 34px);
-  align-items: center;
-  width: 144px;
-  height: 36px;
-  padding: 2px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: #f8fafc;
-  transition: border-color 180ms ease, background-color 180ms ease;
+  height: 30px;
+  isolation: isolate;
 }
-.wordpress-lifecycle-track::before {
+.wordpress-lifecycle-select {
+  width: 132px;
+  height: 30px;
+  padding: 0 32px 0 10px;
+  appearance: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+.wordpress-lifecycle::after {
   position: absolute;
-  z-index: 0;
-  top: 17px;
-  right: 18px;
-  left: 18px;
-  height: 2px;
-  background: #e2e8f0;
+  top: 10px;
+  right: 11px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: #64748b;
   content: '';
+  pointer-events: none;
+  transform: rotate(45deg);
 }
-.wordpress-lifecycle-capsule {
+.wordpress-lifecycle-select option[value='none'] { color: #64748b; }
+.wordpress-lifecycle-select option[value='draft'] { color: #475569; }
+.wordpress-lifecycle-select option[value='published'] { color: #15803d; }
+.wordpress-lifecycle-select option[value='trash'] { color: #991b1b; }
+.wordpress-lifecycle[data-status='none'] .wordpress-lifecycle-select { border-color: #e2e5e9; background: #f8fafc99; color: #94a3b8; }
+.wordpress-lifecycle[data-status='draft'] .wordpress-lifecycle-select { border-color: #94a3b8; background: #f1f5f9; color: #475569; }
+.wordpress-lifecycle[data-status='published'] .wordpress-lifecycle-select { border-color: #86efac; background: #f0fdf4; color: #15803d; }
+.wordpress-lifecycle[data-status='trash'] .wordpress-lifecycle-select { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+.wordpress-lifecycle-select:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.wordpress-lifecycle-select:disabled { cursor: default; opacity: 1; }
+.wordpress-lifecycle.is-busy .wordpress-lifecycle-select { pointer-events: none; }
+.wordpress-lifecycle-loading {
   position: absolute;
-  z-index: 0;
-  top: 2px;
-  left: 2px;
-  width: 34px;
-  height: 30px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  box-shadow: 0 1px 3px #0f172a18;
-  transition: left 220ms cubic-bezier(.2,.8,.2,1), background-color 180ms ease;
+  z-index: 3;
+  inset: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #ffffffd9;
+  color: #64748b;
+  cursor: progress;
 }
-.wordpress-lifecycle[data-active-index='1'] .wordpress-lifecycle-capsule { left: 36px; }
-.wordpress-lifecycle[data-active-index='2'] .wordpress-lifecycle-capsule { left: 70px; }
-.wordpress-lifecycle[data-active-index='3'] .wordpress-lifecycle-capsule { left: 104px; }
-.wordpress-lifecycle[data-active-status='draft'] .wordpress-lifecycle-capsule { background: #e2e8f0; }
-.wordpress-lifecycle[data-active-status='published'] .wordpress-lifecycle-capsule { background: #dcfce7; }
-.wordpress-lifecycle[data-active-status='trash'] .wordpress-lifecycle-capsule { background: #fee2e2; }
-.wordpress-lifecycle-node {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  width: 34px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #cbd5e1;
-  cursor: default;
-  transition: color 160ms ease, transform 160ms ease;
-}
-.wordpress-lifecycle-node svg { width: 16px; height: 16px; }
-.wordpress-lifecycle-node.is-active { color: #64748b; }
-.wordpress-lifecycle[data-status='none'] .wordpress-lifecycle-node.is-active { color: #94a3b8; }
-.wordpress-lifecycle[data-status='draft'] .wordpress-lifecycle-node.is-active { color: #475569; }
-.wordpress-lifecycle[data-status='published'] .wordpress-lifecycle-node.is-active { color: #059669; }
-.wordpress-lifecycle[data-status='trash'] .wordpress-lifecycle-node.is-active { color: #b45353; }
-.wordpress-lifecycle-node.is-next { color: #64748b; cursor: pointer; }
-.wordpress-lifecycle-node.is-next:hover { transform: translateY(-1px); }
-.wordpress-lifecycle-node.is-destructive { color: #b45353; }
-.wordpress-lifecycle-node.is-destructive:hover,
-.wordpress-lifecycle-node.is-destructive.is-holding { color: #b91c1c; }
-.wordpress-lifecycle[data-holding='trash'] .wordpress-lifecycle-track { border-color: #fca5a5; background: #fff1f2; }
-.wordpress-lifecycle[data-holding='none'] .wordpress-lifecycle-track { border-color: #fca5a5; }
-.wordpress-lifecycle[data-status='published'][data-hover-target='trash'] .wordpress-lifecycle-track,
-.wordpress-lifecycle[data-status='published'][data-holding='trash'] .wordpress-lifecycle-track { border-color: #fca5a5; background: #fff1f2; }
-.wordpress-lifecycle[data-status='published'][data-hover-target='trash'] .wordpress-lifecycle-capsule,
-.wordpress-lifecycle[data-status='published'][data-holding='trash'] .wordpress-lifecycle-capsule { background: #fecaca; }
-.wordpress-lifecycle-node:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
-.wordpress-lifecycle.is-disabled .wordpress-lifecycle-node { cursor: default; }
-.wordpress-lifecycle.is-busy .wordpress-lifecycle-capsule { box-shadow: 0 0 0 2px #94a3b833; }
 .wordpress-state-control .MuiToggleButtonGroup-root {
   background: #f1f5f9;
   border: 1px solid #dbe3ed;

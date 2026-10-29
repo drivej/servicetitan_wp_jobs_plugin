@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Job Showcase for ServiceTitan
  * Description: Publishes ServiceTitan job posts and provides shortcode-configured ZIP filtering for WordPress pages.
- * Version: 1.20.3
+ * Version: 1.20.5
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * Requires Plugins: advanced-custom-fields
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STJI_VERSION', '1.20.3');
+define('STJI_VERSION', '1.20.5');
 define('STJI_SEO_VERSION_META', '_stji_seo_version');
 define('STJI_GENERATED_HASH_META', '_stji_generated_hash');
 define('STJI_GENERATED_AT_META', '_stji_generated_at');
@@ -729,6 +729,17 @@ function stji_register_status_route(): void
     );
     register_rest_route(
         'servicetitan-job-integration/v1',
+        '/posts',
+        array(
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => 'stji_rest_posts',
+            'permission_callback' => static function (): bool {
+                return current_user_can('edit_posts') || current_user_can('edit_st_jobs');
+            },
+        )
+    );
+    register_rest_route(
+        'servicetitan-job-integration/v1',
         '/zipcodes',
         array(
             array(
@@ -747,6 +758,75 @@ function stji_register_status_route(): void
             ),
         )
     );
+}
+
+/**
+ * Return paginated WordPress posts created by this integration.
+ *
+ * @param WP_REST_Request $request REST request.
+ * @return WP_REST_Response|WP_Error
+ */
+function stji_rest_posts(WP_REST_Request $request)
+{
+    $page = max(1, absint($request->get_param('page')));
+    $per_page = absint($request->get_param('perPage'));
+    if ($per_page < 1 || $per_page > 50) {
+        return new WP_Error('stji_invalid_page_size', __('perPage must be between 1 and 50.', 'servicetitan-job-integration'), array('status' => 400));
+    }
+
+    $statuses = get_post_stati(array(), 'names');
+    $statuses = array_values(array_diff($statuses, array('auto-draft')));
+    $query = new WP_Query(array(
+        'post_type' => stji_post_type(),
+        'post_status' => $statuses,
+        'meta_query' => array(array('key' => STJI_JOB_ID_META, 'value' => 0, 'compare' => '>', 'type' => 'NUMERIC')),
+        'posts_per_page' => $per_page,
+        'paged' => $page,
+        'orderby' => 'modified',
+        'order' => 'DESC',
+        'no_found_rows' => false,
+        'update_post_meta_cache' => true,
+        'update_post_term_cache' => false,
+    ));
+
+    $posts = array();
+    foreach ($query->posts as $post) {
+        $job_id = absint(get_post_meta($post->ID, STJI_JOB_ID_META, true));
+        if (!$job_id) continue;
+        $image_id = stji_get_job_image_id((int) $post->ID);
+        $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'thumbnail') : false;
+        if (!is_string($image_url) || '' === $image_url) {
+            $image_url = $image_id ? wp_get_attachment_url($image_id) : false;
+        }
+        $image_alt = $image_id ? (string) get_post_meta($image_id, '_wp_attachment_image_alt', true) : '';
+        $location = stji_get_rest_location(array('id' => $post->ID));
+        $first_location = !empty($location['zipcodes'][0]) ? $location['zipcodes'][0] : array();
+        $posts[] = array(
+            'jobId' => $job_id,
+            'postId' => (int) $post->ID,
+            'title' => get_the_title($post),
+            'excerpt' => (string) $post->post_excerpt,
+            'status' => (string) $post->post_status,
+            'modifiedOn' => get_post_modified_time('c', true, $post),
+            'completedOn' => (string) $location['completedOn'],
+            'location' => array(
+                'city' => isset($first_location['city']) ? (string) $first_location['city'] : '',
+                'state' => isset($first_location['state']) ? (string) $first_location['state'] : '',
+                'zip' => isset($first_location['zipcode']) ? (string) $first_location['zipcode'] : '',
+            ),
+            'featuredImageUrl' => is_string($image_url) ? $image_url : '',
+            'featuredImageAlt' => $image_alt,
+            'link' => (string) get_permalink($post),
+        );
+    }
+
+    return new WP_REST_Response(array(
+        'posts' => $posts,
+        'page' => $page,
+        'perPage' => $per_page,
+        'total' => (int) $query->found_posts,
+        'totalPages' => (int) $query->max_num_pages,
+    ), 200);
 }
 add_action('rest_api_init', 'stji_register_status_route');
 
