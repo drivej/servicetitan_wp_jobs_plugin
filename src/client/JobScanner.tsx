@@ -7,7 +7,7 @@ import { Button, CircularProgress, IconButton, TextField } from '@mui/material';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import type { ScannerTask } from '../shared/job-scanner';
 import type { WordPressStatus } from './wordpressStatusCache';
-import { apiFetch, enqueueWordPressTrash } from './api';
+import { apiFetch, enqueueWordPressTrash, enqueueWordPressUnlink } from './api';
 import { PageHeader } from './PageHeader';
 import { useWordPressPluginStatus } from './useWordPressPluginStatus';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
@@ -132,6 +132,14 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to move the WordPress post to Trash.'); }
     finally { setPublishing(undefined); }
   };
+  const unlinkPost = async (jobId:number) => {
+    setPublishing(jobId); setError('');
+    try {
+      const result = await read<WordPressStatus>(await enqueueWordPressUnlink(jobId));
+      setStatuses(current => ({ ...current, [jobId]: result }));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to remove the WordPress draft.'); }
+    finally {setPublishing(undefined);}
+  };
   const scanActions=<div className='job-scout-actions'>
       <Button variant='contained' disabled={busy || isActive || !plugin.ready || scan === undefined} onClick={()=>void start()}>{busy?'Starting…':isActive?'Scan in progress':searchFilters?'Start AI Job Scout':'Find My Next Great Posts'}</Button>
       <IconButton component='a' href='/help/job-scanner' aria-label='How AI Job Scout works' title='How AI Job Scout works'><InfoOutlinedIcon/></IconButton>
@@ -163,7 +171,7 @@ export function JobScanner({searchFilters,controlRef,onShow,visible=true}: {sear
           const job=jobs[item.jobId] || {id:item.jobId,jobName:item.title,status:'Completed',location:{city:'—',state:'—',zip:'—'}};
           return <JobTableRow key={item.jobId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status}
             wordpressBusy={publishing!==undefined || refreshing} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted}
-            onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onTrash={()=>void trashPost(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
+            onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onTrash={()=>void trashPost(item.jobId)} onUnlink={()=>void unlinkPost(item.jobId)} onRefresh={()=>void refreshStatuses(item.jobId)}/>;
         })}
         {isActive && <tr className='job-row scanner-processing-row' aria-busy='true'>
           <td className='readiness-cell' aria-label='Processing'>…</td>

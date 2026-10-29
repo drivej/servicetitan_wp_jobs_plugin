@@ -6,7 +6,7 @@ import type { BuildTask } from '../shared/build-queue';
 import { ErrorDialog } from './ErrorDialog';
 import { JobTableHeader, JobTableRow } from './JobTable';
 import { useTokenSpendConfirmation } from './TokenSpendConfirmation';
-import { accountFetch, apiFetch, apiUrl, enqueueWordPressTrash, wordpressStatusStorage } from './api';
+import { accountFetch, apiFetch, apiUrl, enqueueWordPressTrash, enqueueWordPressUnlink, wordpressStatusStorage } from './api';
 
 import { formatJobCopy, hasCompleteJobBody, fromSeedJobCopy, type SeedJobCopy, type JobCopySource } from '../shared/job-copy';
 import { showTokenError, useTokensExhausted } from './tokenState';
@@ -393,6 +393,23 @@ export function JobDetails({ jobId }: { jobId: number }) {
     }
   };
 
+  const unlinkWordPressDraft = async () => {
+    if (wordpressStatus?.state !== 'exists' || wordpressStatus.postStatus !== 'draft' || !wordpressPluginReady || publishing) return;
+    setPublishing(true);
+    try {
+      const response = await enqueueWordPressUnlink(jobId);
+      const body = await readJson<WordPressStatus | { error?: string }>(response);
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not remove the draft.');
+      const status = body as WordPressStatus;
+      setWordpressStatus(status);
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'WordPress could not remove the draft.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const enqueueBuild = async () => {
     if (!wordpressPluginReady || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running') return;
     setQueueingBuild(true);
@@ -472,7 +489,7 @@ export function JobDetails({ jobId }: { jobId: number }) {
         <table className='jobs-table' aria-label='Job list row'>
           <colgroup><col className='readiness-column' /><col className='job-image-column' /><col className='job-name-column' /><col className='location-column' /><col className='wp-status-column' /><col className='actions-column' /></colgroup>
           <JobTableHeader disabled={!wordpressPluginReady || wordpressStatusLoading || publishing || regenerating || queueingBuild} onRefresh={() => void refreshWordPressStatus()} />
-          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } void enqueueBuild(); }} onPublish={() => void updateWordPressPostStatus('publish')} onSetDraft={() => void updateWordPressPostStatus('draft')} onTrash={() => void trashWordPressPost()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
+          <tbody><JobTableRow job={{ ...details.summary, attachments: details.attachments, sourceCopyStatus: details.summary.summaryText?.trim() ? details.summary.summaryText.trim().split(/\s+/).length < 10 ? 'limited' : 'available' : 'missing' }} wordpressStatus={wordpressStatus || { state: 'unknown', label: wordpressStatusLoading ? 'Loading…' : 'Unknown' }} wordpressBusy={wordpressStatusLoading || publishing || regenerating || queueingBuild || buildTask?.state === 'queued' || buildTask?.state === 'running'} buildTask={buildTask} wordpressPluginReady={wordpressPluginReady} tokensExhausted={tokensExhausted} onBuild={() => { if (tokensExhausted) { showTokenError(); return; } return enqueueBuild(); }} onPublish={() => updateWordPressPostStatus('publish')} onSetDraft={() => updateWordPressPostStatus('draft')} onTrash={() => trashWordPressPost()} onUnlink={() => unlinkWordPressDraft()} onUpdate={() => { if (tokensExhausted) { showTokenError(); return; } void regenerateWordPress(); }} onRefresh={() => void refreshWordPressStatus()} /></tbody>
         </table>
       </div>}
 

@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildTask } from '../shared/build-queue';
 import { SEO_GENERATOR_VERSION } from '../shared/seo-prompt-version';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
-import { apiFetch, enqueueWordPressTrash, wordpressStatusStorage } from './api';
+import { apiFetch, enqueueWordPressTrash, enqueueWordPressUnlink, wordpressStatusStorage } from './api';
 
 import { ErrorDialog } from './ErrorDialog';
 import { LoadingModal } from './LoadingModal';
@@ -267,6 +267,28 @@ export function App() {
     }
   };
 
+  const unlinkWordpressDraft = async (jobId: number) => {
+    if (!wordpressPluginReady) return;
+    const previousStatus = wordpressStatuses[jobId] || unknownWordPressStatus;
+    setWordpressBusy(jobId, true);
+    setActionError(undefined);
+    setWordpressStatuses((current) => ({ ...current, [jobId]: { ...previousStatus, label: 'Removing draft…' } }));
+    try {
+      const response = await enqueueWordPressUnlink(jobId);
+      const body = await readApiResponse<WordPressStatus | { error?: string }>(response, 'WordPress could not remove the draft.');
+      if (!response.ok) throw new Error('error' in body && body.error ? body.error : 'WordPress could not remove the draft.');
+      const status = body as WordPressStatus;
+      setWordpressStatuses((current) => ({ ...current, [jobId]: status }));
+      writeCachedWordPressStatuses({ [jobId]: status }, wordpressStatusStorage());
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'WordPress could not remove the draft.';
+      setWordpressStatuses((current) => ({ ...current, [jobId]: previousStatus }));
+      setActionError({ title: 'Could not remove WordPress draft', message });
+    } finally {
+      setWordpressBusy(jobId, false);
+    }
+  };
+
   const updateWordpressSeo = async (jobId: number, currentStatus: WordPressStatus) => {
     const serviceTitanModifiedOn = result?.data.find((job) => job.id === jobId)?.modifiedOn;
     if (!wordpressPluginReady || !isSeoPromptOutOfSync(currentStatus, serviceTitanModifiedOn)) return;
@@ -492,11 +514,12 @@ export function App() {
                         showTokenError();
                         return;
                       }
-                      if (wordpressPluginReady && !queueError) void enqueueBuild(job.id);
+                      if (wordpressPluginReady && !queueError) return enqueueBuild(job.id);
                     }}
-                    onPublish={() => void updateWordpressStatus(job.id, 'publish')}
-                    onSetDraft={() => void updateWordpressStatus(job.id, 'draft')}
-                    onTrash={() => void trashWordpressPost(job.id)}
+                    onPublish={() => updateWordpressStatus(job.id, 'publish')}
+                    onSetDraft={() => updateWordpressStatus(job.id, 'draft')}
+                    onTrash={() => trashWordpressPost(job.id)}
+                    onUnlink={() => unlinkWordpressDraft(job.id)}
                     onUpdate={() => void updateWordpressSeo(job.id, wordpressStatuses[job.id] || unknownWordPressStatus)}
                     onRefresh={() => void requestWordpress(job.id)}
                   />

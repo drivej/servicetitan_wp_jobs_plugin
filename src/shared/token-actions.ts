@@ -4,6 +4,8 @@ export const TOKEN_ACTIONS = {
   build: { label: 'Build', cost: 1 },
   update: { label: 'Update', cost: 1 },
   publish: { label: 'Publish', cost: 0 },
+  trash: { label: 'Trash', cost: 0 },
+  unlink: { label: 'Remove draft', cost: 0 },
 } as const;
 
 export type TokenAction = keyof typeof TOKEN_ACTIONS;

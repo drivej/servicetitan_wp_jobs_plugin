@@ -282,7 +282,15 @@ export const createApp = ({
       const jobId = parseJobId(request.params.jobId);
       if (!wordpress.trashPost) throw new WordPressRequestError('Moving WordPress posts to Trash is unavailable.', 503);
       response.set('Cache-Control', 'no-store');
-      response.json(await spendJobToken('publish', () => wordpress.trashPost!(jobId), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'trash', jobId })));
+      response.json(await spendJobToken('trash', () => wordpress.trashPost!(jobId), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'trash', jobId })));
+    } catch (error) { next(error); }
+  });
+  app.post(`${apiPrefix}/jobs/:jobId/wordpress/unlink`, async (request, response, next) => {
+    try {
+      const jobId = parseJobId(request.params.jobId);
+      if (!wordpress.unlinkPost) throw new WordPressRequestError('Disconnecting WordPress drafts is unavailable.', 503);
+      response.set('Cache-Control', 'no-store');
+      response.json(await spendJobToken('unlink', () => wordpress.unlinkPost!(jobId), jobId, request.get('Idempotency-Key'), JSON.stringify({ action: 'unlink', jobId })));
     } catch (error) { next(error); }
   });
 

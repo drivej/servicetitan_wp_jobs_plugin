@@ -15,20 +15,20 @@ export const accountFetch = (path: string, init: RequestInit = {}): Promise<Resp
   return fetch(path, { ...init, headers, credentials: 'same-origin' });
 };
 const paidOperationPath = (path: string, method: string): boolean => method.toUpperCase() === 'POST'
-  && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/(?:regenerate|status|trash))?)$/.test(new URL(path, window.location.origin).pathname);
+  && /\/jobs\/\d+\/(?:ai-copy|wordpress(?:\/(?:regenerate|status|trash|unlink))?)$/.test(new URL(path, window.location.origin).pathname);
 const WORDPRESS_TRASH_INTERVAL_MS = 1_500;
-let wordpressTrashQueue: Promise<void> = Promise.resolve();
-let lastWordPressTrashRequestAt = 0;
+let wordpressLifecycleQueue: Promise<void> = Promise.resolve();
+let lastWordPressLifecycleRequestAt = 0;
 
-/** Serialize trash operations and pace them to avoid overwhelming WordPress. */
-export const enqueueWordPressTrash = (jobId: number): Promise<Response> => {
-  const operation = wordpressTrashQueue.then(async () => {
+/** Serialize destructive WordPress lifecycle operations and pace their requests. */
+const enqueueWordPressLifecycleRequest = (jobId: number, action: 'trash' | 'unlink'): Promise<Response> => {
+  const operation = wordpressLifecycleQueue.then(async () => {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const waitForNextSlot = WORDPRESS_TRASH_INTERVAL_MS - (Date.now() - lastWordPressTrashRequestAt);
+      const waitForNextSlot = WORDPRESS_TRASH_INTERVAL_MS - (Date.now() - lastWordPressLifecycleRequestAt);
       if (waitForNextSlot > 0) await new Promise((resolve) => setTimeout(resolve, waitForNextSlot));
-      lastWordPressTrashRequestAt = Date.now();
+      lastWordPressLifecycleRequestAt = Date.now();
 
-      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/trash`, {
+      const response = await apiFetch(`/api/jobs/${jobId}/wordpress/${action}`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: '{}',
@@ -43,9 +43,11 @@ export const enqueueWordPressTrash = (jobId: number): Promise<Response> => {
     }
     throw new Error('WordPress could not move the post to Trash.');
   });
-  wordpressTrashQueue = operation.then(() => undefined, () => undefined);
+  wordpressLifecycleQueue = operation.then(() => undefined, () => undefined);
   return operation;
 };
+export const enqueueWordPressTrash = (jobId: number): Promise<Response> => enqueueWordPressLifecycleRequest(jobId, 'trash');
+export const enqueueWordPressUnlink = (jobId: number): Promise<Response> => enqueueWordPressLifecycleRequest(jobId, 'unlink');
 const paidOperationKey = async (path: string, init: RequestInit): Promise<{ key: string; storageKey: string }> => {
   const body = typeof init.body === 'string' ? init.body : '';
   const copyContractVersion = /\/jobs\/\d+\/ai-copy$/.test(new URL(path, window.location.origin).pathname) ? 'copy-v2' : 'operation-v1';

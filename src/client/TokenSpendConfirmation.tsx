@@ -13,6 +13,8 @@ const actionCopy: Record<TokenAction, { title: string; benefit: string; approve:
   build: { title: 'Make your next great post', benefit: 'Turn this job into a WordPress draft, ready for your review.', approve: 'Spend 1 token & build' },
   update: { title: 'Give this post a fresh spark', benefit: 'Generate fresh copy and update your WordPress post.', approve: 'Spend 1 token & update' },
   publish: { title: 'Ready to share your work?', benefit: 'Publish your WordPress draft.', approve: 'Publish draft' },
+  trash: { title: 'Move this post to Trash?', benefit: 'The post will leave your public WordPress site and can be restored from Trash.', approve: 'Move to Trash' },
+  unlink: { title: 'Remove this draft?', benefit: 'Permanently delete the WordPress draft and disconnect it from this ServiceTitan job.', approve: 'Remove draft' },
 };
 
 export function useTokenSpendConfirmation() {

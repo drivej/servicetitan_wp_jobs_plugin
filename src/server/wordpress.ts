@@ -68,6 +68,7 @@ export interface WordPressProvider {
   regenerateJob(job: JobListItem, force: boolean, image?: JobImage, approvedCopy?: ApprovedPostCopy): Promise<WordPressPostStatus>;
   updateStatus(serviceTitanJobId: number, status: WordPressWritableStatus): Promise<WordPressPostStatus>;
   trashPost?(serviceTitanJobId: number): Promise<WordPressPostStatus>;
+  unlinkPost?(serviceTitanJobId: number): Promise<WordPressPostStatus>;
 }
 
 type FetchImplementation = typeof fetch;
@@ -236,6 +237,20 @@ export class WordPressClient implements WordPressProvider {
     await this.request(`${this.config.collectionUrl}/${currentStatus.postId}`, { method: 'DELETE' });
     const { link: _link, ...trashedStatus } = currentStatus;
     return { ...trashedStatus, label: 'Trash', postStatus: 'trash' };
+  }
+
+  async unlinkPost(serviceTitanJobId: number): Promise<WordPressPostStatus> {
+    const currentStatus = await this.getStatus(serviceTitanJobId);
+    if (currentStatus.state === 'not_found') return currentStatus;
+    if (currentStatus.state !== 'exists' || !currentStatus.postId) {
+      throw new WordPressRequestError('This ServiceTitan job does not have a verifiable WordPress post.', 404);
+    }
+    if (currentStatus.postStatus !== 'draft') {
+      throw new WordPressRequestError('Only a WordPress draft can be disconnected from this job.', 409);
+    }
+
+    await this.request(`${this.config.collectionUrl}/${currentStatus.postId}?force=true`, { method: 'DELETE' });
+    return { state: 'not_found', label: 'None', currentSeoVersion: SEO_GENERATOR_VERSION };
   }
 
   private async createJobPost(job: JobListItem, images: JobImage[], status: WordPressWritableStatus, approvedCopy: ApprovedPostCopy): Promise<WordPressPostStatus> {
@@ -498,6 +513,10 @@ export class DisabledWordPressClient implements WordPressProvider {
   }
 
   async trashPost(): Promise<WordPressPostStatus> {
+    throw new WordPressRequestError('WordPress is not configured on the server.', 503);
+  }
+
+  async unlinkPost(): Promise<WordPressPostStatus> {
     throw new WordPressRequestError('WordPress is not configured on the server.', 503);
   }
 }

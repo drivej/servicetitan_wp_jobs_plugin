@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@mui/material';
-import { apiFetch, enqueueWordPressTrash } from './api';
+import { apiFetch, enqueueWordPressTrash, enqueueWordPressUnlink } from './api';
 import type { ScannerTask } from '../shared/job-scanner';
 import { JobTableHeader, JobTableRow, type JobTableItem } from './JobTable';
 import { navigateTo } from './navigation';
@@ -65,6 +65,12 @@ export function ScanHistory({open}:{open:boolean}) {
     catch(reason){setError(reason instanceof Error?reason.message:'Unable to move the WordPress post to Trash.');}
     finally{setPublishing(undefined);}
   };
+  const unlinkPost=async(id:number)=>{
+    setPublishing(id);setError('');
+    try{const status=await read<WordPressStatus>(await enqueueWordPressUnlink(id));setStatuses(current=>({...current,[id]:status}));}
+    catch(reason){setError(reason instanceof Error?reason.message:'Unable to remove the WordPress draft.');}
+    finally{setPublishing(undefined);}
+  };
   if(!open)return null;
   return <section className='scanner-results' aria-label='Previous AI Job Scout scans'>
     {error && <p role='alert'>{error} <Button disabled={loading} onClick={()=>setRetry(value=>value+1)}>Retry</Button></p>}
@@ -85,7 +91,7 @@ export function ScanHistory({open}:{open:boolean}) {
           {pushed.map(item=>{
             const status=statuses[item.jobId] || {state:'unknown' as const,label:'Unknown'};
             const job=jobs[item.jobId] || {id:item.jobId,jobName:item.title,status:'Completed',location:{city:'—',state:'—',zip:'—'}};
-            return <JobTableRow key={item.buildTaskId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status} wordpressBusy={publishing!==undefined || loading} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted} onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onTrash={()=>void trashPost(item.jobId)} onRefresh={()=>setRetry(value=>value+1)}/>;
+            return <JobTableRow key={item.buildTaskId} job={job} rating={item} wordpressStatus={publishing===item.jobId?{...status,label:'Updating…'}:status} wordpressBusy={publishing!==undefined || loading} wordpressPluginReady={plugin.ready} tokensExhausted={exhausted} onOpen={()=>navigateTo(`/jobs/${item.jobId}`)} onPublish={()=>void updateStatus(item.jobId, 'publish')} onSetDraft={()=>void updateStatus(item.jobId, 'draft')} onTrash={()=>void trashPost(item.jobId)} onUnlink={()=>void unlinkPost(item.jobId)} onRefresh={()=>setRetry(value=>value+1)}/>;
           })}
           {!pushed.length && <tr><td colSpan={6}>No drafts were created in this scan.</td></tr>}
         </tbody>;
